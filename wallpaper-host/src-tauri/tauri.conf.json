@@ -2,45 +2,54 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "壁纸盒子",
   "mainBinaryName": "wallpaper-box",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "local.screen-garden.wallpaper",
-  "build": { "frontendDist": "../ui" },
+  "build": {
+    "frontendDist": "../ui"
+  },
   "app": {
     "withGlobalTauri": true,
-    "windows": [{
-      "label": "manager",
-      "title": "壁纸盒子 · 壁纸管理",
-      "width": 1080,
-      "height": 760,
-      "minWidth": 780,
-      "minHeight": 600,
-      "center": true
-    }],
+    "windows": [
+      {
+        "label": "manager",
+        "title": "壁纸盒子 · 壁纸管理",
+        "width": 1080,
+        "height": 760,
+        "minWidth": 780,
+        "minHeight": 600,
+        "center": true
+      }
+    ],
     "security": {
-      "csp": "default-src 'self' asset: http://asset.localhost; img-src 'self' asset: http://asset.localhost http://127.0.0.1:8088 data:; style-src 'self'; script-src 'self'; connect-src ipc: http://ipc.localhost"
+      "csp": "default-src 'self' asset: http://asset.localhost; img-src 'self' http://wallpaper.localhost https://github.com https://*.githubusercontent.com data:; style-src 'self'; script-src 'self'; connect-src ipc: http://ipc.localhost"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "Wallpaper Box",
     "shortDescription": "支持多显示器和模块切换的 Windows 动态壁纸程序",
-    "icon": ["icons/icon.ico"],
+    "icon": [
+      "icons/icon.ico"
+    ],
     "resources": {
-      "../../display-service/compose.yaml": "display-service/compose.yaml",
-      "../../display-service/nginx.conf": "display-service/nginx.conf",
-      "../../display-service/site.conf": "display-service/site.conf",
-      "../../display-service/registry/": "display-service/registry/",
-      "../../display-service/modules/": "display-service/modules/",
-      "../../display-service/public/": "display-service/public/",
-      "../../display-service/routes/": "display-service/routes/",
+      "../../wallpapers/": "wallpapers/",
+      "../../display-service/public/docs/architecture.html": "docs/architecture.html",
       "../resources/README.txt": "README.txt"
     },
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["SimpChinese", "English"],
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico"
       }

@@ -1,0 +1,19 @@
+{
+  "name": "松风镇",
+  "subtitle": "PINEWIND",
+  "description": "林间小屋、昼夜流转，还有一班开往慢生活的小火车。",
+  "entry": "index.html",
+  "tags": [
+    "像素小镇",
+    "昼夜流转",
+    "点击种花"
+  ],
+  "order": 10,
+  "enabled": true,
+  "id": "pinewind-town",
+  "schemaVersion": 1,
+  "type": "web",
+  "version": "1.0.0",
+  "minAppVersion": "0.2.0",
+  "cover": "cover.jpg"
+}

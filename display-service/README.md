@@ -1,5 +1,7 @@
 # 壁纸盒子：模块化展示服务
 
+> Legacy 浏览器开发示例：壁纸盒子 0.2.0 已改用 Tauri 原生目录发现与本地协议，运行无需 Docker，安装包也不再包含此服务。日常使用、用户壁纸目录与在线更新请看[主项目 README](../README.md)及[最新 HTML 技术方案](public/docs/architecture.html)。本目录继续保留原浏览器展示服务供开发参考，以下命令只适用于该示例。
+
 - 首页：http://127.0.0.1:8088/
 - 松风镇：http://127.0.0.1:8088/pinewind-town/
 - 技术方案（HTML）：[public/docs/architecture.html](public/docs/architecture.html)

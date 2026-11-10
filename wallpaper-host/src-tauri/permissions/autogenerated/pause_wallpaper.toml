@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pause-wallpaper"
+description = "Enables the pause_wallpaper command without any pre-configured scope."
+commands.allow = ["pause_wallpaper"]
+
+[[permission]]
+identifier = "deny-pause-wallpaper"
+description = "Denies the pause_wallpaper command without any pre-configured scope."
+commands.deny = ["pause_wallpaper"]

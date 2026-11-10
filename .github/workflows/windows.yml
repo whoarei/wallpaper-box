@@ -57,10 +57,18 @@ jobs:
       - name: Build Windows NSIS installer
         working-directory: wallpaper-host
         run: npm run bundle
+      - name: Verify per-wallpaper downloads and offline manager flows
+        working-directory: wallpaper-host
+        run: npm run test:ui
       - name: Test Rust with release features
         run: cargo test --locked --release --features custom-protocol --manifest-path wallpaper-host/src-tauri/Cargo.toml
       - name: Package portable version and verify payload hashes
         run: ./wallpaper-host/scripts/package-release.ps1 -OutputDirectory ./release
+      - name: Verify installer payload matches the portable package
+        run: |
+          $sevenZip = (Get-Command 7z.exe -ErrorAction Stop).Source
+          node ./wallpaper-host/scripts/verify-installer.mjs ./release $sevenZip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: wallpaper-box-windows-x64

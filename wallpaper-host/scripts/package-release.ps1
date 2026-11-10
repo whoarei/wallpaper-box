@@ -21,6 +21,9 @@ $stage = Join-Path $outputRoot ('.stage-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $stage | Out-Null
 try {
     Copy-Item -LiteralPath $binary -Destination (Join-Path $stage 'wallpaper-box.exe')
+    # Only the portable distribution carries this marker. The installer keeps
+    # downloaded/custom wallpapers in LocalAppData instead of its program folder.
+    [IO.File]::WriteAllText((Join-Path $stage 'portable.flag'),"wallpaper-box-portable-v1`n",[Text.UTF8Encoding]::new($false))
     foreach ($resource in $config.bundle.resources.psobject.Properties) {
         $source = [IO.Path]::GetFullPath((Join-Path $tauriRoot $resource.Name))
         $destination = Join-Path $stage $resource.Value
@@ -40,7 +43,7 @@ try {
     $zipPath = Join-Path $outputRoot $portableName
     if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath }
     [IO.Compression.ZipFile]::CreateFromDirectory($stage,$zipPath,[IO.Compression.CompressionLevel]::Optimal,$false)
-    $manifest = [ordered]@{ product='壁纸盒子'; version=$version; platform='windows-x64'; commit=$env:GITHUB_SHA; portableFiles=$files }
+    $manifest = [ordered]@{ schemaVersion=2; product='壁纸盒子'; version=$version; platform='windows-x64'; commit=$env:GITHUB_SHA; portableOnlyFiles=@('portable.flag'); portableFiles=$files }
     [IO.File]::WriteAllText((Join-Path $outputRoot 'release-manifest.json'),($manifest | ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
     $hashLines = @($installerName,$portableName,'release-manifest.json') | ForEach-Object {
         (Get-FileHash -LiteralPath (Join-Path $outputRoot $_) -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_

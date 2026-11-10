@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-apply-wallpaper"
+description = "Enables the apply_wallpaper command without any pre-configured scope."
+commands.allow = ["apply_wallpaper"]
+
+[[permission]]
+identifier = "deny-apply-wallpaper"
+description = "Denies the apply_wallpaper command without any pre-configured scope."
+commands.deny = ["apply_wallpaper"]

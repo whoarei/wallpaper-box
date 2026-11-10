@@ -1,0 +1,19 @@
+{
+  "name": "静水之间",
+  "subtitle": "STILLWATER AQUARIUM",
+  "description": "一缸草木与微光，鱼群缓缓游过。点击水面，投下一点好心情。",
+  "entry": "index.html",
+  "tags": [
+    "水族箱",
+    "鱼群漫游",
+    "点击投喂"
+  ],
+  "order": 20,
+  "enabled": true,
+  "id": "aquarium",
+  "schemaVersion": 1,
+  "type": "web",
+  "version": "1.0.0",
+  "minAppVersion": "0.2.0",
+  "cover": "cover.jpg"
+}

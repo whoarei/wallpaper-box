@@ -2,6 +2,7 @@
 **/gen/
 **/node_modules/
 **/artifacts/
+**/UserData/
 /release/
 *.log
 .env

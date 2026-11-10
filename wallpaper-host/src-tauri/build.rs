@@ -1,3 +1,25 @@
 fn main() {
-    tauri_build::build()
+    let commands = &[
+        "get_state",
+        "refresh_modules",
+        "select_monitor",
+        "apply_wallpaper",
+        "pause_wallpaper",
+        "remove_wallpaper",
+        "auto_pause",
+        "hide_manager",
+        "quit_app",
+        "capture_desktop",
+        "show_desktop",
+        "check_online",
+        "install_online",
+        "rollback_wallpaper",
+        "import_wallpaper",
+        "open_wallpaper_folder",
+    ];
+    tauri_build::try_build(
+        tauri_build::Attributes::new()
+            .app_manifest(tauri_build::AppManifest::new().commands(commands)),
+    )
+    .expect("Tauri build failed");
 }

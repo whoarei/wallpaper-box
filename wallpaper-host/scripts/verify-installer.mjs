@@ -8,8 +8,14 @@ const sevenZip=process.argv[3]||path.join(process.env.ProgramFiles||'C:\\Program
 const manifest=JSON.parse(fs.readFileSync(path.join(directory,'release-manifest.json'),'utf8'));
 assert.match(manifest.version,/^\d+\.\d+\.\d+$/);
 const installer=path.join(directory,`wallpaper-box_${manifest.version}_x64-setup.exe`);
+const installerListing=execFileSync(sevenZip,['l','-slt',installer],{windowsHide:true,maxBuffer:8*1024*1024,encoding:'utf8',stdio:['ignore','pipe','pipe']});
+assert.ok(!installerListing.split(/\r?\n/).some(line=>line==='Path = portable.flag'),'NSIS installer must not contain the portable mode marker');
+let verifiedFiles=0;
 for(const file of manifest.portableFiles){
   assert.ok(!file.path.includes('..')&&!file.path.startsWith('/')&&!file.path.includes('\\'),'Unsafe payload path');
+  // The marker is intentionally exclusive to the portable ZIP and is validated
+  // there by verify-release.ps1; NSIS must not enable portable storage mode.
+  if(file.path==='portable.flag')continue;
   // Decode each NSIS payload to stdout. No installer execution, disk extraction,
   // registry changes, or temporary directory removal is needed.
   const bytes=execFileSync(sevenZip,['x','-so','-y',installer,file.path.replaceAll('/','\\')],{windowsHide:true,maxBuffer:64*1024*1024,stdio:['ignore','pipe','pipe']});
@@ -27,5 +33,6 @@ for(const file of manifest.portableFiles){
     marker.copy(bytes,offset);
   }
   assert.equal(createHash('sha256').update(bytes).digest('hex'),file.sha256,`Installer payload checksum differs: ${file.path}`);
+  verifiedFiles++;
 }
-console.log(`Installer payload verified: ${manifest.portableFiles.length} files (Tauri EXE bundle marker normalized).`);
+console.log(`Installer payload verified: ${verifiedFiles} shared files (portable.flag excluded; Tauri EXE bundle marker normalized).`);

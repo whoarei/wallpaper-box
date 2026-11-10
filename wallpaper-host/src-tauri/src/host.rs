@@ -1,3 +1,4 @@
+mod commands;
 use crate::{
     catalog::{self, Module},
     desktop::{self, Attachment, Display},
@@ -50,6 +51,7 @@ impl Default for Settings {
 #[derive(Clone, Debug)]
 struct Running {
     label: String,
+    module_root: PathBuf,
     proof: Attachment,
     auto_paused: bool,
     effective_paused: bool,
@@ -57,15 +59,28 @@ struct Running {
 struct Data {
     settings: Settings,
     modules: Vec<Module>,
-    online: bool,
+    online: crate::online::State,
+    warnings: Vec<String>,
+    transfer: Option<Transfer>,
+    resource_scopes: BTreeMap<String, String>,
     last_error: Option<String>,
     running: BTreeMap<String, Running>,
 }
 pub struct Host {
     data: Mutex<Data>,
     operations: Mutex<()>,
+    updates: Mutex<()>,
+    library: catalog::Library,
     dir: PathBuf,
     exiting: AtomicBool,
+}
+
+#[derive(Clone, Serialize)]
+struct Transfer {
+    id: String,
+    name: String,
+    received: u64,
+    total: u64,
 }
 
 #[derive(Serialize)]
@@ -81,13 +96,26 @@ pub struct WallpaperView {
 pub struct View {
     version: &'static str,
     service: &'static str,
-    online: bool,
+    online: crate::online::State,
+    online_repository: &'static str,
+    user_directory: String,
+    warnings: Vec<String>,
+    transfer: Option<Transfer>,
     selected_monitor: String,
     displays: Vec<Display>,
     modules: Vec<Module>,
     wallpapers: Vec<WallpaperView>,
     auto_pause: bool,
     last_error: Option<String>,
+}
+
+fn display_path(path: &std::path::Path) -> String {
+    let text = path.to_string_lossy();
+    if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{unc}")
+    } else {
+        text.strip_prefix(r"\\?\").unwrap_or(&text).to_string()
+    }
 }
 
 fn label(id: &str) -> String {
@@ -101,18 +129,12 @@ fn label(id: &str) -> String {
 }
 fn save(app: &AppHandle) {
     let host = app.state::<Host>();
-    let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+    let result = {
         let data = host.data.lock().unwrap();
-        let json = serde_json::to_vec_pretty(&data.settings)?;
-        drop(data);
-        fs::create_dir_all(&host.dir)?;
-        fs::write(host.dir.join("settings.tmp"), json)?;
-        fs::rename(
-            host.dir.join("settings.tmp"),
-            host.dir.join("settings.json"),
-        )?;
-        Ok(())
-    })();
+        // Serialize the latest settings while holding their lock. Concurrent
+        // commands cannot overwrite a newer snapshot or share a temporary file.
+        catalog::atomic_json(&host.dir.join("settings.json"), &data.settings)
+    };
     if let Err(error) = result {
         log(app, &format!("Save settings: {error}"));
     }
@@ -172,8 +194,12 @@ fn snapshot(app: &AppHandle) -> View {
         .collect();
     View {
         version: env!("CARGO_PKG_VERSION"),
-        service: catalog::SERVICE,
-        online: data.online,
+        service: catalog::ORIGIN,
+        online: data.online.clone(),
+        online_repository: crate::online::REPOSITORY,
+        user_directory: display_path(&host.library.user.join("local")),
+        warnings: data.warnings.clone(),
+        transfer: data.transfer.clone(),
         selected_monitor: data.settings.selected_monitor.clone(),
         displays: desktop::displays(),
         modules: data.modules.clone(),
@@ -192,22 +218,14 @@ fn diagnostics(app: &AppHandle) {
 
 fn refresh(app: &AppHandle) -> Result<(), String> {
     let host = app.state::<Host>();
-    let changed;
-    match catalog::fetch() {
-        Ok(modules) => {
-            let mut data = host.data.lock().unwrap();
-            changed = data.modules != modules;
-            data.modules = modules;
-            data.online = true;
-            data.last_error = None;
-        }
-        Err(message) => {
-            let mut data = host.data.lock().unwrap();
-            data.online = false;
-            data.last_error = Some(message.clone());
-            return Err(message);
-        }
-    }
+    let (modules, warnings) = host.library.discover();
+    let changed = {
+        let mut data = host.data.lock().unwrap();
+        let changed = data.modules != modules;
+        data.modules = modules;
+        data.warnings = warnings;
+        changed
+    };
     if changed {
         rebuild_tray(app);
     }
@@ -230,17 +248,22 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
         .find(|m| m.id == module_id)
         .cloned()
         .ok_or("该壁纸已从模块目录移除，请刷新列表。")?;
-    let url = format!("{}{}", catalog::SERVICE, module.href)
+    let url = format!("{}{}", catalog::ORIGIN, module.href)
         .parse()
         .map_err(|e| format!("壁纸地址错误：{e}"))?;
     let window_label = label(monitor_id);
+    host.data
+        .lock()
+        .unwrap()
+        .resource_scopes
+        .insert(window_label.clone(), module_id.into());
     let window = if let Some(window) = app.get_webview_window(&window_label) {
         window.navigate(url).map_err(|e| e.to_string())?;
         window
     } else {
         let profile = host.dir.join("webview").join(&window_label);
         let _ = fs::create_dir_all(&profile);
-        WebviewWindowBuilder::new(app, &window_label, WebviewUrl::External(url))
+        WebviewWindowBuilder::new(app, &window_label, WebviewUrl::CustomProtocol(url))
             .title(format!("壁纸盒子 · {} · {}", module.name, display.name))
             .inner_size(
                 display.width as f64 / display.scale,
@@ -257,8 +280,8 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
             .initialization_script(WALLPAPER_SCRIPT)
             .on_navigation(|url| {
                 url.scheme() == "http"
-                    && url.host_str() == Some("127.0.0.1")
-                    && url.port() == Some(8088)
+                    && url.host_str() == Some("wallpaper.localhost")
+                    && url.port().is_none()
             })
             .build()
             .map_err(|e| format!("创建壁纸窗口失败：{e}"))?
@@ -276,7 +299,6 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
     let effective;
     {
         let mut data = host.data.lock().unwrap();
-        data.settings.selected_monitor = monitor_id.into();
         let paused = data
             .settings
             .assignments
@@ -296,6 +318,7 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
             monitor_id.into(),
             Running {
                 label: window_label,
+                module_root: module.root.clone(),
                 proof: proof.clone(),
                 auto_paused: automatic,
                 effective_paused: effective,
@@ -329,6 +352,7 @@ fn remove(app: &AppHandle, monitor_id: &str) {
     {
         let mut data = host.data.lock().unwrap();
         data.running.remove(monitor_id);
+        data.resource_scopes.remove(&label(monitor_id));
         data.settings.assignments.remove(monitor_id);
     }
     save(app);
@@ -610,7 +634,7 @@ fn maintenance(app: AppHandle, first: bool) {
         if app.state::<Host>().exiting.load(Ordering::SeqCst) {
             break;
         }
-        if iteration > 0 && iteration % 8 == 0 {
+        if iteration > 0 {
             let _ = refresh(&app);
         }
         let displays = desktop::displays();
@@ -667,6 +691,42 @@ fn maintenance(app: AppHandle, first: bool) {
                 else {
                     continue;
                 };
+                let current_module = host
+                    .data
+                    .lock()
+                    .unwrap()
+                    .modules
+                    .iter()
+                    .find(|m| m.id == selection.module_id)
+                    .cloned();
+                let Some(current_module) = current_module else {
+                    if host
+                        .data
+                        .lock()
+                        .unwrap()
+                        .modules
+                        .iter()
+                        .any(|m| m.id == "aquarium")
+                    {
+                        if let Err(message) = apply_inner(&app, &id, "aquarium") {
+                            error(&app, message);
+                        }
+                    }
+                    continue;
+                };
+                let changed_root = host
+                    .data
+                    .lock()
+                    .unwrap()
+                    .running
+                    .get(&id)
+                    .is_some_and(|r| r.module_root != current_module.root);
+                if changed_root {
+                    if let Err(message) = apply_inner(&app, &id, &selection.module_id) {
+                        error(&app, message);
+                    }
+                    continue;
+                }
                 if let Some(window) = app.get_webview_window(&label(&id)) {
                     if let Ok(handle) = window.hwnd() {
                         let raw = handle.0 as isize;
@@ -696,27 +756,29 @@ fn maintenance(app: AppHandle, first: bool) {
                             .values()
                             .map(|r| r.proof.hwnd as isize)
                             .collect();
-                        let mut data = host.data.lock().unwrap();
+                        // GetWindowTextW may synchronously query our manager's
+                        // UI thread. Never hold its state lock during this call.
                         let cover = desktop::covering_window(display, &ignore);
-                        let auto = data.settings.auto_pause && cover.is_some();
-                        let effective = selection.paused || auto;
-                        if let Some(running) = data.running.get_mut(&id) {
-                            if auto != running.auto_paused {
-                                let message =
-                                    format!("Auto pause {id} = {auto}; covering={cover:?}");
-                                use std::io::Write;
-                                if let Ok(mut file) = fs::OpenOptions::new()
-                                    .create(true)
-                                    .append(true)
-                                    .open(host.dir.join("host.log"))
-                                {
-                                    let _ = writeln!(file, "{message}");
-                                }
+                        let change = {
+                            let mut data = host.data.lock().unwrap();
+                            let auto = data.settings.auto_pause && cover.is_some();
+                            let effective = selection.paused || auto;
+                            data.running.get_mut(&id).map(|running| {
+                                let auto_changed = auto != running.auto_paused;
+                                running.effective_paused = effective;
+                                running.auto_paused = auto;
+                                (auto, effective, auto_changed)
+                            })
+                        };
+                        if let Some((auto, effective, auto_changed)) = change {
+                            if auto_changed {
+                                log(
+                                    &app,
+                                    &format!("Auto pause {id} = {auto}; covering={cover:?}"),
+                                );
                             }
                             let _ = window
                                 .eval(format!("window.__SCREEN_GARDEN_SET_PAUSED?.({effective});"));
-                            running.effective_paused = effective;
-                            running.auto_paused = auto;
                         }
                     }
                 } else if let Err(message) = apply_inner(&app, &id, &selection.module_id) {
@@ -730,146 +792,82 @@ fn maintenance(app: AppHandle, first: bool) {
     }
 }
 
-#[tauri::command]
-async fn get_state(app: AppHandle) -> Result<View, String> {
-    tauri::async_runtime::spawn_blocking(move || snapshot(&app))
-        .await
-        .map_err(|e| e.to_string())
-}
-#[tauri::command]
-async fn refresh_modules(app: AppHandle) -> Result<View, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        refresh(&app)?;
-        Ok(snapshot(&app))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn start_content_service(app: AppHandle) -> Result<View, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let resources = app.path().resource_dir().map_err(|e| e.to_string())?;
-        crate::content::start(&resources)?;
-        refresh(&app)?;
-        Ok(snapshot(&app))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn select_monitor(app: AppHandle, monitor_id: String) -> Result<View, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        select(&app, &monitor_id)?;
-        Ok(snapshot(&app))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn apply_wallpaper(
-    app: AppHandle,
-    monitor_id: String,
-    module_id: String,
-) -> Result<View, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        apply(&app, &monitor_id, &module_id)?;
-        Ok(snapshot(&app))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn pause_wallpaper(app: AppHandle, monitor_id: String, paused: bool) -> Result<View, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        set_paused(&app, Some(&monitor_id), paused);
-        snapshot(&app)
-    })
-    .await
-    .map_err(|e| e.to_string())
-}
-#[tauri::command]
-async fn remove_wallpaper(app: AppHandle, monitor_id: String) -> Result<View, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        remove(&app, &monitor_id);
-        snapshot(&app)
-    })
-    .await
-    .map_err(|e| e.to_string())
-}
-#[tauri::command]
-fn auto_pause(app: AppHandle, enabled: bool) -> View {
-    set_auto(&app, enabled);
-    snapshot(&app)
-}
-#[tauri::command]
-fn hide_manager(app: AppHandle) {
-    if let Some(window) = app.get_webview_window("manager") {
-        let _ = window.hide();
-    }
-}
-#[tauri::command]
-fn quit_app(app: AppHandle) {
-    quit(&app);
-}
-#[tauri::command]
-async fn capture_desktop(app: AppHandle, monitor_id: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let display = desktop::displays()
-            .into_iter()
-            .find(|d| d.id == monitor_id)
-            .ok_or("显示器已断开连接。")?;
-        let output = app
-            .state::<Host>()
-            .dir
-            .join(format!("preview-{}.png", label(&monitor_id)));
-        desktop::capture(&display, &output)?;
-        Ok(output.to_string_lossy().into_owned())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn show_desktop(app: AppHandle, monitor_id: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        desktop::show_desktop()?;
-        std::thread::sleep(Duration::from_secs(3));
-        let display = desktop::displays()
-            .into_iter()
-            .find(|d| d.id == monitor_id)
-            .ok_or("显示器已断开连接。")?;
-        let output = app
-            .state::<Host>()
-            .dir
-            .join(format!("preview-{}.png", label(&monitor_id)));
-        desktop::capture(&display, &output)?;
-        Ok(output.to_string_lossy().into_owned())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
 pub fn run() {
     let app = tauri::Builder::default()
+        .register_asynchronous_uri_scheme_protocol("wallpaper", |context, request, responder| {
+            let app = context.app_handle().clone();
+            let window_label = context.webview_label().to_string();
+            tauri::async_runtime::spawn_blocking(move || {
+                let Some(host) = app.try_state::<Host>() else {
+                    responder.respond(
+                        tauri::http::Response::builder()
+                            .status(503)
+                            .body(Vec::<u8>::new())
+                            .unwrap(),
+                    );
+                    return;
+                };
+                let (modules, scope) = {
+                    let data = host.data.lock().unwrap();
+                    (
+                        data.modules.clone(),
+                        data.resource_scopes.get(&window_label).cloned(),
+                    )
+                };
+                if window_label != "manager" && scope.is_none() {
+                    responder.respond(
+                        tauri::http::Response::builder()
+                            .status(403)
+                            .body(Vec::<u8>::new())
+                            .unwrap(),
+                    );
+                    return;
+                }
+                responder.respond(crate::protocol::serve(&modules, scope.as_deref(), request));
+            });
+        })
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             show_manager(app)
         }))
         .invoke_handler(tauri::generate_handler![
-            get_state,
-            refresh_modules,
-            start_content_service,
-            select_monitor,
-            apply_wallpaper,
-            pause_wallpaper,
-            remove_wallpaper,
-            auto_pause,
-            hide_manager,
-            quit_app,
-            capture_desktop,
-            show_desktop
+            commands::get_state,
+            commands::refresh_modules,
+            commands::select_monitor,
+            commands::apply_wallpaper,
+            commands::pause_wallpaper,
+            commands::remove_wallpaper,
+            commands::auto_pause,
+            commands::hide_manager,
+            commands::quit_app,
+            commands::capture_desktop,
+            commands::show_desktop,
+            commands::check_online,
+            commands::install_online,
+            commands::rollback_wallpaper,
+            commands::import_wallpaper,
+            commands::open_wallpaper_folder,
         ])
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             fs::create_dir_all(&dir)?;
+            let resources = app.path().resource_dir()?;
+            let builtin = if resources.join("wallpapers").is_dir() {
+                resources.join("wallpapers")
+            } else {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../wallpapers")
+            };
+            let executable = std::env::current_exe()?;
+            let executable_dir = executable
+                .parent()
+                .ok_or_else(|| std::io::Error::other("程序目录无效"))?;
+            let user = if executable_dir.join("portable.flag").is_file() {
+                executable_dir.join("UserData/wallpapers")
+            } else {
+                app.path().local_data_dir()?.join("WallpaperBox/wallpapers")
+            };
+            let library =
+                catalog::Library::prepare(builtin, user).map_err(std::io::Error::other)?;
+            let online = crate::online::load_cache(&dir);
             let settings_path = dir.join("settings.json");
             let first = !settings_path.exists();
             let mut settings: Settings = fs::read(&settings_path)
@@ -885,11 +883,16 @@ pub fn run() {
                 data: Mutex::new(Data {
                     settings,
                     modules: vec![],
-                    online: false,
+                    online,
+                    warnings: vec![],
+                    transfer: None,
+                    resource_scopes: BTreeMap::new(),
                     last_error: None,
                     running: BTreeMap::new(),
                 }),
                 operations: Mutex::new(()),
+                updates: Mutex::new(()),
+                library,
                 dir,
                 exiting: AtomicBool::new(false),
             });
