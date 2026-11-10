@@ -46,6 +46,42 @@ pub async fn get_state(app: AppHandle, window: WebviewWindow) -> Result<View, St
         .map_err(|e| e.to_string())
 }
 #[tauri::command]
+pub async fn check_app_update(app: AppHandle, window: WebviewWindow) -> Result<View, String> {
+    manager(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::app_updates::check(&app)?;
+        Ok(snapshot(&app))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+pub async fn download_app_update(app: AppHandle, window: WebviewWindow) -> Result<View, String> {
+    manager(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::app_updates::download(&app)?;
+        Ok(snapshot(&app))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+pub async fn install_app_update(
+    app: AppHandle,
+    window: WebviewWindow,
+    confirmed: bool,
+    version: String,
+) -> Result<View, String> {
+    manager(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        save(&app);
+        crate::app_updates::install(&app, confirmed, &version)?;
+        Ok(snapshot(&app))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
 pub async fn refresh_modules(app: AppHandle, window: WebviewWindow) -> Result<View, String> {
     manager(&window)?;
     tauri::async_runtime::spawn_blocking(move || {

@@ -76,7 +76,7 @@ function fixtures() {
 
 // This fixture owns native state. UI updates only through the production invoke
 // API and its ordinary one-second polling, matching a Tauri manager window.
-function injectNativeFixture({ state, catalog, failCheck, failRollback }) {
+function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppCheck, failAppInstall }) {
   const copy = value => JSON.parse(JSON.stringify(value));
   const calls = [];
   const previous = new Map();
@@ -85,11 +85,29 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback }) {
     calls,
     failNextCheck() { pendingFailure = true; },
     state() { return copy(state); },
+    setAppUpdate(patch) { Object.assign(state.app_update, copy(patch)); },
   };
   window.__TAURI__ = { core: { invoke: async (command, args = {}) => {
     calls.push({ command, args: copy(args) });
     switch (command) {
       case 'get_state': return copy(state);
+      case 'check_app_update':
+        if (failAppCheck) throw '程序更新网络不可用，请稍后重试。';
+        state.app_update = { ...state.app_update, phase: 'downloading', version: '0.3.1',
+          received: 0, total: 1048576, error: null };
+        return copy(state);
+      case 'download_app_update':
+        state.app_update = { ...state.app_update, phase: 'downloading', received: 262144,
+          total: 1048576, error: null };
+        return copy(state);
+      case 'install_app_update':
+        if (args.confirmed !== true || state.app_update.phase !== 'ready') {
+          throw new Error('Test IPC: update installation requires ready state and explicit confirmation');
+        }
+        if (args.version !== state.app_update.version) throw '程序更新版本已变化，请重新确认。';
+        if (failAppInstall) throw '安装包验证被拒绝，请重新检查程序更新。';
+        state.app_update.phase = 'installing';
+        return copy(state);
       case 'select_monitor':
         if (!state.displays.some(display => display.id === args.monitorId)) {
           throw new Error('Test IPC: unknown monitor');
@@ -164,12 +182,25 @@ function moduleCard(page, container, name) {
   return page.locator(`${container} .module`).filter({ has: page.getByRole('heading', { name, exact: true }) });
 }
 
+function appUpdateFixture(fixture, phase, extra = {}) {
+  fixture.state.version = '0.3.0';
+  fixture.state.app_update = { phase, current_version: '0.3.0', version: '0.3.1',
+    notes: '修复显示器切换。\n下载后由用户决定安装时间。', received: 0, total: null,
+    error: null, last_checked_at: 1794297600, ...extra };
+}
+
 async function ready(page) {
   await page.waitForFunction(() => document.getElementById('module-count').textContent === '02');
 }
 
 async function visible(locator) {
   await locator.waitFor({ state: 'visible' });
+}
+
+async function screenshot(page, name) {
+  if (!process.env.UI_SCREENSHOT_DIR) return;
+  fs.mkdirSync(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+  await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, `${name}.png`), fullPage: true });
 }
 
 async function noHorizontalOverflow(page, label) {
@@ -381,6 +412,124 @@ async function noHorizontalOverflow(page, label) {
         { command: 'pause_wallpaper', args: { monitorId: 'primary', paused: false } },
       ]);
       assert.equal(calls.some(call => ['check_online', 'install_online'].includes(call.command)), false);
+    });
+
+    await test('background app downloads show progress and ready never installs automatically', fixture => {
+      appUpdateFixture(fixture, 'checking');
+    }, async page => {
+      await page.locator('#app-update-toggle').click();
+      assert.match(await page.locator('#app-update-status').textContent(), /正在检查/);
+      assert.deepEqual(await actions(page), [], 'Backend scheduling must not be duplicated by UI startup');
+      await page.evaluate(() => window.__uiTest.setAppUpdate({ phase: 'downloading', received: 524288, total: 1048576 }));
+      await page.waitForFunction(() => document.getElementById('app-update-progress').value === 50);
+      assert.match(await page.locator('#app-update-size').textContent(), /512 KB \/ 1\.0 MB/);
+      assert.equal(await page.locator('#download-app-update').isVisible(), false, 'A new version downloads automatically');
+      await moduleCard(page, '#modules', '松风镇').getByRole('button', { name: '设为该屏幕壁纸', exact: true }).click();
+      await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
+      await page.evaluate(() => window.__uiTest.setAppUpdate({ phase: 'ready', received: 1048576,
+        notes: '新版已验证。\n<script>window.badUpdateNotes=true</script>\n' + 'LongReleaseNote'.repeat(60) }));
+      await visible(page.locator('#install-app-update'));
+      assert.match(await page.locator('#app-update-toggle').textContent(), /已就绪/);
+      assert.equal(await page.locator('#app-update-current').textContent(), '0.3.0');
+      assert.equal(await page.locator('#app-update-latest').textContent(), '0.3.1');
+      await page.locator('#app-update-notes-wrap summary').click();
+      assert.match(await page.locator('#app-update-notes').textContent(), /<script>/);
+      assert.equal(await page.evaluate(() => window.badUpdateNotes), undefined);
+      assert.equal(await page.locator('#app-update-confirm').isVisible(), false);
+      await screenshot(page, 'app-update-ready');
+      await page.waitForTimeout(1150);
+      assert.deepEqual(await actions(page), [
+        { command: 'apply_wallpaper', args: { monitorId: 'primary', moduleId: 'pinewind-town' } },
+      ], 'Ready notification must never install or request a second download');
+    });
+
+    await test('app installation requires a cancelable confirmation and is submitted once', fixture => {
+      appUpdateFixture(fixture, 'ready');
+    }, async page => {
+      await visible(page.locator('#install-app-update'));
+      await page.locator('#install-app-update').click();
+      await visible(page.locator('#app-update-confirm'));
+      assert.match(await page.locator('#app-update-confirm-copy').textContent(), /v0\.3\.1/);
+      await screenshot(page, 'app-update-confirm');
+      await page.locator('#cancel-app-update').click();
+      assert.equal(await page.locator('#app-update-confirm').isVisible(), false);
+      assert.deepEqual(await actions(page), [], 'Cancel must leave installation untouched');
+      await page.locator('#install-app-update').click();
+      await page.evaluate(() => {
+        document.getElementById('confirm-app-update').click();
+        document.getElementById('confirm-app-update').click();
+      });
+      await page.waitForFunction(() => document.getElementById('app-update-status').textContent.includes('启动安装'));
+      assert.equal(await page.locator('#app-update-confirm').isVisible(), false);
+      assert.deepEqual(await actions(page), [
+        { command: 'install_app_update', args: { confirmed: true, version: '0.3.1' } },
+      ]);
+    });
+
+    await test('app update network rejection persists without blocking local wallpapers', fixture => {
+      appUpdateFixture(fixture, 'idle', { version: null, notes: null });
+      fixture.failAppCheck = true;
+    }, async page => {
+      await page.locator('#app-update-toggle').click();
+      await page.locator('#check-app-update').click();
+      await visible(page.locator('#app-update-error'));
+      assert.match(await page.locator('#app-update-error').textContent(), /程序更新网络不可用/);
+      await moduleCard(page, '#modules', '松风镇').getByRole('button', { name: '设为该屏幕壁纸', exact: true }).click();
+      await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
+      await page.waitForTimeout(1150);
+      assert.equal(await page.locator('#app-update-error').isVisible(), true);
+      assert.match(await page.locator('#app-update-error').textContent(), /程序更新网络不可用/);
+      assert.equal(await page.locator('#check-app-update').isEnabled(), true);
+      assert.equal(await page.locator('#download-app-update').isVisible(), false);
+      assert.deepEqual(await actions(page), [
+        { command: 'check_app_update', args: {} },
+        { command: 'apply_wallpaper', args: { monitorId: 'primary', moduleId: 'pinewind-town' } },
+      ]);
+    });
+
+    await test('app download retry reports progress and retains rejected installation errors', fixture => {
+      appUpdateFixture(fixture, 'error', { error: '下载中断，原安装版本仍可使用。' });
+      fixture.failAppInstall = true;
+    }, async page => {
+      await page.locator('#app-update-toggle').click();
+      assert.match(await page.locator('#app-update-error').textContent(), /下载中断/);
+      await page.locator('#download-app-update').click();
+      await page.waitForFunction(() => document.getElementById('app-update-progress').value === 25);
+      assert.equal(await page.locator('#app-update-error').isVisible(), false);
+      await page.evaluate(() => window.__uiTest.setAppUpdate({ phase: 'ready', received: 1048576 }));
+      await visible(page.locator('#install-app-update'));
+      await page.locator('#install-app-update').click();
+      await page.locator('#confirm-app-update').click();
+      await visible(page.locator('#app-update-error'));
+      await page.waitForTimeout(1150);
+      assert.match(await page.locator('#app-update-error').textContent(), /安装包验证被拒绝/);
+      assert.equal(await page.locator('#install-app-update').isEnabled(), true);
+      assert.equal(await page.evaluate(() => window.__uiTest.state().app_update.error), null,
+        'Rejected IPC errors must survive in the UI even when snapshots omit them');
+      assert.deepEqual(await actions(page), [
+        { command: 'download_app_update', args: {} },
+        { command: 'install_app_update', args: { confirmed: true, version: '0.3.1' } },
+      ]);
+    });
+
+    await test('installation pins the version shown in confirmation when backend state changes before IPC', fixture => {
+      appUpdateFixture(fixture, 'ready');
+    }, async page => {
+      await page.locator('#install-app-update').click();
+      await visible(page.locator('#app-update-confirm'));
+      assert.match(await page.locator('#app-update-confirm-copy').textContent(), /v0\.3\.1/);
+      await page.evaluate(() => {
+        // Simulate a backend change just before invoking, before the next poll
+        // can inform the UI. The native contract must receive the confirmed pin.
+        window.__uiTest.setAppUpdate({ version: '0.3.2' });
+        document.getElementById('confirm-app-update').click();
+      });
+      await visible(page.locator('#app-update-error'));
+      assert.match(await page.locator('#app-update-error').textContent(), /版本已变化/);
+      assert.equal(await page.evaluate(() => window.__uiTest.state().app_update.phase), 'ready');
+      assert.deepEqual(await actions(page), [
+        { command: 'install_app_update', args: { confirmed: true, version: '0.3.1' } },
+      ], 'A new backend candidate must not silently replace the user-confirmed installation');
     });
 
     console.log(`\n${passed} UI contracts passed; viewport 780x600; zero horizontal overflow; zero JavaScript errors.`);

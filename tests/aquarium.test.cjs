@@ -21,24 +21,46 @@ function playwright() {
   throw new Error('Run npm --prefix wallpaper-host ci, or set PLAYWRIGHT_PATH.');
 }
 
-async function serveAquarium() {
+async function serveAquarium(wrapper) {
   const root = path.resolve(__dirname, '../wallpapers/aquarium');
   const files = { '/': ['index.html', 'text/html; charset=utf-8'],
     '/aquarium.js': ['aquarium.js', 'text/javascript; charset=utf-8'],
     '/aquarium.css': ['aquarium.css', 'text/css; charset=utf-8'] };
   const server = http.createServer((request, response) => {
-    const pathname = new URL(request.url, 'http://localhost').pathname;
+    const url = new URL(request.url, 'http://localhost');
+    const pathname = url.pathname;
     if (pathname === '/favicon.ico') { response.writeHead(204).end(); return; }
     const file = files[pathname];
     if (!file) { response.writeHead(404).end(); return; }
     response.writeHead(200, { 'Content-Type': file[1], 'Cache-Control': 'no-store' });
-    response.end(fs.readFileSync(path.join(root, file[0])));
+    let content = fs.readFileSync(path.join(root, file[0]));
+    if (pathname === '/' && url.searchParams.has('wallpaper')) {
+      // Clock is installed before document scripts; inject the real wallpaper
+      // wrapper before the real deferred module, matching native initialization.
+      // Two independent addInitScripts have undefined ordering in Playwright.
+      content = content.toString('utf8').replace('<head>', `<head><script>${wrapper}</script>`);
+    }
+    response.end(content);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   return { server, address: `http://127.0.0.1:${server.address().port}` };
 }
 
 async function aquariumState(page) { return page.evaluate(() => window.aquarium.getState()); }
+
+async function advanceUntilEaten(page, previousEaten) {
+  // Drive every real RAF and physics update on a virtual clock. Software canvas
+  // rendering on CI can take >20 wall seconds for a few simulation seconds;
+  // waiting for wall time made a healthy aquarium randomly miss its deadline.
+  // No fish, food, update function, or canvas API is stubbed or accelerated.
+  let state;
+  for (let elapsed = 0; elapsed < 30000; elapsed += 500) {
+    await page.clock.runFor(500);
+    state = await aquariumState(page);
+    if (state.eaten > previousEaten) return state;
+  }
+  assert.fail(`Fish did not consume food within 30 simulation seconds: ${JSON.stringify(state)}`);
+}
 
 // Execute the production script verbatim, as native eval_with_callback does.
 async function hostFeed(page) {
@@ -59,8 +81,8 @@ function assertOnePortion({ before, reply, after }) {
 
 (async () => {
   const { chromium } = playwright();
-  const { server, address } = await serveAquarium();
   const wrapper = fs.readFileSync(path.resolve(__dirname, '../wallpaper-host/src-tauri/wallpaper-mode.js'), 'utf8');
+  const { server, address } = await serveAquarium(wrapper);
   let browser;
   let passed = 0;
   try {
@@ -73,14 +95,16 @@ function assertOnePortion({ before, reply, after }) {
 
     async function test(name, wallpaperMode, body) {
       const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'zh-CN' });
-      if (wallpaperMode) await context.addInitScript({ content: wrapper });
       await context.addInitScript(script => {
         // At document creation the actual module has not initialized its HUD or
         // diagnostics yet. Test the real bridge's loading response at that time.
         window.__aquariumFeedBeforeReady = (0, eval)(script);
       }, feedScript);
       const page = await context.newPage();
-      page.setDefaultTimeout(20000);
+      page.setDefaultTimeout(120000);
+      const start = new Date('2026-11-11T00:00:00Z');
+      await page.clock.install({ time: start });
+      await page.clock.pauseAt(new Date(start.getTime() + 1000));
       const errors = [], external = [];
       page.on('pageerror', error => errors.push(error.message));
       page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
@@ -92,8 +116,9 @@ function assertOnePortion({ before, reply, after }) {
         return route.continue();
       });
       try {
-        await page.goto(address, { waitUntil: 'networkidle' });
-        await page.waitForFunction(() => window.aquarium?.getState().frames > 1);
+        await page.goto(address + (wallpaperMode ? '/?wallpaper=1' : '/'), { waitUntil: 'load' });
+        await page.clock.runFor(100);
+        assert.ok((await aquariumState(page)).frames > 1);
         await body(page);
         assert.deepEqual(errors, [], 'The real aquarium must have no JavaScript or console errors');
         assert.deepEqual(external, [], 'The bundled aquarium must work entirely offline');
@@ -108,9 +133,7 @@ function assertOnePortion({ before, reply, after }) {
       const portion = await hostFeed(page);
       assertOnePortion(portion);
       assert.ok(portion.after.foods > 0);
-      await page.waitForFunction(eaten => window.aquarium.getState().eaten > eaten, portion.before.eaten,
-        { timeout: 20000 });
-      const consumed = await aquariumState(page);
+      const consumed = await advanceUntilEaten(page, portion.before.eaten);
       assert.equal(consumed.totalFed, portion.after.totalFed);
       assert.ok(consumed.foods < portion.after.foods, 'Fish must consume real food rather than only display a toast');
     });
@@ -118,27 +141,29 @@ function assertOnePortion({ before, reply, after }) {
     await test('host pause queues food and resume restores simulation and feeding', true, async page => {
       await page.evaluate(() => window.__SCREEN_GARDEN_SET_PAUSED(true));
       const frozen = await aquariumState(page);
-      await page.waitForTimeout(250);
+      await page.clock.runFor(1000);
       assert.equal((await aquariumState(page)).frames, frozen.frames, 'Host pause must freeze animation frames');
       const queued = await hostFeed(page);
       assertOnePortion(queued);
-      await page.waitForTimeout(250);
+      await page.clock.runFor(1000);
       const still = await aquariumState(page);
       assert.equal(still.frames, frozen.frames);
       assert.equal(still.time, frozen.time);
       assert.equal(still.foods, queued.after.foods, 'Occlusion queues the food without advancing physics');
       await page.evaluate(() => window.__SCREEN_GARDEN_SET_PAUSED(false));
-      await page.waitForFunction(frames => window.aquarium.getState().frames > frames, frozen.frames);
+      await page.clock.runFor(100);
+      assert.ok((await aquariumState(page)).frames > frozen.frames);
       assertOnePortion(await hostFeed(page));
-      await page.waitForFunction(eaten => window.aquarium.getState().eaten > eaten, frozen.eaten,
-        { timeout: 20000 });
+      await advanceUntilEaten(page, frozen.eaten);
       assert.ok((await aquariumState(page)).time > frozen.time);
     });
 
     await test('the original web canvas and E controls retain feeding and manual pause behavior', false, async page => {
       assert.equal(await page.locator('#feed').isVisible(), true);
       const before = await aquariumState(page);
-      await page.locator('#aquarium').click({ position: { x: 640, y: 168 } });
+      // Virtual RAF is paused, so bypass Playwright's two-frame stability wait;
+      // this still dispatches the real browser pointer/click events to canvas.
+      await page.locator('#aquarium').click({ position: { x: 640, y: 168 }, force: true });
       assert.equal((await aquariumState(page)).totalFed, before.totalFed + 7, 'Canvas clicks must still feed');
       await page.keyboard.press('e');
       assert.equal((await aquariumState(page)).totalFed, before.totalFed + 14, 'E must still feed');

@@ -2,9 +2,18 @@
 <html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>壁纸盒子 · 壁纸管理</title><link rel="stylesheet" href="app.css"><script src="app.js" defer></script></head>
 <body>
-<header><div class="brand"><span class="mark">≈</span><div><strong>壁纸盒子</strong><small>WALLPAPER BOX</small></div><span id="version" class="version">0.2.1</span></div><div class="header-actions"><span class="service online"><i></i>本地播放 · 离线可用</span></div></header>
+<header><div class="brand"><span class="mark">≈</span><div><strong>壁纸盒子</strong><small>WALLPAPER BOX</small></div><span id="version" class="version">0.3.0</span></div><div class="header-actions"><span class="service online"><i></i>本地播放 · 离线可用</span><button id="app-update-toggle" class="quiet" aria-expanded="false" aria-controls="app-update-panel">程序更新</button></div></header>
 <main>
 <section class="intro"><div><p class="eyebrow">A LITTLE WORLD, ON YOUR DESKTOP.</p><h1>让桌面，留一处风景。</h1><p class="lead">选择显示器，再选一张喜欢的壁纸。</p></div><div class="intro-actions"><button id="show-desktop" class="quiet tray-hide">查看桌面</button><button id="hide" class="quiet tray-hide">收起到托盘 ↘</button></div></section>
+<section id="app-update-panel" class="app-update-panel" aria-labelledby="app-update-title" hidden>
+ <div class="app-update-heading"><h2 id="app-update-title">程序更新</h2><span class="app-update-versions">当前 v<span id="app-update-current"></span><span id="app-update-latest-wrap" hidden> · 新版 v<span id="app-update-latest"></span></span></span></div>
+ <p class="app-update-policy">启动时和每天检查一次，有新版会在后台下载并验证。准备好后，由你决定何时升级。</p>
+ <p id="app-update-status" class="app-update-status" role="status" aria-live="polite"></p>
+ <div id="app-update-progress-wrap" class="app-update-progress-wrap" hidden><progress id="app-update-progress" max="100" aria-label="程序安装包下载进度"></progress><span id="app-update-size"></span></div>
+ <div id="app-update-error" class="error" role="alert" hidden></div>
+ <details id="app-update-notes-wrap" class="app-update-notes" hidden><summary>更新说明</summary><pre id="app-update-notes"></pre></details>
+ <div class="app-update-actions"><button id="check-app-update" class="quiet">检查程序更新</button><button id="download-app-update" class="quiet" hidden>重试下载</button><button id="install-app-update" class="update-install" hidden>重启并升级</button></div>
+</section>
 <div id="error" class="error" role="alert" hidden></div>
 <section class="display-section"><div class="section-label"><h2>显示位置</h2><label class="switch-label"><input id="auto-pause" type="checkbox" checked><span>被窗口遮挡时自动暂停</span></label></div><div id="displays" class="displays" aria-label="选择显示器"></div></section>
 <section class="current"><div><span class="status-dot" id="status-dot"></span><strong id="current-title">正在读取壁纸</strong><span id="current-status"></span></div><div class="current-actions"><button id="feed-aquarium" class="quiet" title="向当前屏幕的水族箱投下一小撮鱼食" hidden>投喂鱼儿</button><button id="pause" class="quiet" disabled>暂停</button><button id="preview" class="quiet">保存桌面预览</button><button id="remove" class="quiet" disabled>关闭该屏幕壁纸</button></div></section>
@@ -15,4 +24,5 @@
 </main>
 <footer><span>关闭窗口后，仍可从系统托盘切换壁纸。</span><button id="quit" class="text-button">退出程序</button></footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog id="app-update-confirm" class="app-update-confirm" aria-labelledby="app-update-confirm-title" aria-describedby="app-update-confirm-copy"><h2 id="app-update-confirm-title">重启并升级？</h2><p id="app-update-confirm-copy"></p><div class="app-update-actions"><button id="cancel-app-update" class="quiet">暂不升级</button><button id="confirm-app-update" class="update-install">确认升级</button></div></dialog>
 </body></html>

@@ -5,7 +5,7 @@ if (-not $env:GH_REPO) { throw 'GH_REPO is required' }
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $verify = Join-Path $repoRoot 'wallpaper-host\scripts\verify-release.ps1'
 $releaseRoot = (Resolve-Path -LiteralPath $Directory).Path
-& $verify -Directory $releaseRoot
+& $verify -Directory $releaseRoot -RequireSigned
 $manifest = Get-Content (Join-Path $releaseRoot 'release-manifest.json') -Raw | ConvertFrom-Json
 if ($Tag -ne "v$($manifest.version)") { throw 'Tag and artifact version differ' }
 $notes = Join-Path $repoRoot ".github\release-notes\$Tag.md"
@@ -20,8 +20,10 @@ if (-not $exists) {
     & gh release create $Tag --verify-tag --draft --title "壁纸盒子 $Tag" --notes-file $notes
     if ($LASTEXITCODE -ne 0) { throw 'Could not create GitHub draft release' }
 }
-$assets = @(Get-ChildItem -LiteralPath $releaseRoot -File | Where-Object { $_.Name -match '(^wallpaper-box_.*\.(exe|zip)$|^SHA256SUMS\.txt$|^release-manifest\.json$)' } | Select-Object -ExpandProperty FullName)
-if ($assets.Count -ne 4) { throw 'Expected exactly four release assets' }
+$installerName = "wallpaper-box_$($manifest.version)_x64-setup.exe"
+$assetNames = @($installerName,"$installerName.sig",'latest.json','release-manifest.json','SHA256SUMS.txt')
+$assets = @($assetNames | ForEach-Object { Join-Path $releaseRoot $_ })
+if (@(Get-ChildItem -LiteralPath $releaseRoot -File).Count -ne 5) { throw 'Expected exactly five signed installer release assets' }
 & gh release upload $Tag @assets --clobber
 if ($LASTEXITCODE -ne 0) { throw 'Release asset upload failed; draft retained' }
 $download = Join-Path ([IO.Path]::GetTempPath()) ('wallpaper-box-release-' + [guid]::NewGuid().ToString('N'))
@@ -29,7 +31,7 @@ New-Item -ItemType Directory -Path $download | Out-Null
 try {
     & gh release download $Tag --dir $download
     if ($LASTEXITCODE -ne 0) { throw 'Release download verification failed; draft retained' }
-    & $verify -Directory $download
+    & $verify -Directory $download -RequireSigned
     foreach ($asset in $assets) {
         $downloaded = Join-Path $download (Split-Path -Leaf $asset)
         if ((Get-FileHash -LiteralPath $asset).Hash -ne (Get-FileHash -LiteralPath $downloaded).Hash) { throw "Uploaded bytes differ: $asset" }

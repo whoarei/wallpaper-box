@@ -44,6 +44,8 @@ jobs:
       - name: Install pinned Tauri CLI
         working-directory: wallpaper-host
         run: npm ci --ignore-scripts
+      - name: Verify signed update release tooling
+        run: node --test ./wallpaper-host/scripts/release.test.mjs
       - name: Validate version, JavaScript, and module discovery
         run: |
           node wallpaper-host/scripts/check-version.mjs
@@ -66,9 +68,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test Rust with release features
         run: cargo test --locked --release --features custom-protocol --manifest-path wallpaper-host/src-tauri/Cargo.toml
-      - name: Package portable version and verify payload hashes
-        run: ./wallpaper-host/scripts/package-release.ps1 -OutputDirectory ./release
-      - name: Verify installer payload matches the portable package
+      - name: Package installer and sign update artifacts when authorized
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name != 'pull_request' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+        run: |
+          $requireSigned = $env:GITHUB_REF -like 'refs/tags/v*'
+          ./wallpaper-host/scripts/package-release.ps1 -OutputDirectory ./release -RequireSigned:$requireSigned
+      - name: Verify actual installer payload matches the resource manifest
         run: |
           $sevenZip = (Get-Command 7z.exe -ErrorAction Stop).Source
           node ./wallpaper-host/scripts/verify-installer.mjs ./release $sevenZip
@@ -89,6 +96,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: wallpaper-box-windows-x64

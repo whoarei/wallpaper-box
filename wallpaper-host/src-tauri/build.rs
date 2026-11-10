@@ -1,6 +1,9 @@
 fn main() {
     let commands = &[
         "get_state",
+        "check_app_update",
+        "download_app_update",
+        "install_app_update",
         "refresh_modules",
         "select_monitor",
         "apply_wallpaper",

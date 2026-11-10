@@ -96,6 +96,7 @@ pub struct WallpaperView {
 #[derive(Serialize)]
 pub struct View {
     version: &'static str,
+    app_update: crate::app_updates::View,
     service: &'static str,
     online: crate::online::State,
     online_repository: &'static str,
@@ -195,6 +196,7 @@ fn snapshot(app: &AppHandle) -> View {
         .collect();
     View {
         version: env!("CARGO_PKG_VERSION"),
+        app_update: app.state::<crate::app_updates::Updates>().view(),
         service: catalog::ORIGIN,
         online: data.online.clone(),
         online_repository: crate::online::REPOSITORY,
@@ -589,6 +591,13 @@ fn rebuild_tray(app: &AppHandle) {
         )?)?;
         menu.append(&MenuItem::with_id(
             app,
+            "check-app-update",
+            "检查程序更新",
+            true,
+            None::<&str>,
+        )?)?;
+        menu.append(&MenuItem::with_id(
+            app,
             "quit",
             "退出壁纸盒子",
             true,
@@ -619,6 +628,10 @@ fn tray_action(app: &AppHandle, id: &str) {
             apply(&app, &view.selected_monitor, module)
         } else if id == "feed-aquarium" {
             feed_aquarium(&app, &view.selected_monitor)
+        } else if id == "check-app-update" {
+            show_manager(&app);
+            let _ = crate::app_updates::check(&app);
+            Ok(())
         } else {
             match id.as_str() {
                 "pause-current" => {
@@ -858,6 +871,7 @@ fn maintenance(app: AppHandle, first: bool) {
 
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .register_asynchronous_uri_scheme_protocol("wallpaper", |context, request, responder| {
             let app = context.app_handle().clone();
             let window_label = context.webview_label().to_string();
@@ -895,6 +909,9 @@ pub fn run() {
         }))
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
+            commands::check_app_update,
+            commands::download_app_update,
+            commands::install_app_update,
             commands::refresh_modules,
             commands::select_monitor,
             commands::apply_wallpaper,
@@ -921,18 +938,11 @@ pub fn run() {
             } else {
                 PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../wallpapers")
             };
-            let executable = std::env::current_exe()?;
-            let executable_dir = executable
-                .parent()
-                .ok_or_else(|| std::io::Error::other("程序目录无效"))?;
-            let user = if executable_dir.join("portable.flag").is_file() {
-                executable_dir.join("UserData/wallpapers")
-            } else {
-                app.path().local_data_dir()?.join("WallpaperBox/wallpapers")
-            };
+            let user = app.path().local_data_dir()?.join("WallpaperBox/wallpapers");
             let library =
                 catalog::Library::prepare(builtin, user).map_err(std::io::Error::other)?;
             let online = crate::online::load_cache(&dir);
+            app.manage(crate::app_updates::Updates::new(dir.join("app-updates")));
             let settings_path = dir.join("settings.json");
             let first = !settings_path.exists();
             let mut settings: Settings = fs::read(&settings_path)
@@ -998,6 +1008,7 @@ pub fn run() {
                 ),
             );
             std::thread::spawn(move || maintenance(handle, first));
+            crate::app_updates::start(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {
