@@ -1,0 +1,97 @@
+'use strict';
+// Editable document source. The companion JSON is consumed by rtd-html-docs/render.mjs.
+const fs = require('node:fs');
+const path = require('node:path');
+const escape = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const code = s => '<pre><code>' + escape(s) + '</code></pre>';
+const table = (heads, rows) => '<div class="table-wrap"><table><thead><tr>' + heads.map(h=>'<th>'+h+'</th>').join('') + '</tr></thead><tbody>' + rows.map(row=>'<tr>'+row.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('') + '</tbody></table></div>';
+const diagram = `<figure><div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 930 410" role="img" aria-labelledby="architecture-title architecture-desc"><title id="architecture-title">展示服务运行架构</title><desc id="architecture-desc">浏览器通过本机 8088 端口访问 Nginx；Nginx 提供首页、文档与模块文件，并将目录接口转发给 Node 目录服务。目录服务每次请求读取 modules 中的文件夹和元数据。</desc><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8Z" fill="var(--accent, #b7432a)"/></marker></defs><g font-family="Microsoft YaHei, sans-serif" font-size="16" text-anchor="middle" fill="var(--ink, #404040)"><rect x="25" y="130" width="190" height="92" rx="10" fill="var(--surface-raised, #fff)" stroke="var(--diagram-line, #b8c7d3)"/><text x="120" y="165">浏览器 / 全屏显示</text><text x="120" y="193" font-size="13">每 5 秒更新目录</text><rect x="300" y="130" width="210" height="92" rx="10" fill="var(--accent-soft, #fff1e9)" stroke="var(--accent, #b7432a)"/><text x="405" y="165">Nginx · web</text><text x="405" y="193" font-size="13">127.0.0.1:8088 → 8080</text><rect x="635" y="22" width="255" height="88" rx="10" fill="var(--surface-raised, #fff)" stroke="var(--diagram-line, #b8c7d3)"/><text x="762" y="55">public/</text><text x="762" y="81" font-size="13">首页、静态资源、HTML 文档</text><rect x="635" y="142" width="255" height="88" rx="10" fill="var(--surface-raised, #fff)" stroke="var(--diagram-line, #b8c7d3)"/><text x="762" y="175">modules/</text><text x="762" y="201" font-size="13">模块页面、资源、module.json</text><rect x="300" y="300" width="210" height="88" rx="10" fill="var(--accent-soft, #fff1e9)" stroke="var(--accent, #b7432a)"/><text x="405" y="333">Node.js · registry</text><text x="405" y="360" font-size="13">内部端口 3000 · 无依赖</text></g><g stroke="var(--accent, #b7432a)" fill="none" stroke-width="2" marker-end="url(#arrow)"><path d="M215 176H292"/><path d="M510 157H565V66H627"/><path d="M510 191H627"/><path d="M405 222V292"/><path d="M510 344H762V238" stroke-dasharray="6 4"/></g><g font-family="Microsoft YaHei, sans-serif" font-size="12" fill="var(--muted, #607080)"><text x="225" y="158">HTTP</text><text x="525" y="135">静态读取</text><text x="420" y="264">/api/modules</text><text x="545" y="329">按请求扫描（只读）</text></g></svg></div><figcaption>统一挂载整个模块目录，模块增减不改变容器配置。虚线表示目录与元数据读取。</figcaption></figure>`;
+const spec = {
+ title:'壁纸盒子 · 模块化技术方案', project:'Wallpaper Box', subtitle:'架构、模块规范与部署维护', documentId:'screen-garden-architecture', updated:'2026-11-10', eyebrow:'本机 Docker 展示服务 / 模块自动发现',
+ introHtml:'<p class="lead">将动态桌面、全屏风景和静态小工具收敛到统一入口。新增模块只需放入一个文件夹，首页自动发现；松风镇作为第一个模块保留原访问地址。</p><div class="callout"><strong>日常新增模块：</strong>放入 <code>modules/&lt;模块名&gt;/index.html</code>，直接访问 <code>http://127.0.0.1:8088/&lt;模块名&gt;/</code>。可选的 <code>module.json</code> 定义名称、封面、入口和排序。</div>',
+ sections:[
+ {id:'overview',title:'目标与边界',html:'<p>本次改造保留一个固定的本机端口，将模块内容与运行服务分开。纯前端模块的添加、页面编辑、元数据修改和列表移除，都不需要修改 Compose、重新构建镜像或重启容器。</p>'+table(['事项','运行方式'],[['展示入口','<a href="http://127.0.0.1:8088/">http://127.0.0.1:8088/</a>'],['松风镇','<a href="http://127.0.0.1:8088/pinewind-town/">/pinewind-town/</a>，迁移前后保持一致'],['访问范围','只绑定本机回环地址；Docker Desktop 需要处于运行状态'],['适用模块','HTML / CSS / JavaScript 与静态图片、音视频资源'],['带后端的应用','仍需独立启动后端并按需添加反向代理；放文件夹不会自动启动服务端程序']])},
+ {id:'architecture',title:'运行架构与请求流程',html:diagram+'<h3>两个轻量服务</h3><ul><li><code>web</code>：官方 Nginx 稳定版镜像，负责网页与资源访问、目录接口代理和可选应用代理。</li><li><code>registry</code>：Node.js 24 Alpine 镜像，仅使用标准库。读取目录和 JSON，返回模块列表，不安装依赖、不执行模块代码。</li></ul><p>两个服务都将同一宿主机 <code>modules/</code> 目录只读挂载到 <code>/srv/modules</code>。目录服务不向宿主机发布端口，浏览器统一经 Nginx 的 8088 端口访问。</p><p>Nginx 使用 Docker 内置 DNS 动态解析 <code>registry</code>，避免目录容器重建后沿用旧 IP。自动发现不依赖文件监听事件，每次调用接口都重新扫描。</p>'},
+ {id:'layout',title:'目录布局与内容归属',html:code(`E:/codex-proj/desktop/display-service/
+├─ compose.yaml                   两个服务、挂载、资源限制和健康检查
+├─ nginx.conf                     Nginx 主配置
+├─ site.conf                      通用模块路由与目录接口
+├─ registry/server.cjs            模块扫描与只读 JSON 接口
+├─ modules/
+│  └─ pinewind-town/
+│     ├─ index.html               松风镇完整页面
+│     ├─ module.json              名称、说明、排序等元数据
+│     └─ cover.jpg                自动识别的封面（可选）
+├─ public/
+│  ├─ index.html                  自动生成列表的首页外壳
+│  ├─ assets/gallery.js           轮询、卡片渲染和错误回退
+│  ├─ assets/gallery.css          响应式布局
+│  └─ docs/architecture.html      本技术方案（单文件、可离线）
+├─ routes/*.conf                  可选的反向代理路由
+├─ docs/architecture-source.cjs   技术方案的可编辑内容源
+└─ tests/                        目录逻辑与运行环境验收脚本`)+ '<p><code>modules/</code> 内的文件属于网页内容；Compose、服务端代码和测试文件保存在该目录之外。静态内容不打包进镜像，容器更新不覆盖宿主机页面。</p>'},
+ {id:'module-contract',title:'模块接入规范',html:'<h3>最小模块</h3>'+code('modules/\n  aquarium/\n    index.html')+'<p>无需元数据也可发现：名称默认为文件夹名，入口为 <code>index.html</code>，排序值为 100；缺少封面时，首页使用默认视觉封面。模块中的资源应使用相对路径，例如 <code>./assets/fish.png</code>。</p><h3>完整元数据示例</h3>'+code(JSON.stringify({name:'水族箱',subtitle:'AQUARIUM',description:'一小片安静游动的海。',entry:'index.html',cover:'cover.webp',tags:['海底','慢生活'],order:20,enabled:true},null,2))+table(['字段','规则与默认值'],[['文件夹名','1～64 个小写字母、数字或连字符，首字符为字母或数字；保留名：api、assets、docs、healthz'],['name / subtitle','可选字符串，最多 80 字符；name 默认为文件夹名'],['description','可选说明，最多 300 字符'],['entry','相对 HTML 路径，默认 index.html，最多 256 字符；支持 view/start.html；首页链接指向该文件'],['cover','相对图片路径，最多 256 字符；支持 webp、jpg、jpeg、png、svg、avif、gif'],['自动封面','不指定 cover 时，依次寻找 cover.webp、cover.jpg、cover.png、cover.svg'],['tags','最多 8 个字符串，每个最多 30 字符'],['order','有限数值，默认 100；越小越靠前，同值按文件夹名排序'],['enabled','布尔值，默认 true；false 仅从首页隐藏，不阻止通过原 URL 访问'],['module.json','UTF-8 JSON 对象，不超过 64 KiB；不支持注释或末尾逗号']])+'<div class="callout amber">入口和封面必须位于当前模块目录内。入口不存在、元数据损坏或字段类型不合法时，只跳过该模块；错误原因出现在 API 的 warnings 中，其他模块继续显示。封面缺失则回退到默认封面。</div>'},
+ {id:'discovery',title:'自动发现与页面更新',html:'<ol><li>首页首次打开时请求 <code>GET /api/modules</code>。</li><li>目录服务列出 <code>modules/</code> 的直接子目录，排除保留名称、无效名称和目录符号链接。</li><li>读取可选元数据，校验入口与封面文件，生成 URL 并排序。</li><li>首页根据结果生成卡片，渲染元数据时使用文本节点，避免将字段当作 HTML 执行。</li><li>页面可见时每 5 秒重新请求；重新聚焦或切回页面时立即更新。页面隐藏时暂停请求。</li></ol><p>API 和静态内容均设置 <code>Cache-Control: no-store</code>。列表内容没有变化时不重建卡片。模块页面正在播放时，修改其源文件仍需刷新该模块页面；目录自动更新不会强制中断正在展示的内容。</p><h3>添加、修改与移除</h3><ul><li>添加文件夹：API 下一次请求即可发现，打开的首页通常在下一个 5 秒轮询周期显示。</li><li>修改名称、封面路径、排序或 enabled：首页自动更新；同一路径的图片内容替换可刷新首页重新载入。</li><li>删除或移出文件夹：首页下一次更新时移除卡片；之前的页面地址随后返回 404。</li><li>复制大型模块：建议先以点开头的暂存目录复制，完成后重命名为合法模块名，避免未复制完成就被列出。</li></ul>'},
+ {id:'interfaces',title:'HTTP 接口与路由',html:table(['路径','行为'],[['/','首页，从目录接口生成卡片'],['/&lt;模块名&gt;/','通用目录路由，默认返回 index.html'],['/&lt;模块名&gt;/&lt;相对文件&gt;','模块内静态资源或自定义 HTML 入口'],['/api/modules','GET / HEAD：模块列表及 warnings；其他方法返回 405'],['/healthz','Nginx 存活检查；目录服务内部也提供 /healthz'],['/assets/*','首页静态资源'],['/docs/architecture.html','本技术方案'],['/docs 或 /docs/','重定向到本技术方案']])+'<h3>目录响应示例</h3>'+code(JSON.stringify({modules:[{id:'pinewind-town',name:'松风镇',subtitle:'PINEWIND',description:'林间小屋、昼夜流转，还有一班开往慢生活的小火车。',tags:['像素小镇','昼夜流转','点击种花'],order:10,entry:'index.html',href:'/pinewind-town/',cover:'/pinewind-town/cover.jpg'}],warnings:[]},null,2))+'<p>目录根路径不可读取时，API 返回 503 和 <code>{"error":"module_directory_unavailable"}</code>。个别模块出错不会让整个接口失败。目录服务仅负责列出模块，模块文件由 Nginx 直接提供。</p>'},
+ {id:'deployment',title:'部署与日常维护',html:'<p>在服务根目录执行以下命令。镜像以摘要固定，首次部署需能获取对应镜像，正常运行不需要 npm 安装或构建步骤。</p>'+code(String.raw`Set-Location -LiteralPath 'E:\codex-proj\desktop\display-service'
+docker compose up -d --wait
+docker compose ps
+docker compose logs --tail 50 web registry
+
+# 停止服务；手动停止后不会自动恢复
+docker compose stop
+
+# 再次启动
+docker compose up -d --wait`)+table(['改动','需要的操作'],[['新增 / 修改 / 移除静态模块','修改 modules/ 内容；无需重启'],['修改 module.json','保存即可，等待首页下一次更新'],['修改首页 HTML / CSS / JavaScript','刷新首页'],['修改 registry/server.cjs','docker compose restart registry；无需镜像重建'],['修改 Nginx 路由','先 nginx -t，成功后 nginx -s reload'],['修改 Compose、镜像、挂载或环境变量','docker compose up -d --wait 应用配置']])+code('docker compose exec web nginx -t\n# 只有检查成功后才执行\ndocker compose exec web nginx -s reload')+'<p>容器使用 <code>restart: unless-stopped</code>；Docker 引擎启动后会恢复未被手动停止的服务。此配置不修改 Docker Desktop 自身的开机启动设置。</p><p>web 的健康检查同时验证自身和目录接口；registry 单独验证内部健康端点。目录容器不发布宿主机端口，web 仅发布 <code>127.0.0.1:8088</code>。</p>'},
+ {id:'migration',title:'松风镇迁移与状态兼容',html:'<p>松风镇统一迁入 <code>display-service/modules/pinewind-town/</code>，取消针对单个场景的文件挂载和专用 Nginx 路由。首页不再写死模块卡片，名称与说明来自该模块的元数据。</p><p>迁移保留 HTML 原始字节和 <code>http://127.0.0.1:8088/pinewind-town/</code> 地址。浏览器的 localStorage 属于同一来源，所以该来源下的种花记录可以继续使用。此前 47831 端口的临时预览属于另一个来源，其记录不会自动迁入 8088。</p><p>模块源码无需为自动发现增加特殊 SDK、生命周期接口或构建脚本。已有的静态页面可以直接按目录接入。</p>'},
+ {id:'verification',title:'验收与回归检查',html:'<p>本次验证覆盖目录逻辑与实际运行的 Docker 服务，重点检查新增模块时服务持续运行。</p><ul><li>五组 Node 标准测试：新增、重命名、入口变化、元数据与排序、坏模块隔离、路径校验和 HTTP 行为。</li><li>运行环境检查：临时加入模块、修改元数据、损坏 JSON、隐藏模块和移除模块；整个过程中容器 ID 与启动时间保持一致。</li><li>路由检查：首页、CSS / JS、健康端点、松风镇原地址及原始 HTML 哈希，缺失页面与非公开文件返回 404，非法 API 方法返回 405。</li><li>浏览器检查：首页在不手动刷新的情况下自动出现和移除新卡片，桌面和手机布局不产生横向溢出。</li></ul>'+code('node --test tests/registry.test.cjs\nnode tests/verify-running.cjs')+'<p>浏览器测试脚本为 <code>tests/gallery.browser.cjs</code>，需要现有 Playwright 模块和浏览器路径。HTML 文档还按 RTD 文档技能检查目录、10 套配色、主题恢复、无脚本阅读、窄屏和打印样式。</p>'},
+ {id:'troubleshooting',title:'排查、扩展与参考',html:table(['现象','检查方向'],[['新增模块未显示','检查目录名、index.html 或 entry 是否存在；查看 /api/modules 的 warnings；首页需保持可见'],['JSON 修改后模块消失','检查 JSON 语法与字段类型，保存为有效对象后会自动恢复'],['首页只显示默认封面','检查 cover 相对路径与图片格式；未指定时可使用约定的 cover 文件名'],['后台目录正常但首页未更新','重新聚焦首页；检查浏览器网络请求；需要时刷新首页脚本'],['模块页面正常、API 不可用','docker compose ps；查看 registry 日志；目录服务恢复后首页会继续更新'],['Docker 未运行时页面打不开','启动 Docker Desktop，再检查服务状态；曾手动停止时执行 up -d --wait']])+'<h3>应用代理扩展</h3><p><code>routes/local-app.conf.example</code> 是默认不启用的代理示例。复制为 .conf 后设置路径和上游，再执行配置检查与热加载。Windows 宿主机应用可使用 <code>host.docker.internal</code>，但应用需能从 Docker 网络访问，并正确配置 base URL。静态模块目录不会承担进程管理或后端依赖安装。</p><h3>实现参考</h3><ul><li><a href="https://docs.docker.com/reference/compose-file/services/">Docker Compose 服务配置</a></li><li><a href="https://nginx.org/en/docs/http/ngx_http_core_module.html">Nginx 静态文件、目录与路由</a></li><li><a href="https://nodejs.org/api/fs.html">Node.js 文件系统标准库</a></li></ul>'}
+ ], footer:'Wallpaper Box · 本机模块化展示服务'
+};
+spec.subtitle='模块自动发现、Docker 服务与 Tauri 动态壁纸';
+spec.eyebrow='本机 Docker 展示服务 / Tauri Windows 壁纸宿主';
+spec.sections.splice(2,0,{
+ id:'wallpaper-host',title:'Tauri 动态壁纸与系统托盘',html:
+ '<p><strong>壁纸盒子 0.1.0</strong> 是独立的 Windows Tauri 2 程序。管理界面嵌入可执行文件，壁纸由 WebView2 直接加载原有 Docker 模块地址；松风镇和水族箱继续共用同一套源码。新增模块后，网页首页与壁纸程序都从 <code>/api/modules</code> 发现，无需重新编译宿主。</p>'+
+ table(['部分','职责'],[['Rust / Tauri','枚举显示器、持久化每屏选择、创建 WebView、托盘菜单、遮挡检测'],['Windows 原生桌面层','将自有 HWND 挂入 Explorer 的 Progman / WorkerW，保持在桌面图标下方'],['WebView2','加载 /pinewind-town/、/aquarium/ 等现有模块'],['模块目录','仍位于 display-service/modules/；不复制进 EXE']])+
+ '<h3>启动与日常操作</h3>'+code(String.raw`# 先确认本机展示服务运行
+Set-Location -LiteralPath 'E:\codex-proj\desktop\display-service'
+docker compose up -d --wait
+
+# 运行便携程序
+& 'E:\codex-proj\desktop\wallpaper-host\artifacts\wallpaper-box.exe'`)+
+ '<ul><li>首次启动将水族箱应用到主显示器；后续启动恢复上次每屏选择与暂停状态。</li><li>管理界面先选显示器，再点壁纸卡片。每块屏幕使用独立壁纸窗口；切换时复用该窗口。</li><li>左键托盘图标打开管理窗口；右键选择显示器、切换壁纸、暂停当前或全部、关闭当前壁纸、显示桌面或退出。</li><li>关闭管理窗口会收起到托盘。选择“退出壁纸盒子”才结束程序并恢复原桌面背景。</li><li>“查看桌面”调用 Windows Shell 的 ToggleDesktop，并在 3 秒后保存当前屏幕 PNG，便于确认实际图标与壁纸层级。</li></ul>'+
+ '<h3>窗口、显示器与节能</h3><p>经典桌面使用 WorkerW 子窗口；本机较新 Windows 11 使用 Progman 下的透明合成子窗口。仅修改程序自己的窗口，不迁移 Explorer 图标窗口。窗口按原生物理像素设置位置和尺寸，支持负坐标与不同 DPI。每 2 秒重新检查连接、窗口层级与大小；屏幕断开后保留配置，重新连接时恢复。</p><p>壁纸模式隐藏原模块的说明面板，并让鼠标穿透，桌面图标保持可操作。宿主注入可暂停的 requestAnimationFrame 包装器；单个普通窗口覆盖屏幕至少 95% 时自动暂停。显示桌面或移开窗口后恢复，手动暂停优先。多个小窗口合计遮挡暂不计算。</p>'+
+ '<h3>设置、日志与构建</h3>'+code(String.raw`wallpaper-host/
+├─ ui/                         嵌入式管理界面
+├─ src-tauri/src/host.rs        每屏壁纸、IPC、托盘与维护循环
+├─ src-tauri/src/desktop.rs     Windows 桌面层、显示器与预览
+├─ src-tauri/src/catalog.rs     复用模块目录接口
+├─ src-tauri/wallpaper-mode.js  隐藏页面控件与暂停动画
+├─ build.ps1                   使用 Cargo.lock 构建便携 EXE
+└─ artifacts/wallpaper-box.exe
+
+%APPDATA%/local.screen-garden.wallpaper/
+├─ settings.json               每屏壁纸、选中屏幕与暂停设置
+├─ diagnostics.json            当前显示器、HWND 归属与错误状态
+├─ host.log                    启动、应用与恢复记录
+├─ webview/                    独立 WebView2 数据目录
+└─ preview-wallpaper-*.png      用户触发的桌面预览`)+
+ '<p>构建需要 Rust MSVC 工具链、Visual Studio C++ Build Tools 与 Windows SDK。执行 <code>./build.ps1</code>；更新 EXE 前先从托盘退出旧程序。运行需要 Windows Explorer 桌面与 WebView2 Runtime。当前不注册开机启动、不创建 Windows 服务；Docker 只提供内容，Tauri 程序运行于当前登录用户会话。</p>'+
+ '<div class="callout amber"><strong>验证范围：</strong>已在本机 Windows 11、3840×2160、150% 缩放的主屏验证桌面挂载、松风镇与水族箱切换、暂停恢复、退出与配置恢复。当前 Windows 会话仅枚举到一块屏幕，多屏选择与断连恢复已实现，尚未进行第二块实体屏幕实测。Explorer 重启后宿主会尝试重新挂载；程序崩溃、显卡重置等恢复路径仍需更长时间验证。</div>'+
+ '<p>参考：<a href="https://v2.tauri.app/learn/system-tray/">Tauri 系统托盘</a>、<a href="https://learn.microsoft.com/en-us/windows/win32/shell/ishelldispatch4-toggledesktop">Windows Shell ToggleDesktop</a>。</p>'
+});
+spec.sections.splice(3,0,{
+ id:'release',title:'Windows 安装包与 GitHub CI 发布',html:
+ '<p>首版版本号为 <code>0.1.0</code>，对应标签 <code>v0.1.0</code>，发布目标为 <code>whoarei/wallpaper-box</code>。Windows x64 安装程序采用 Tauri NSIS 当前用户安装模式；便携版完整解压后运行。安装版和便携版均带有展示服务配置、松风镇、水族箱及本 HTML 文档。</p>'+
+ '<h3>安装后首次使用</h3><ol><li>安装并启动 Docker Desktop，选择 Linux 容器。</li><li>运行壁纸盒子；缺少 WebView2 时安装版会下载 Microsoft 官方运行时。</li><li>内容服务未连接时，点击“启动内容服务”。程序在后台执行随包 Compose 配置，首次需要下载固定镜像。</li><li>选择显示器与壁纸。已有健康的 8088 目录服务会直接复用，避免替换用户的模块目录。</li></ol><p>新增模块放入正在提供内容的 <code>display-service/modules/</code>。安装版资源位于安装目录，便携版位于解压目录；设置与 WebView 数据继续保存在 AppData，发布包不包含本机设置、桌面截图或日志。</p>'+
+ table(['产物','用途'],[['wallpaper-box_0.1.0_x64-setup.exe','Windows x64 当前用户安装包，中文 / 英文界面'],['wallpaper-box_0.1.0_windows-x64-portable.zip','程序、README 与完整展示服务，无需安装程序本体'],['release-manifest.json','版本、平台、提交和便携包逐文件 SHA-256'],['SHA256SUMS.txt','安装包、ZIP、清单的 SHA-256']])+
+ '<h3>本地构建</h3><p>需要 Windows x64、Rust 1.95.0、Visual Studio C++ Build Tools、Windows SDK 与 Node.js 24。Tauri CLI 固定为 2.12.4，npm 与 Cargo 均使用锁文件。</p>'+code('cd wallpaper-host\nnpm ci --ignore-scripts\nnpm run check:version\nnpm run bundle\n./scripts/package-release.ps1')+
+ '<p>产物默认写入仓库根目录 <code>release/v0.1.0/</code>。打包脚本逐项复制 Tauri 资源清单，检查可执行文件的产品名和版本；校验脚本检查 ZIP 所需入口、每个文件的大小和 SHA-256，禁止本机设置、日志与编译缓存进入便携包。</p>'+
+ '<h3>自动化构建与发布触发</h3><p><code>.github/workflows/windows.yml</code> 在 main 推送、PR 和手动运行时构建并上传 Actions Artifact；只有推送版本标签时才运行有写权限的发布任务。构建任务只读仓库，发布任务使用 GitHub 自动提供的 <code>GITHUB_TOKEN</code>，不需要额外配置个人令牌。</p><ol><li>固定 Action 提交、Node.js、Rust 与 CLI 版本，恢复缓存。</li><li>校验 Cargo / Tauri / npm 版本与标签一致，执行模块目录测试、JavaScript 语法和 Rust 格式检查。</li><li>构建 NSIS 安装程序并执行 Rust 测试。</li><li>生成便携 ZIP、逐文件清单及外层 SHA-256，检查全部资源。</li><li>标签发布创建草稿，上传四个产物后回下载，重新校验每个产物的哈希。</li><li>全部成功才公开 Release；失败保留草稿，已发布版本重跑不会覆盖文件。</li></ol>'+
+ '<h3>首次关联与发布</h3>'+code('gh auth login -h github.com\ngh repo create whoarei/wallpaper-box --public --source . --remote origin --push\ngit tag v0.1.0\ngit push origin v0.1.0')+
+ '<p>后续版本同步修改 Cargo.toml、tauri.conf.json、package.json、package-lock.json 和随包 README.txt，并添加对应的 <code>.github/release-notes/vX.Y.Z.md</code>。完整使用与命令见仓库根目录 README。</p><div class="callout amber">首版为 Windows x64，运行依赖 Docker Desktop 与 WebView2，未配置 Authenticode 签名、自动更新或开机启动。本地安装包构建与 GitHub 云端执行是两项独立验证；仓库推送并实际跑完 Actions 后，才算完成云端发布。</div>'+
+ '<p>参考：<a href="https://v2.tauri.app/distribute/windows-installer/">Tauri Windows Installer</a>、<a href="https://v2.tauri.app/distribute/pipelines/github/">Tauri GitHub Pipelines</a>。</p>'
+});
+fs.writeFileSync(path.join(__dirname, 'architecture.spec.json'), JSON.stringify(spec, null, 2));
+console.log('Generated docs/architecture.spec.json');

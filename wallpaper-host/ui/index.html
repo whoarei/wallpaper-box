@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>壁纸盒子 · 壁纸管理</title><link rel="stylesheet" href="app.css"><script src="app.js" defer></script></head>
+<body>
+<header><div class="brand"><span class="mark">≈</span><div><strong>壁纸盒子</strong><small>WALLPAPER BOX</small></div><span class="version">0.1</span></div><div class="header-actions"><span id="service-state" class="service"><i></i>正在连接</span><button id="start-service" class="quiet" hidden>启动内容服务</button><button id="refresh" class="quiet">刷新壁纸</button></div></header>
+<main>
+<section class="intro"><div><p class="eyebrow">A LITTLE WORLD, ON YOUR DESKTOP.</p><h1>让桌面，留一处风景。</h1><p class="lead">选择显示器，再选一张喜欢的壁纸。</p></div><div class="intro-actions"><button id="show-desktop" class="quiet tray-hide">查看桌面</button><button id="hide" class="quiet tray-hide">收起到托盘 ↘</button></div></section>
+<div id="error" class="error" role="alert" hidden></div>
+<section class="display-section"><div class="section-label"><h2>显示位置</h2><label class="switch-label"><input id="auto-pause" type="checkbox" checked><span>被窗口遮挡时自动暂停</span></label></div><div id="displays" class="displays" aria-label="选择显示器"></div></section>
+<section class="current" id="current"><div><span class="status-dot" id="status-dot"></span><strong id="current-title">正在读取壁纸状态</strong><span id="current-status"></span></div><div class="current-actions"><button id="pause" class="quiet" disabled>暂停</button><button id="preview" class="quiet">保存桌面预览</button><button id="remove" class="quiet" disabled>关闭该屏幕壁纸</button></div></section>
+<section><div class="section-label"><h2>我的风景 <span id="module-count"></span></h2><span id="target-label" class="target-label"></span></div><div id="modules" class="modules"></div><p id="empty" class="empty" hidden>先启动 Docker Desktop，再点“启动内容服务”。</p></section>
+</main>
+<footer><span>关闭窗口后，仍可从系统托盘切换壁纸。</span><button id="quit" class="text-button">退出程序</button></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body></html>

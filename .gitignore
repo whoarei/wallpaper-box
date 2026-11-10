@@ -1,0 +1,12 @@
+**/target/
+**/gen/
+**/node_modules/
+**/artifacts/
+/release/
+*.log
+.env
+.env.*
+*.pfx
+*.p12
+Thumbs.db
+.DS_Store

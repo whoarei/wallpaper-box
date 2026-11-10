@@ -1,0 +1,921 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="apricot" data-document-id="screen-garden-architecture">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>壁纸盒子 · 模块化技术方案</title>
+  <script>
+    (() => {
+      const root = document.documentElement;
+      try {
+        const key = 'rtd-html-docs:theme:' + (root.dataset.documentId || location.pathname);
+        const saved = localStorage.getItem(key);
+        if (["classic","slate","forest","sky","mint","yellow","pink","apricot","lavender","dark"].includes(saved)) root.dataset.theme = saved;
+      } catch (_) { /* Reading and switching still work when storage is blocked. */ }
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #404040;
+      --muted: #737373;
+      --paper: #edf0f2;
+      --white: #fcfcfc;
+      --line: #e1e4e5;
+      --accent: #2980b9;
+      --accent-hover: #205f88;
+      --accent-soft: #e7f2fa;
+      --accent-ink: #25668f;
+      --accent-line: #c7ddeb;
+      --accent-edge: #6ab0de;
+      --amber: #916413;
+      --sand: #ffedcc;
+      --warning-line: #f0b37e;
+      --surface: #f3f6f6;
+      --surface-strong: #e8ecec;
+      --surface-raised: #fff;
+      --surface-subtle: #f8fafa;
+      --surface-neutral: #ededed;
+      --ink-soft: #555;
+      --ink-secondary: #626262;
+      --code-ink: #a33b31;
+      --selection: #b9d8ee;
+      --selection-ink: #253847;
+      --focus: #55a5d9;
+      --nav: #343131;
+      --nav-text: #d9d9d9;
+      --nav-hover: #4e4a4a;
+      --nav-active: #e3e3e3;
+      --nav-active-ink: #404040;
+      --nav-number: #b0adad;
+      --nav-active-number: #616161;
+      --nav-foot: #272525;
+      --nav-muted: #b3b3b3;
+      --nav-scrollbar: #686464;
+      --brand-bg: var(--accent);
+      --brand-ink: #fff;
+      --theme-swatch: var(--accent);
+      --nav-hover-ink: #fff;
+      --brand-sub: #e3eff7;
+      --button-bg: var(--accent);
+      --button-hover: var(--accent-hover);
+      --button-border: #2472a4;
+      --button-shadow: #1c5d87;
+      --select-bg: #383636;
+      --select-border: #777171;
+      --diagram-response: #42765f;
+      --diagram-muted: #666666;
+      --diagram-line: #d4dada;
+      --diagram-soft-line: #d5dada;
+      --diagram-accent-line: #b9d5e8;
+      --diagram-warning: #a66b25;
+      --diagram-warning-bg: #fff7e9;
+      --diagram-warning-line: #e8d2aa;
+      --diagram-extension: #766285;
+      --diagram-extension-bg: #f5f0f7;
+      --diagram-extension-line: #cdbed5;
+      --mono: SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      --heading: Georgia, "Times New Roman", "Noto Serif CJK SC", "Microsoft YaHei", serif;
+    }
+
+    @media all {
+      :root[data-theme="slate"] {
+        --paper: #e9edf0;
+        --white: #fafbfc;
+        --line: #dce2e7;
+        --accent: #52677b;
+        --accent-hover: #3d5062;
+        --accent-soft: #eaf0f5;
+        --accent-ink: #40596f;
+        --accent-line: #ccd8e3;
+        --accent-edge: #8aa2b7;
+        --surface: #f0f3f6;
+        --surface-strong: #e4e9ee;
+        --surface-subtle: #f6f8fa;
+        --nav: #2c333b;
+        --nav-hover: #3c4752;
+        --nav-active: #e2e8ee;
+        --nav-foot: #222830;
+        --nav-scrollbar: #657484;
+        --nav-number: #a7b7c5;
+        --brand-sub: #e4eaf0;
+        --focus: #a4bdd3;
+        --button-border: #475e72;
+        --button-shadow: #374c5e;
+        --select-bg: #303a44;
+        --select-border: #6b7c8c;
+        --selection: #cad9e6;
+        --diagram-response: #426f70;
+        --diagram-accent-line: #c2d0dd;
+      }
+      :root[data-theme="forest"] {
+        --paper: #ebf0ed;
+        --white: #fcfdfb;
+        --line: #dce5df;
+        --accent: #26735b;
+        --accent-hover: #19553f;
+        --accent-soft: #eaf4ee;
+        --accent-ink: #256148;
+        --accent-line: #c4ddce;
+        --accent-edge: #72aa8f;
+        --surface: #f0f5f1;
+        --surface-strong: #e3ece6;
+        --surface-subtle: #f7faf7;
+        --nav: #293a33;
+        --nav-hover: #3b5146;
+        --nav-active: #e2ece6;
+        --nav-foot: #213029;
+        --nav-scrollbar: #637e6f;
+        --nav-number: #a8bfb1;
+        --brand-sub: #e2f1e9;
+        --focus: #9bceb4;
+        --button-border: #21654e;
+        --button-shadow: #164c39;
+        --select-bg: #2e4237;
+        --select-border: #6c8b7a;
+        --selection: #c5e4d2;
+        --selection-ink: #244736;
+        --diagram-response: #466ba0;
+        --diagram-accent-line: #bcd9c7;
+      }
+      :root[data-theme="sky"] {
+        --theme-swatch: #3566f0;
+        --paper: #f7f9fe;
+        --white: #fefeff;
+        --line: #dfe7fd;
+        --accent: #3566f0;
+        --accent-hover: #2347b5;
+        --accent-soft: #f3f6fe;
+        --accent-ink: #3566f0;
+        --accent-line: #d3ddfc;
+        --accent-edge: #688cf4;
+        --surface: #f9faff;
+        --surface-strong: #eff3fe;
+        --surface-subtle: #fcfdff;
+        --surface-neutral: #f1f4fe;
+        --selection: #c2d1fb;
+        --selection-ink: #29456e;
+        --focus: #3566f0;
+        --nav: #f6f8fe;
+        --nav-text: #29456e;
+        --nav-hover: #e9eefd;
+        --nav-hover-ink: #29456e;
+        --nav-active: #d7e0fc;
+        --nav-active-ink: #29456e;
+        --nav-number: #536781;
+        --nav-active-number: #29456e;
+        --nav-foot: #eff3fe;
+        --nav-muted: #536781;
+        --nav-scrollbar: #b2c5f9;
+        --brand-bg: #3566f0;
+        --brand-ink: #ffffff;
+        --brand-sub: #ffffff;
+        --button-bg: #3566f0;
+        --button-hover: #2347b5;
+        --button-border: #2347b5;
+        --button-shadow: #2347b5;
+        --select-bg: #fff;
+        --select-border: #a4baf8;
+        --diagram-response: #32785f;
+        --diagram-accent-line: #becefa;
+      }
+      :root[data-theme="mint"] {
+        --theme-swatch: #04bb9f;
+        --paper: #f5fcfb;
+        --white: #feffff;
+        --line: #d7f4f0;
+        --accent: #087b69;
+        --accent-hover: #075b4e;
+        --accent-soft: #f0fbf9;
+        --accent-ink: #087b69;
+        --accent-line: #c8f0ea;
+        --accent-edge: #43ccb7;
+        --surface: #f7fdfc;
+        --surface-strong: #ebfaf7;
+        --surface-subtle: #fbfefe;
+        --surface-neutral: #edfaf8;
+        --selection: #b4ebe2;
+        --selection-ink: #285b50;
+        --focus: #087b69;
+        --nav: #f4fcfb;
+        --nav-text: #285b50;
+        --nav-hover: #e3f8f4;
+        --nav-hover-ink: #285b50;
+        --nav-active: #cdf1ec;
+        --nav-active-ink: #285b50;
+        --nav-number: #4f6c62;
+        --nav-active-number: #285b50;
+        --nav-foot: #ebfaf7;
+        --nav-muted: #4f6c62;
+        --nav-scrollbar: #a0e5db;
+        --brand-bg: #04bb9f;
+        --brand-ink: #073d32;
+        --brand-sub: #073d32;
+        --button-bg: #087b69;
+        --button-hover: #075b4e;
+        --button-border: #075b4e;
+        --button-shadow: #075b4e;
+        --select-bg: #fff;
+        --select-border: #8ee0d4;
+        --diagram-response: #466fa0;
+        --diagram-accent-line: #afe9e0;
+      }
+      :root[data-theme="yellow"] {
+        --theme-swatch: #ffcc38;
+        --paper: #fffdf7;
+        --white: #fffffe;
+        --line: #fff7df;
+        --accent: #80610b;
+        --accent-hover: #624907;
+        --accent-soft: #fffcf3;
+        --accent-ink: #80610b;
+        --accent-line: #fff4d3;
+        --accent-edge: #ffd96a;
+        --surface: #fffdf9;
+        --surface-strong: #fffbef;
+        --surface-subtle: #fffefc;
+        --surface-neutral: #fffbf1;
+        --selection: #fff0c3;
+        --selection-ink: #66531e;
+        --focus: #80610b;
+        --nav: #fffdf6;
+        --nav-text: #66531e;
+        --nav-hover: #fff9e9;
+        --nav-hover-ink: #66531e;
+        --nav-active: #fff5d7;
+        --nav-active-ink: #66531e;
+        --nav-number: #73663f;
+        --nav-active-number: #66531e;
+        --nav-foot: #fffbef;
+        --nav-muted: #73663f;
+        --nav-scrollbar: #ffecb3;
+        --brand-bg: #ffcc38;
+        --brand-ink: #4d3c06;
+        --brand-sub: #4d3c06;
+        --button-bg: #80610b;
+        --button-hover: #624907;
+        --button-border: #624907;
+        --button-shadow: #624907;
+        --select-bg: #fff;
+        --select-border: #ffe8a5;
+        --diagram-response: #327b85;
+        --diagram-accent-line: #ffefbf;
+      }
+      :root[data-theme="pink"] {
+        --theme-swatch: #fa70ab;
+        --paper: #fff9fc;
+        --white: #fffeff;
+        --line: #fee8f2;
+        --accent: #a33363;
+        --accent-hover: #7e254b;
+        --accent-soft: #fff6fa;
+        --accent-ink: #a33363;
+        --accent-line: #fee0ed;
+        --accent-edge: #fb94c0;
+        --surface: #fffbfc;
+        --surface-strong: #fff4f8;
+        --surface-subtle: #fffdfe;
+        --surface-neutral: #fff5f9;
+        --selection: #fed4e6;
+        --selection-ink: #70364e;
+        --focus: #a33363;
+        --nav: #fff9fb;
+        --nav-text: #70364e;
+        --nav-hover: #feeff6;
+        --nav-hover-ink: #70364e;
+        --nav-active: #fee2ee;
+        --nav-active-ink: #70364e;
+        --nav-number: #785868;
+        --nav-active-number: #70364e;
+        --nav-foot: #fff4f8;
+        --nav-muted: #785868;
+        --nav-scrollbar: #fdc9df;
+        --brand-bg: #fa70ab;
+        --brand-ink: #42152b;
+        --brand-sub: #42152b;
+        --button-bg: #a33363;
+        --button-hover: #7e254b;
+        --button-border: #7e254b;
+        --button-shadow: #7e254b;
+        --select-bg: #fff;
+        --select-border: #fdbfd9;
+        --diagram-response: #347b6d;
+        --diagram-accent-line: #fdd1e4;
+      }
+      :root[data-theme="apricot"] {
+        --theme-swatch: #ff8066;
+        --paper: #fffaf9;
+        --white: #fffefe;
+        --line: #ffebe7;
+        --accent: #a8442d;
+        --accent-hover: #80301f;
+        --accent-soft: #fff7f6;
+        --accent-ink: #a8442d;
+        --accent-line: #ffe3dd;
+        --accent-edge: #ffa08c;
+        --surface: #fffbfa;
+        --surface-strong: #fff5f3;
+        --surface-subtle: #fffdfd;
+        --surface-neutral: #fff6f4;
+        --selection: #ffd9d1;
+        --selection-ink: #743e2f;
+        --focus: #a8442d;
+        --nav: #fff9f8;
+        --nav-text: #743e2f;
+        --nav-hover: #fff1ee;
+        --nav-hover-ink: #743e2f;
+        --nav-active: #ffe6e0;
+        --nav-active-ink: #743e2f;
+        --nav-number: #795c52;
+        --nav-active-number: #743e2f;
+        --nav-foot: #fff5f3;
+        --nav-muted: #795c52;
+        --nav-scrollbar: #ffcfc5;
+        --brand-bg: #ff8066;
+        --brand-ink: #542114;
+        --brand-sub: #542114;
+        --button-bg: #a8442d;
+        --button-hover: #80301f;
+        --button-border: #80301f;
+        --button-shadow: #80301f;
+        --select-bg: #fff;
+        --select-border: #ffc6ba;
+        --diagram-response: #327b85;
+        --diagram-accent-line: #ffd6ce;
+      }
+      :root[data-theme="lavender"] {
+        --theme-swatch: #a25bff;
+        --paper: #fbf8ff;
+        --white: #fffeff;
+        --line: #f0e5ff;
+        --accent: #7840c0;
+        --accent-hover: #5c2c99;
+        --accent-soft: #f9f5ff;
+        --accent-ink: #7840c0;
+        --accent-line: #ebdbff;
+        --accent-edge: #b984ff;
+        --surface: #fcfaff;
+        --surface-strong: #f8f2ff;
+        --surface-subtle: #fefdff;
+        --surface-neutral: #f8f4ff;
+        --selection: #e3ceff;
+        --selection-ink: #5c3a7b;
+        --focus: #7840c0;
+        --nav: #fbf8ff;
+        --nav-text: #5c3a7b;
+        --nav-hover: #f5edff;
+        --nav-hover-ink: #5c3a7b;
+        --nav-active: #ecdeff;
+        --nav-active-ink: #5c3a7b;
+        --nav-number: #6b587f;
+        --nav-active-number: #5c3a7b;
+        --nav-foot: #f8f2ff;
+        --nav-muted: #6b587f;
+        --nav-scrollbar: #dcc1ff;
+        --brand-bg: #a25bff;
+        --brand-ink: #241033;
+        --brand-sub: #241033;
+        --button-bg: #7840c0;
+        --button-hover: #5c2c99;
+        --button-border: #5c2c99;
+        --button-shadow: #5c2c99;
+        --select-bg: #fff;
+        --select-border: #d5b5ff;
+        --diagram-response: #347b6d;
+        --diagram-accent-line: #e1cbff;
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --ink: #dbe2eb;
+        --muted: #acb7c6;
+        --paper: #121820;
+        --white: #1c2530;
+        --line: #3c4a5c;
+        --accent: #8fc5ed;
+        --accent-hover: #b6def8;
+        --accent-soft: #243c50;
+        --accent-ink: #a8d6f5;
+        --accent-line: #476781;
+        --accent-edge: #598fba;
+        --amber: #f1ce91;
+        --sand: #3e3323;
+        --warning-line: #b88c50;
+        --surface: #232f3d;
+        --surface-strong: #2d3b4c;
+        --surface-raised: #1c2530;
+        --surface-subtle: #202c39;
+        --surface-neutral: #334153;
+        --ink-soft: #c2ccd9;
+        --ink-secondary: #bac7d7;
+        --code-ink: #f2b5a8;
+        --selection: #3c6380;
+        --selection-ink: #fff;
+        --focus: #8fc5ed;
+        --nav: #17212c;
+        --nav-text: #d0dbe6;
+        --nav-hover: #2a3b4e;
+        --nav-active: #304a63;
+        --nav-active-ink: #f1f5fa;
+        --nav-number: #9eafc2;
+        --nav-active-number: #c7d6e5;
+        --nav-foot: #101923;
+        --nav-muted: #aab8c9;
+        --nav-scrollbar: #4e6279;
+        --brand-bg: #23445f;
+        --brand-sub: #d1e1ee;
+        --button-bg: #27668f;
+        --button-hover: #3078a6;
+        --button-border: #397fae;
+        --button-shadow: #19466a;
+        --select-bg: #243448;
+        --select-border: #5a7089;
+        --diagram-response: #99c7a9;
+        --diagram-muted: #b5c2d0;
+        --diagram-line: #495b70;
+        --diagram-soft-line: #495b70;
+        --diagram-accent-line: #52789a;
+        --diagram-warning: #e3bd7e;
+        --diagram-warning-bg: #3b3226;
+        --diagram-warning-line: #8f7852;
+        --diagram-extension: #c2b2dc;
+        --diagram-extension-bg: #322d42;
+        --diagram-extension-line: #78668e;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 28px; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 16px/1.75 "Segoe UI", "Helvetica Neue", Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::selection { background: var(--selection); color: var(--selection-ink); }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); text-decoration: underline; }
+    button { font: inherit; cursor: pointer; }
+    button:focus-visible, a:focus-visible, summary:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    /* A classic documentation sidebar, with export always available below it. */
+    .shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: 100vh; }
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--nav);
+      color: var(--nav-text);
+    }
+    .sidebar-header { flex-shrink: 0; padding: 28px 22px 24px; background: var(--brand-bg); text-align: center; }
+    .brand { font: 700 21px/1.4 "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: var(--brand-ink); }
+    .brand span { color: var(--brand-ink); }
+    .brand svg { width: 17px; height: 17px; vertical-align: -2px; margin-right: 8px; }
+    .sidebar .sub { font-size: 12px; color: var(--brand-sub); margin: 10px 0 0; }
+    .sidebar nav { flex: 1; min-height: 0; padding: 16px 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--nav-scrollbar) transparent; }
+    .sidebar nav::before { content: "文档目录"; display: block; padding: 0 24px 10px; color: var(--focus); font-size: 13px; font-weight: 700; }
+    .sidebar nav a {
+      display: block;
+      color: var(--nav-text);
+      text-decoration: none;
+      padding: 9px 24px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .sidebar nav a:hover { color: var(--nav-hover-ink); background: var(--nav-hover); }
+    .sidebar nav a.active { color: var(--nav-active-ink); background: var(--nav-active); font-weight: 700; }
+    .sidebar nav span { font: 11px var(--mono); color: var(--nav-number); margin-right: 10px; }
+    .sidebar nav a.active span { color: var(--nav-active-number); }
+    .sidebar .foot { flex-shrink: 0; background: var(--nav-foot); padding: 17px 24px 20px; font-size: 11px; line-height: 1.9; color: var(--nav-muted); }
+    .sidebar button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      background: var(--button-bg);
+      border: 1px solid var(--button-border);
+      border-bottom: 2px solid var(--button-shadow);
+      color: white;
+      border-radius: 2px;
+      padding: 8px 12px;
+      margin-top: 13px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .sidebar button:hover { background: var(--button-hover); }
+    .sidebar button svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+
+    .theme-control { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .theme-control[hidden] { display: none; }
+    .theme-control label { flex-shrink: 0; font-size: 12px; color: var(--nav-text); }
+    .theme-control label::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; background: var(--theme-swatch); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
+    .theme-control select {
+      min-width: 0;
+      flex: 1;
+      font: 12px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: var(--select-bg);
+      color: var(--nav-text);
+      border: 1px solid var(--select-border);
+      border-radius: 2px;
+      padding: 7px 8px;
+      cursor: pointer;
+    }
+    .theme-control select:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+
+    main { min-width: 0; max-width: 1100px; width: 100%; padding: 30px 48px 64px; margin: 0; background: var(--white); }
+    .eyebrow { font: 12px/1.6 var(--mono); color: var(--muted); padding-bottom: 22px; margin-bottom: 26px; border-bottom: 1px solid var(--line); }
+    .hero { padding: 0 0 24px; border-bottom: 1px solid var(--line); margin-bottom: 30px; }
+    .hero h1 { font: 700 30px/1.45 var(--heading); letter-spacing: -.4px; margin: 0 0 22px; color: var(--ink); }
+    .hero h1 br { display: none; }
+    .hero .lead { font-size: 16px; line-height: 1.85; color: var(--ink); }
+    .chips { display: flex; gap: 7px; flex-wrap: wrap; margin: 20px 0; }
+    .chip { font: 11px/1.6 var(--mono); padding: 3px 7px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-secondary); }
+    .chip.green { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-line); }
+    .section { margin: 30px 0 44px; scroll-margin-top: 28px; }
+    .section-head { display: flex; align-items: baseline; gap: 11px; margin-bottom: 22px; }
+    .section-num { font: 700 14px var(--mono); color: var(--muted); }
+    h2 { font: 700 25px/1.4 var(--heading); margin: 0; color: var(--ink); }
+    h3 { font: 700 20px/1.5 var(--heading); margin: 26px 0 14px; }
+    h4 { font-size: 17px; margin: 22px 0 12px; }
+    p { margin: 12px 0 18px; }
+    strong { font-weight: 650; }
+    ul, ol { padding-left: 24px; margin: 12px 0 20px; }
+    li { margin: 6px 0; }
+    li::marker { color: var(--ink); }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin: 20px 0 24px; }
+    .card { background: transparent; border-top: 2px solid var(--line); padding: 15px 0 0; }
+    .card h3 { margin: 0 0 10px; font-size: 17px; }
+    .card p { margin: 0; font-size: 14px; color: var(--ink-soft); }
+    .callout { padding: 14px 18px; border: 0; border-top: 4px solid var(--accent-edge); background: var(--accent-soft); margin: 22px 0; }
+    .callout.amber { border-top-color: var(--warning-line); background: var(--sand); }
+    .callout p { margin: 3px 0; }
+    .small, .caption { font-size: 13px; color: var(--muted); }
+    .caption { margin: 10px 0 20px; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--surface-raised); margin: 18px 0 24px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; line-height: 1.75; }
+    th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); }
+    th { font-size: 13px; font-weight: 700; background: var(--surface-strong); color: var(--ink); }
+    tr:last-child td { border-bottom: 0; }
+    th:last-child, td:last-child { border-right: 0; }
+    tbody tr:nth-child(even) { background: var(--surface); }
+    td:first-child { font-weight: 550; }
+    code { font: .85em/1.5 var(--mono); background: var(--surface-raised); color: var(--code-ink); border: 1px solid var(--line); padding: 2px 5px; overflow-wrap: anywhere; }
+    pre { font: 12px/1.75 var(--mono); background: var(--surface); color: var(--ink); border: 1px solid var(--line); padding: 16px; overflow: auto; margin: 16px 0 24px; tab-size: 2; }
+    pre code { font: inherit; background: none; border: 0; padding: 0; color: inherit; overflow-wrap: normal; }
+    .tag { display: inline-block; background: var(--accent-soft); color: var(--accent-ink); padding: 1px 6px; font-size: 12px; white-space: nowrap; }
+    .tag.gray { background: var(--surface-neutral); color: var(--ink-secondary); }
+    .tag.amber { background: var(--sand); color: var(--amber); }
+    figure { margin: 22px 0; }
+    .diagram { border: 1px solid var(--line); overflow: auto; background: var(--surface-raised); padding: 14px; }
+    .diagram svg { display: block; width: 100%; min-width: 750px; height: auto; }
+    .architecture-diagram { padding: 10px; }
+    .architecture-diagram svg { min-width: 1080px; }
+    .steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 22px 0; }
+    .step { border: 1px solid var(--line); padding: 16px; background: var(--surface); font-size: 13px; }
+    .step b { display: block; font: 12px var(--mono); color: var(--accent); margin-bottom: 8px; }
+    .step strong { display: block; font-size: 15px; }
+    .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    .two-col > * { min-width: 0; }
+    .formula { background: var(--surface); border: 1px solid var(--line); padding: 16px 18px; font: 13px/1.9 var(--mono); overflow: auto; }
+    details { border: 1px solid var(--line); background: var(--surface-subtle); margin: 16px 0; padding: 0 16px; }
+    summary { cursor: pointer; padding: 13px 0; font-size: 14px; font-weight: 600; }
+    summary::marker { color: var(--accent); }
+    details[open] { padding-bottom: 16px; }
+    details pre { margin-bottom: 0; }
+    .milestone { display: grid; grid-template-columns: 55px 1fr; border-bottom: 1px solid var(--line); gap: 14px; padding: 20px 0; }
+    .milestone .id { font: 18px var(--mono); color: var(--accent); }
+    .milestone h3 { margin: 0 0 8px; }
+    .milestone p { margin: 0; font-size: 14px; }
+    .refs li { font-size: 14px; margin-bottom: 14px; }
+    .footer { margin-top: 48px; border-top: 1px solid var(--line); padding-top: 22px; font-size: 12px; color: var(--muted); }
+    .nowrap { white-space: nowrap; }
+
+    @media (max-width: 1100px) {
+      .shell { grid-template-columns: 260px minmax(0, 1fr); }
+      .sidebar nav a { padding: 9px 20px; font-size: 13px; }
+      .sidebar nav::before { padding-left: 20px; }
+      .sidebar .foot { padding-left: 20px; padding-right: 20px; }
+      main { padding: 28px 30px 56px; }
+      .cards { grid-template-columns: 1fr; gap: 16px; }
+      .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .shell { display: block; }
+      .sidebar { position: relative; height: auto; }
+      .sidebar-header { padding: 17px 20px 16px; text-align: left; }
+      .brand { font-size: 20px; }
+      .sidebar .sub { margin-top: 5px; }
+      .sidebar nav { display: flex; flex: none; overflow-x: auto; gap: 0; padding: 10px 12px; }
+      .sidebar nav::before { display: none; }
+      .sidebar nav a { flex-shrink: 0; white-space: nowrap; padding: 8px 10px; font-size: 12px; }
+      .sidebar .foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0 14px; padding: 10px 20px 13px; font-size: 10px; }
+      .theme-control { flex-basis: 100%; margin-bottom: 10px; }
+      .sidebar button { width: auto; margin-top: 8px; padding: 7px 11px; font-size: 12px; }
+      main { padding: 24px 20px 46px; }
+      .eyebrow { font-size: 10px; padding-bottom: 17px; margin-bottom: 22px; }
+      .hero h1 { font-size: 26px; }
+      .hero h1 br { display: initial; }
+      .hero .lead { font-size: 16px; }
+      .two-col { grid-template-columns: 1fr; }
+      .section { margin-bottom: 38px; }
+      .section-head { gap: 9px; }
+      .section-num { font-size: 12px; }
+      h2 { font-size: 22px; }
+      th, td { padding: 9px 10px; min-width: 110px; }
+      .chips { gap: 6px; }
+      .chip { font-size: 10px; }
+      .steps { grid-template-columns: 1fr; }
+      pre { padding: 13px; font-size: 11px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+    @media print {
+      @page { size: A4; margin: 16mm 14mm; }
+      html { scroll-behavior: auto; background: var(--white); }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { background: var(--white); font-size: 10pt; line-height: 1.65; }
+      .shell { display: block; }
+      .sidebar { display: none; }
+      main { max-width: none; padding: 0; background: var(--white); }
+      .eyebrow { margin-bottom: 20px; padding-bottom: 14px; }
+      .hero h1 { font-size: 23pt; }
+      .hero .lead { font-size: 11pt; }
+      .section { margin: 22px 0 28px; }
+      .section-head { break-after: avoid; }
+      h2 { font-size: 17pt; }
+      h3 { font-size: 12pt; break-after: avoid; }
+      .cards { grid-template-columns: repeat(3, 1fr); }
+      .card, .callout, .milestone, .step { break-inside: avoid; }
+      .steps { break-inside: avoid; }
+      table { font-size: 9pt; }
+      thead { display: table-header-group; }
+      tr { break-inside: avoid; }
+      .table-wrap { overflow: visible; }
+      th, td { padding: 7px 9px; min-width: 0; }
+      pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 8pt; break-inside: auto; }
+      .diagram { overflow: visible; padding: 8px; break-inside: avoid; }
+      .diagram svg, .architecture-diagram svg { min-width: 0; }
+      figure { break-inside: avoid; }
+      .architecture-diagram { padding: 3px; }
+      .chip { font-size: 8pt; }
+      a { color: var(--accent); text-decoration: none; }
+      details { break-inside: auto; }
+      .caption, .small { font-size: 9pt; }
+      button { display: none; }
+      .footer { font-size: 8pt; }
+    }
+
+    .brand { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand">Wallpaper Box</div>
+      <div class="sub">模块自动发现、Docker 服务与 Tauri 动态壁纸</div>
+    </div>
+    <nav aria-label="文档目录">
+      <a href="#overview"><span>01</span>目标与边界</a>
+      <a href="#architecture"><span>02</span>运行架构与请求流程</a>
+      <a href="#wallpaper-host"><span>03</span>Tauri 动态壁纸与系统托盘</a>
+      <a href="#release"><span>04</span>Windows 安装包与 GitHub CI 发布</a>
+      <a href="#layout"><span>05</span>目录布局与内容归属</a>
+      <a href="#module-contract"><span>06</span>模块接入规范</a>
+      <a href="#discovery"><span>07</span>自动发现与页面更新</a>
+      <a href="#interfaces"><span>08</span>HTTP 接口与路由</a>
+      <a href="#deployment"><span>09</span>部署与日常维护</a>
+      <a href="#migration"><span>10</span>松风镇迁移与状态兼容</a>
+      <a href="#verification"><span>11</span>验收与回归检查</a>
+      <a href="#troubleshooting"><span>12</span>排查、扩展与参考</a>
+    </nav>
+    <div class="foot">
+      <div class="theme-control" hidden><label for="theme-select">文档配色</label><select id="theme-select"><optgroup label="经典配色"><option value="classic">经典蓝</option><option value="slate">石墨灰</option><option value="forest">森林绿</option></optgroup><optgroup label="亮色配色"><option value="sky">蓝色 · 亮色</option><option value="mint">绿色 · 亮色</option><option value="yellow">黄色 · 亮色</option><option value="pink">粉色 · 亮色</option><option value="apricot" selected>橙色 · 默认</option><option value="lavender">紫色 · 亮色</option></optgroup><optgroup label="深色配色"><option value="dark">深色</option></optgroup></select></div>
+      更新于 2026-11-10<br>单文件 HTML · 支持离线阅读
+      <button type="button" id="print-button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v7H7zM17 11h.01"/></svg>打印 / 保存 PDF</button>
+    </div>
+  </aside>
+  <main>
+    <header class="hero">
+      <div class="eyebrow">本机 Docker 展示服务 / Tauri Windows 壁纸宿主</div>
+      <h1>壁纸盒子 · 模块化技术方案</h1>
+      <p class="lead">将动态桌面、全屏风景和静态小工具收敛到统一入口。新增模块只需放入一个文件夹，首页自动发现；松风镇作为第一个模块保留原访问地址。</p><div class="callout"><strong>日常新增模块：</strong>放入 <code>modules/&lt;模块名&gt;/index.html</code>，直接访问 <code>http://127.0.0.1:8088/&lt;模块名&gt;/</code>。可选的 <code>module.json</code> 定义名称、封面、入口和排序。</div>
+    </header>
+    <section class="section" id="overview">
+      <div class="section-head"><span class="section-num">01</span><h2>目标与边界</h2></div>
+<p>本次改造保留一个固定的本机端口，将模块内容与运行服务分开。纯前端模块的添加、页面编辑、元数据修改和列表移除，都不需要修改 Compose、重新构建镜像或重启容器。</p><div class="table-wrap"><table><thead><tr><th>事项</th><th>运行方式</th></tr></thead><tbody><tr><td>展示入口</td><td><a href="http://127.0.0.1:8088/">http://127.0.0.1:8088/</a></td></tr><tr><td>松风镇</td><td><a href="http://127.0.0.1:8088/pinewind-town/">/pinewind-town/</a>，迁移前后保持一致</td></tr><tr><td>访问范围</td><td>只绑定本机回环地址；Docker Desktop 需要处于运行状态</td></tr><tr><td>适用模块</td><td>HTML / CSS / JavaScript 与静态图片、音视频资源</td></tr><tr><td>带后端的应用</td><td>仍需独立启动后端并按需添加反向代理；放文件夹不会自动启动服务端程序</td></tr></tbody></table></div>
+    </section>
+
+    <section class="section" id="architecture">
+      <div class="section-head"><span class="section-num">02</span><h2>运行架构与请求流程</h2></div>
+<figure><div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 930 410" role="img" aria-labelledby="architecture-title architecture-desc"><title id="architecture-title">展示服务运行架构</title><desc id="architecture-desc">浏览器通过本机 8088 端口访问 Nginx；Nginx 提供首页、文档与模块文件，并将目录接口转发给 Node 目录服务。目录服务每次请求读取 modules 中的文件夹和元数据。</desc><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8Z" fill="var(--accent, #b7432a)"/></marker></defs><g font-family="Microsoft YaHei, sans-serif" font-size="16" text-anchor="middle" fill="var(--ink, #404040)"><rect x="25" y="130" width="190" height="92" rx="10" fill="var(--surface-raised, #fff)" stroke="var(--diagram-line, #b8c7d3)"/><text x="120" y="165">浏览器 / 全屏显示</text><text x="120" y="193" font-size="13">每 5 秒更新目录</text><rect x="300" y="130" width="210" height="92" rx="10" fill="var(--accent-soft, #fff1e9)" stroke="var(--accent, #b7432a)"/><text x="405" y="165">Nginx · web</text><text x="405" y="193" font-size="13">127.0.0.1:8088 → 8080</text><rect x="635" y="22" width="255" height="88" rx="10" fill="var(--surface-raised, #fff)" stroke="var(--diagram-line, #b8c7d3)"/><text x="762" y="55">public/</text><text x="762" y="81" font-size="13">首页、静态资源、HTML 文档</text><rect x="635" y="142" width="255" height="88" rx="10" fill="var(--surface-raised, #fff)" stroke="var(--diagram-line, #b8c7d3)"/><text x="762" y="175">modules/</text><text x="762" y="201" font-size="13">模块页面、资源、module.json</text><rect x="300" y="300" width="210" height="88" rx="10" fill="var(--accent-soft, #fff1e9)" stroke="var(--accent, #b7432a)"/><text x="405" y="333">Node.js · registry</text><text x="405" y="360" font-size="13">内部端口 3000 · 无依赖</text></g><g stroke="var(--accent, #b7432a)" fill="none" stroke-width="2" marker-end="url(#arrow)"><path d="M215 176H292"/><path d="M510 157H565V66H627"/><path d="M510 191H627"/><path d="M405 222V292"/><path d="M510 344H762V238" stroke-dasharray="6 4"/></g><g font-family="Microsoft YaHei, sans-serif" font-size="12" fill="var(--muted, #607080)"><text x="225" y="158">HTTP</text><text x="525" y="135">静态读取</text><text x="420" y="264">/api/modules</text><text x="545" y="329">按请求扫描（只读）</text></g></svg></div><figcaption>统一挂载整个模块目录，模块增减不改变容器配置。虚线表示目录与元数据读取。</figcaption></figure><h3>两个轻量服务</h3><ul><li><code>web</code>：官方 Nginx 稳定版镜像，负责网页与资源访问、目录接口代理和可选应用代理。</li><li><code>registry</code>：Node.js 24 Alpine 镜像，仅使用标准库。读取目录和 JSON，返回模块列表，不安装依赖、不执行模块代码。</li></ul><p>两个服务都将同一宿主机 <code>modules/</code> 目录只读挂载到 <code>/srv/modules</code>。目录服务不向宿主机发布端口，浏览器统一经 Nginx 的 8088 端口访问。</p><p>Nginx 使用 Docker 内置 DNS 动态解析 <code>registry</code>，避免目录容器重建后沿用旧 IP。自动发现不依赖文件监听事件，每次调用接口都重新扫描。</p>
+    </section>
+
+    <section class="section" id="wallpaper-host">
+      <div class="section-head"><span class="section-num">03</span><h2>Tauri 动态壁纸与系统托盘</h2></div>
+<p><strong>壁纸盒子 0.1.0</strong> 是独立的 Windows Tauri 2 程序。管理界面嵌入可执行文件，壁纸由 WebView2 直接加载原有 Docker 模块地址；松风镇和水族箱继续共用同一套源码。新增模块后，网页首页与壁纸程序都从 <code>/api/modules</code> 发现，无需重新编译宿主。</p><div class="table-wrap"><table><thead><tr><th>部分</th><th>职责</th></tr></thead><tbody><tr><td>Rust / Tauri</td><td>枚举显示器、持久化每屏选择、创建 WebView、托盘菜单、遮挡检测</td></tr><tr><td>Windows 原生桌面层</td><td>将自有 HWND 挂入 Explorer 的 Progman / WorkerW，保持在桌面图标下方</td></tr><tr><td>WebView2</td><td>加载 /pinewind-town/、/aquarium/ 等现有模块</td></tr><tr><td>模块目录</td><td>仍位于 display-service/modules/；不复制进 EXE</td></tr></tbody></table></div><h3>启动与日常操作</h3><pre><code># 先确认本机展示服务运行
+Set-Location -LiteralPath 'E:\codex-proj\desktop\display-service'
+docker compose up -d --wait
+
+# 运行便携程序
+&amp; 'E:\codex-proj\desktop\wallpaper-host\artifacts\wallpaper-box.exe'</code></pre><ul><li>首次启动将水族箱应用到主显示器；后续启动恢复上次每屏选择与暂停状态。</li><li>管理界面先选显示器，再点壁纸卡片。每块屏幕使用独立壁纸窗口；切换时复用该窗口。</li><li>左键托盘图标打开管理窗口；右键选择显示器、切换壁纸、暂停当前或全部、关闭当前壁纸、显示桌面或退出。</li><li>关闭管理窗口会收起到托盘。选择“退出壁纸盒子”才结束程序并恢复原桌面背景。</li><li>“查看桌面”调用 Windows Shell 的 ToggleDesktop，并在 3 秒后保存当前屏幕 PNG，便于确认实际图标与壁纸层级。</li></ul><h3>窗口、显示器与节能</h3><p>经典桌面使用 WorkerW 子窗口；本机较新 Windows 11 使用 Progman 下的透明合成子窗口。仅修改程序自己的窗口，不迁移 Explorer 图标窗口。窗口按原生物理像素设置位置和尺寸，支持负坐标与不同 DPI。每 2 秒重新检查连接、窗口层级与大小；屏幕断开后保留配置，重新连接时恢复。</p><p>壁纸模式隐藏原模块的说明面板，并让鼠标穿透，桌面图标保持可操作。宿主注入可暂停的 requestAnimationFrame 包装器；单个普通窗口覆盖屏幕至少 95% 时自动暂停。显示桌面或移开窗口后恢复，手动暂停优先。多个小窗口合计遮挡暂不计算。</p><h3>设置、日志与构建</h3><pre><code>wallpaper-host/
+├─ ui/                         嵌入式管理界面
+├─ src-tauri/src/host.rs        每屏壁纸、IPC、托盘与维护循环
+├─ src-tauri/src/desktop.rs     Windows 桌面层、显示器与预览
+├─ src-tauri/src/catalog.rs     复用模块目录接口
+├─ src-tauri/wallpaper-mode.js  隐藏页面控件与暂停动画
+├─ build.ps1                   使用 Cargo.lock 构建便携 EXE
+└─ artifacts/wallpaper-box.exe
+
+%APPDATA%/local.screen-garden.wallpaper/
+├─ settings.json               每屏壁纸、选中屏幕与暂停设置
+├─ diagnostics.json            当前显示器、HWND 归属与错误状态
+├─ host.log                    启动、应用与恢复记录
+├─ webview/                    独立 WebView2 数据目录
+└─ preview-wallpaper-*.png      用户触发的桌面预览</code></pre><p>构建需要 Rust MSVC 工具链、Visual Studio C++ Build Tools 与 Windows SDK。执行 <code>./build.ps1</code>；更新 EXE 前先从托盘退出旧程序。运行需要 Windows Explorer 桌面与 WebView2 Runtime。当前不注册开机启动、不创建 Windows 服务；Docker 只提供内容，Tauri 程序运行于当前登录用户会话。</p><div class="callout amber"><strong>验证范围：</strong>已在本机 Windows 11、3840×2160、150% 缩放的主屏验证桌面挂载、松风镇与水族箱切换、暂停恢复、退出与配置恢复。当前 Windows 会话仅枚举到一块屏幕，多屏选择与断连恢复已实现，尚未进行第二块实体屏幕实测。Explorer 重启后宿主会尝试重新挂载；程序崩溃、显卡重置等恢复路径仍需更长时间验证。</div><p>参考：<a href="https://v2.tauri.app/learn/system-tray/">Tauri 系统托盘</a>、<a href="https://learn.microsoft.com/en-us/windows/win32/shell/ishelldispatch4-toggledesktop">Windows Shell ToggleDesktop</a>。</p>
+    </section>
+
+    <section class="section" id="release">
+      <div class="section-head"><span class="section-num">04</span><h2>Windows 安装包与 GitHub CI 发布</h2></div>
+<p>首版版本号为 <code>0.1.0</code>，对应标签 <code>v0.1.0</code>，发布目标为 <code>whoarei/wallpaper-box</code>。Windows x64 安装程序采用 Tauri NSIS 当前用户安装模式；便携版完整解压后运行。安装版和便携版均带有展示服务配置、松风镇、水族箱及本 HTML 文档。</p><h3>安装后首次使用</h3><ol><li>安装并启动 Docker Desktop，选择 Linux 容器。</li><li>运行壁纸盒子；缺少 WebView2 时安装版会下载 Microsoft 官方运行时。</li><li>内容服务未连接时，点击“启动内容服务”。程序在后台执行随包 Compose 配置，首次需要下载固定镜像。</li><li>选择显示器与壁纸。已有健康的 8088 目录服务会直接复用，避免替换用户的模块目录。</li></ol><p>新增模块放入正在提供内容的 <code>display-service/modules/</code>。安装版资源位于安装目录，便携版位于解压目录；设置与 WebView 数据继续保存在 AppData，发布包不包含本机设置、桌面截图或日志。</p><div class="table-wrap"><table><thead><tr><th>产物</th><th>用途</th></tr></thead><tbody><tr><td>wallpaper-box_0.1.0_x64-setup.exe</td><td>Windows x64 当前用户安装包，中文 / 英文界面</td></tr><tr><td>wallpaper-box_0.1.0_windows-x64-portable.zip</td><td>程序、README 与完整展示服务，无需安装程序本体</td></tr><tr><td>release-manifest.json</td><td>版本、平台、提交和便携包逐文件 SHA-256</td></tr><tr><td>SHA256SUMS.txt</td><td>安装包、ZIP、清单的 SHA-256</td></tr></tbody></table></div><h3>本地构建</h3><p>需要 Windows x64、Rust 1.95.0、Visual Studio C++ Build Tools、Windows SDK 与 Node.js 24。Tauri CLI 固定为 2.12.4，npm 与 Cargo 均使用锁文件。</p><pre><code>cd wallpaper-host
+npm ci --ignore-scripts
+npm run check:version
+npm run bundle
+./scripts/package-release.ps1</code></pre><p>产物默认写入仓库根目录 <code>release/v0.1.0/</code>。打包脚本逐项复制 Tauri 资源清单，检查可执行文件的产品名和版本；校验脚本检查 ZIP 所需入口、每个文件的大小和 SHA-256，禁止本机设置、日志与编译缓存进入便携包。</p><h3>自动化构建与发布触发</h3><p><code>.github/workflows/windows.yml</code> 在 main 推送、PR 和手动运行时构建并上传 Actions Artifact；只有推送版本标签时才运行有写权限的发布任务。构建任务只读仓库，发布任务使用 GitHub 自动提供的 <code>GITHUB_TOKEN</code>，不需要额外配置个人令牌。</p><ol><li>固定 Action 提交、Node.js、Rust 与 CLI 版本，恢复缓存。</li><li>校验 Cargo / Tauri / npm 版本与标签一致，执行模块目录测试、JavaScript 语法和 Rust 格式检查。</li><li>构建 NSIS 安装程序并执行 Rust 测试。</li><li>生成便携 ZIP、逐文件清单及外层 SHA-256，检查全部资源。</li><li>标签发布创建草稿，上传四个产物后回下载，重新校验每个产物的哈希。</li><li>全部成功才公开 Release；失败保留草稿，已发布版本重跑不会覆盖文件。</li></ol><h3>首次关联与发布</h3><pre><code>gh auth login -h github.com
+gh repo create whoarei/wallpaper-box --public --source . --remote origin --push
+git tag v0.1.0
+git push origin v0.1.0</code></pre><p>后续版本同步修改 Cargo.toml、tauri.conf.json、package.json、package-lock.json 和随包 README.txt，并添加对应的 <code>.github/release-notes/vX.Y.Z.md</code>。完整使用与命令见仓库根目录 README。</p><div class="callout amber">首版为 Windows x64，运行依赖 Docker Desktop 与 WebView2，未配置 Authenticode 签名、自动更新或开机启动。本地安装包构建与 GitHub 云端执行是两项独立验证；仓库推送并实际跑完 Actions 后，才算完成云端发布。</div><p>参考：<a href="https://v2.tauri.app/distribute/windows-installer/">Tauri Windows Installer</a>、<a href="https://v2.tauri.app/distribute/pipelines/github/">Tauri GitHub Pipelines</a>。</p>
+    </section>
+
+    <section class="section" id="layout">
+      <div class="section-head"><span class="section-num">05</span><h2>目录布局与内容归属</h2></div>
+<pre><code>E:/codex-proj/desktop/display-service/
+├─ compose.yaml                   两个服务、挂载、资源限制和健康检查
+├─ nginx.conf                     Nginx 主配置
+├─ site.conf                      通用模块路由与目录接口
+├─ registry/server.cjs            模块扫描与只读 JSON 接口
+├─ modules/
+│  └─ pinewind-town/
+│     ├─ index.html               松风镇完整页面
+│     ├─ module.json              名称、说明、排序等元数据
+│     └─ cover.jpg                自动识别的封面（可选）
+├─ public/
+│  ├─ index.html                  自动生成列表的首页外壳
+│  ├─ assets/gallery.js           轮询、卡片渲染和错误回退
+│  ├─ assets/gallery.css          响应式布局
+│  └─ docs/architecture.html      本技术方案（单文件、可离线）
+├─ routes/*.conf                  可选的反向代理路由
+├─ docs/architecture-source.cjs   技术方案的可编辑内容源
+└─ tests/                        目录逻辑与运行环境验收脚本</code></pre><p><code>modules/</code> 内的文件属于网页内容；Compose、服务端代码和测试文件保存在该目录之外。静态内容不打包进镜像，容器更新不覆盖宿主机页面。</p>
+    </section>
+
+    <section class="section" id="module-contract">
+      <div class="section-head"><span class="section-num">06</span><h2>模块接入规范</h2></div>
+<h3>最小模块</h3><pre><code>modules/
+  aquarium/
+    index.html</code></pre><p>无需元数据也可发现：名称默认为文件夹名，入口为 <code>index.html</code>，排序值为 100；缺少封面时，首页使用默认视觉封面。模块中的资源应使用相对路径，例如 <code>./assets/fish.png</code>。</p><h3>完整元数据示例</h3><pre><code>{
+  "name": "水族箱",
+  "subtitle": "AQUARIUM",
+  "description": "一小片安静游动的海。",
+  "entry": "index.html",
+  "cover": "cover.webp",
+  "tags": [
+    "海底",
+    "慢生活"
+  ],
+  "order": 20,
+  "enabled": true
+}</code></pre><div class="table-wrap"><table><thead><tr><th>字段</th><th>规则与默认值</th></tr></thead><tbody><tr><td>文件夹名</td><td>1～64 个小写字母、数字或连字符，首字符为字母或数字；保留名：api、assets、docs、healthz</td></tr><tr><td>name / subtitle</td><td>可选字符串，最多 80 字符；name 默认为文件夹名</td></tr><tr><td>description</td><td>可选说明，最多 300 字符</td></tr><tr><td>entry</td><td>相对 HTML 路径，默认 index.html，最多 256 字符；支持 view/start.html；首页链接指向该文件</td></tr><tr><td>cover</td><td>相对图片路径，最多 256 字符；支持 webp、jpg、jpeg、png、svg、avif、gif</td></tr><tr><td>自动封面</td><td>不指定 cover 时，依次寻找 cover.webp、cover.jpg、cover.png、cover.svg</td></tr><tr><td>tags</td><td>最多 8 个字符串，每个最多 30 字符</td></tr><tr><td>order</td><td>有限数值，默认 100；越小越靠前，同值按文件夹名排序</td></tr><tr><td>enabled</td><td>布尔值，默认 true；false 仅从首页隐藏，不阻止通过原 URL 访问</td></tr><tr><td>module.json</td><td>UTF-8 JSON 对象，不超过 64 KiB；不支持注释或末尾逗号</td></tr></tbody></table></div><div class="callout amber">入口和封面必须位于当前模块目录内。入口不存在、元数据损坏或字段类型不合法时，只跳过该模块；错误原因出现在 API 的 warnings 中，其他模块继续显示。封面缺失则回退到默认封面。</div>
+    </section>
+
+    <section class="section" id="discovery">
+      <div class="section-head"><span class="section-num">07</span><h2>自动发现与页面更新</h2></div>
+<ol><li>首页首次打开时请求 <code>GET /api/modules</code>。</li><li>目录服务列出 <code>modules/</code> 的直接子目录，排除保留名称、无效名称和目录符号链接。</li><li>读取可选元数据，校验入口与封面文件，生成 URL 并排序。</li><li>首页根据结果生成卡片，渲染元数据时使用文本节点，避免将字段当作 HTML 执行。</li><li>页面可见时每 5 秒重新请求；重新聚焦或切回页面时立即更新。页面隐藏时暂停请求。</li></ol><p>API 和静态内容均设置 <code>Cache-Control: no-store</code>。列表内容没有变化时不重建卡片。模块页面正在播放时，修改其源文件仍需刷新该模块页面；目录自动更新不会强制中断正在展示的内容。</p><h3>添加、修改与移除</h3><ul><li>添加文件夹：API 下一次请求即可发现，打开的首页通常在下一个 5 秒轮询周期显示。</li><li>修改名称、封面路径、排序或 enabled：首页自动更新；同一路径的图片内容替换可刷新首页重新载入。</li><li>删除或移出文件夹：首页下一次更新时移除卡片；之前的页面地址随后返回 404。</li><li>复制大型模块：建议先以点开头的暂存目录复制，完成后重命名为合法模块名，避免未复制完成就被列出。</li></ul>
+    </section>
+
+    <section class="section" id="interfaces">
+      <div class="section-head"><span class="section-num">08</span><h2>HTTP 接口与路由</h2></div>
+<div class="table-wrap"><table><thead><tr><th>路径</th><th>行为</th></tr></thead><tbody><tr><td>/</td><td>首页，从目录接口生成卡片</td></tr><tr><td>/&lt;模块名&gt;/</td><td>通用目录路由，默认返回 index.html</td></tr><tr><td>/&lt;模块名&gt;/&lt;相对文件&gt;</td><td>模块内静态资源或自定义 HTML 入口</td></tr><tr><td>/api/modules</td><td>GET / HEAD：模块列表及 warnings；其他方法返回 405</td></tr><tr><td>/healthz</td><td>Nginx 存活检查；目录服务内部也提供 /healthz</td></tr><tr><td>/assets/*</td><td>首页静态资源</td></tr><tr><td>/docs/architecture.html</td><td>本技术方案</td></tr><tr><td>/docs 或 /docs/</td><td>重定向到本技术方案</td></tr></tbody></table></div><h3>目录响应示例</h3><pre><code>{
+  "modules": [
+    {
+      "id": "pinewind-town",
+      "name": "松风镇",
+      "subtitle": "PINEWIND",
+      "description": "林间小屋、昼夜流转，还有一班开往慢生活的小火车。",
+      "tags": [
+        "像素小镇",
+        "昼夜流转",
+        "点击种花"
+      ],
+      "order": 10,
+      "entry": "index.html",
+      "href": "/pinewind-town/",
+      "cover": "/pinewind-town/cover.jpg"
+    }
+  ],
+  "warnings": []
+}</code></pre><p>目录根路径不可读取时，API 返回 503 和 <code>{"error":"module_directory_unavailable"}</code>。个别模块出错不会让整个接口失败。目录服务仅负责列出模块，模块文件由 Nginx 直接提供。</p>
+    </section>
+
+    <section class="section" id="deployment">
+      <div class="section-head"><span class="section-num">09</span><h2>部署与日常维护</h2></div>
+<p>在服务根目录执行以下命令。镜像以摘要固定，首次部署需能获取对应镜像，正常运行不需要 npm 安装或构建步骤。</p><pre><code>Set-Location -LiteralPath 'E:\codex-proj\desktop\display-service'
+docker compose up -d --wait
+docker compose ps
+docker compose logs --tail 50 web registry
+
+# 停止服务；手动停止后不会自动恢复
+docker compose stop
+
+# 再次启动
+docker compose up -d --wait</code></pre><div class="table-wrap"><table><thead><tr><th>改动</th><th>需要的操作</th></tr></thead><tbody><tr><td>新增 / 修改 / 移除静态模块</td><td>修改 modules/ 内容；无需重启</td></tr><tr><td>修改 module.json</td><td>保存即可，等待首页下一次更新</td></tr><tr><td>修改首页 HTML / CSS / JavaScript</td><td>刷新首页</td></tr><tr><td>修改 registry/server.cjs</td><td>docker compose restart registry；无需镜像重建</td></tr><tr><td>修改 Nginx 路由</td><td>先 nginx -t，成功后 nginx -s reload</td></tr><tr><td>修改 Compose、镜像、挂载或环境变量</td><td>docker compose up -d --wait 应用配置</td></tr></tbody></table></div><pre><code>docker compose exec web nginx -t
+# 只有检查成功后才执行
+docker compose exec web nginx -s reload</code></pre><p>容器使用 <code>restart: unless-stopped</code>；Docker 引擎启动后会恢复未被手动停止的服务。此配置不修改 Docker Desktop 自身的开机启动设置。</p><p>web 的健康检查同时验证自身和目录接口；registry 单独验证内部健康端点。目录容器不发布宿主机端口，web 仅发布 <code>127.0.0.1:8088</code>。</p>
+    </section>
+
+    <section class="section" id="migration">
+      <div class="section-head"><span class="section-num">10</span><h2>松风镇迁移与状态兼容</h2></div>
+<p>松风镇统一迁入 <code>display-service/modules/pinewind-town/</code>，取消针对单个场景的文件挂载和专用 Nginx 路由。首页不再写死模块卡片，名称与说明来自该模块的元数据。</p><p>迁移保留 HTML 原始字节和 <code>http://127.0.0.1:8088/pinewind-town/</code> 地址。浏览器的 localStorage 属于同一来源，所以该来源下的种花记录可以继续使用。此前 47831 端口的临时预览属于另一个来源，其记录不会自动迁入 8088。</p><p>模块源码无需为自动发现增加特殊 SDK、生命周期接口或构建脚本。已有的静态页面可以直接按目录接入。</p>
+    </section>
+
+    <section class="section" id="verification">
+      <div class="section-head"><span class="section-num">11</span><h2>验收与回归检查</h2></div>
+<p>本次验证覆盖目录逻辑与实际运行的 Docker 服务，重点检查新增模块时服务持续运行。</p><ul><li>五组 Node 标准测试：新增、重命名、入口变化、元数据与排序、坏模块隔离、路径校验和 HTTP 行为。</li><li>运行环境检查：临时加入模块、修改元数据、损坏 JSON、隐藏模块和移除模块；整个过程中容器 ID 与启动时间保持一致。</li><li>路由检查：首页、CSS / JS、健康端点、松风镇原地址及原始 HTML 哈希，缺失页面与非公开文件返回 404，非法 API 方法返回 405。</li><li>浏览器检查：首页在不手动刷新的情况下自动出现和移除新卡片，桌面和手机布局不产生横向溢出。</li></ul><pre><code>node --test tests/registry.test.cjs
+node tests/verify-running.cjs</code></pre><p>浏览器测试脚本为 <code>tests/gallery.browser.cjs</code>，需要现有 Playwright 模块和浏览器路径。HTML 文档还按 RTD 文档技能检查目录、10 套配色、主题恢复、无脚本阅读、窄屏和打印样式。</p>
+    </section>
+
+    <section class="section" id="troubleshooting">
+      <div class="section-head"><span class="section-num">12</span><h2>排查、扩展与参考</h2></div>
+<div class="table-wrap"><table><thead><tr><th>现象</th><th>检查方向</th></tr></thead><tbody><tr><td>新增模块未显示</td><td>检查目录名、index.html 或 entry 是否存在；查看 /api/modules 的 warnings；首页需保持可见</td></tr><tr><td>JSON 修改后模块消失</td><td>检查 JSON 语法与字段类型，保存为有效对象后会自动恢复</td></tr><tr><td>首页只显示默认封面</td><td>检查 cover 相对路径与图片格式；未指定时可使用约定的 cover 文件名</td></tr><tr><td>后台目录正常但首页未更新</td><td>重新聚焦首页；检查浏览器网络请求；需要时刷新首页脚本</td></tr><tr><td>模块页面正常、API 不可用</td><td>docker compose ps；查看 registry 日志；目录服务恢复后首页会继续更新</td></tr><tr><td>Docker 未运行时页面打不开</td><td>启动 Docker Desktop，再检查服务状态；曾手动停止时执行 up -d --wait</td></tr></tbody></table></div><h3>应用代理扩展</h3><p><code>routes/local-app.conf.example</code> 是默认不启用的代理示例。复制为 .conf 后设置路径和上游，再执行配置检查与热加载。Windows 宿主机应用可使用 <code>host.docker.internal</code>，但应用需能从 Docker 网络访问，并正确配置 base URL。静态模块目录不会承担进程管理或后端依赖安装。</p><h3>实现参考</h3><ul><li><a href="https://docs.docker.com/reference/compose-file/services/">Docker Compose 服务配置</a></li><li><a href="https://nginx.org/en/docs/http/ngx_http_core_module.html">Nginx 静态文件、目录与路由</a></li><li><a href="https://nodejs.org/api/fs.html">Node.js 文件系统标准库</a></li></ul>
+    </section>
+    <footer class="footer">Wallpaper Box · 本机模块化展示服务<br>单文件 HTML · 支持离线阅读与打印 / 保存 PDF</footer>
+  </main>
+</div>
+<script>
+  (() => {
+    const root = document.documentElement;
+    const themeSelect = document.getElementById('theme-select');
+    if (themeSelect) {
+      themeSelect.value = root.dataset.theme || 'apricot';
+      themeSelect.closest('.theme-control').hidden = false;
+      themeSelect.addEventListener('change', () => {
+        root.dataset.theme = themeSelect.value;
+        try {
+          const key = 'rtd-html-docs:theme:' + (root.dataset.documentId || location.pathname);
+          localStorage.setItem(key, themeSelect.value);
+        } catch (_) { /* Keep the choice for this visit when storage is blocked. */ }
+      });
+    }
+    const printButton = document.getElementById('print-button');
+    if (printButton) printButton.addEventListener('click', () => window.print());
+    let printState = null;
+    window.addEventListener('beforeprint', () => {
+      if (printState) return;
+      printState = Array.from(document.querySelectorAll('details'), item => [item, item.open]);
+      printState.forEach(([item]) => { item.open = true; });
+    });
+    window.addEventListener('afterprint', () => {
+      if (!printState) return;
+      printState.forEach(([item, wasOpen]) => { item.open = wasOpen; });
+      printState = null;
+    });
+    const links = Array.from(document.querySelectorAll('.sidebar nav a'));
+    const sections = Array.from(document.querySelectorAll('main > section[id]'));
+    let scheduled = false;
+    function syncDirectory() {
+      scheduled = false;
+      if (!sections.length) return;
+      let current = sections[0];
+      for (const section of sections) {
+        if (section.getBoundingClientRect().top <= Math.min(160, innerHeight * .25)) current = section;
+        else break;
+      }
+      links.forEach(link => {
+        const active = link.getAttribute('href') === '#' + current.id;
+        link.classList.toggle('active', active);
+        if (active) link.setAttribute('aria-current', 'location');
+        else link.removeAttribute('aria-current');
+      });
+    }
+    function scheduleDirectory() {
+      if (!scheduled) { scheduled = true; requestAnimationFrame(syncDirectory); }
+    }
+    window.addEventListener('scroll', scheduleDirectory, { passive: true });
+    window.addEventListener('resize', scheduleDirectory);
+    window.addEventListener('load', scheduleDirectory);
+    syncDirectory();
+  })();
+</script>
+</body>
+</html>

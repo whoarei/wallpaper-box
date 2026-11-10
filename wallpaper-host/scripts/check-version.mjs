@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const config=JSON.parse(fs.readFileSync(path.join(root,'src-tauri/tauri.conf.json'),'utf8'));
+const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+const cargo=fs.readFileSync(path.join(root,'src-tauri/Cargo.toml'),'utf8');
+const cargoVersion=cargo.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+assert.match(config.version,/^\d+\.\d+\.\d+$/,'Release version must be x.y.z');
+assert.equal(pkg.version,config.version,'package.json version differs');
+assert.equal(cargoVersion,config.version,'Cargo.toml version differs');
+assert.equal(config.mainBinaryName,'wallpaper-box');
+if(process.env.GITHUB_REF_TYPE==='tag')assert.equal(process.env.GITHUB_REF_NAME,`v${config.version}`,'Git tag must match package version');
+console.log(`Version verified: v${config.version}`);

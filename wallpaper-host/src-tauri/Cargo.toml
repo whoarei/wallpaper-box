@@ -1,0 +1,31 @@
+[package]
+name = "screen-garden"
+version = "0.1.0"
+description = "Wallpaper Box desktop wallpaper host"
+edition = "2021"
+default-run = "wallpaper-box"
+
+[[bin]]
+name = "wallpaper-box"
+path = "src/main.rs"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+[build-dependencies]
+tauri-build = { version = "=2.7.3", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.4", features = ["tray-icon"] }
+tauri-plugin-single-instance = "=2.5.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json"] }
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_UI_HiDpi", "Win32_System_Threading"] }
+png = "0.18"
+windows = { version = "0.62", features = ["Win32_System_Com", "Win32_UI_Shell"] }
+
+[profile.release]
+strip = true
+opt-level = "s"
+codegen-units = 8
