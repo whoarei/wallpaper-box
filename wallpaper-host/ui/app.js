@@ -25,6 +25,7 @@ async function run(command,args={},message='',remote=false){
  finally{if(remote)remoteBusy=false;else localBusy=false;lastModules='';lastOnline='';if(state)render(state);renderBusy();}
 }
 function renderBusy(){
+ $('feed-aquarium').disabled=localBusy||!current()||current().paused;
  $('check-online').disabled=remoteBusy||!!state?.transfer;$('check-online').textContent=remoteBusy&&!state?.transfer?'检查中…':'检查更新';
  for(const id of ['import-folder','import-zip'])$(id).disabled=localBusy||!!state?.transfer;
  document.querySelectorAll('.apply').forEach(button=>button.disabled=localBusy||button.dataset.available==='false');
@@ -39,6 +40,7 @@ function render(data){
  $('current-status').textContent=playing?(playing.paused?'已暂停':playing.auto_paused?'遮挡，自动暂停':'正在播放'):'';
  $('status-dot').classList.toggle('playing',!!playing&&!playing.paused&&!playing.auto_paused);
  $('pause').disabled=!playing;$('pause').textContent=playing?.paused?'继续':'暂停';$('remove').disabled=!playing;
+ $('feed-aquarium').hidden=playing?.module_id!=='aquarium';
  $('target-label').textContent=monitor?'应用到 '+monitor.name:'';$('module-count').textContent=String(data.modules.length).padStart(2,'0');
  const displaySig=JSON.stringify([data.displays,data.selected_monitor]);
  if(displaySig!==lastDisplays){$('displays').replaceChildren(...data.displays.map(display=>{const button=el('button','display'+(display.id===data.selected_monitor?' selected':''));button.setAttribute('aria-pressed',String(display.id===data.selected_monitor));button.setAttribute('aria-label','选择 '+display.name);const copy=el('span');copy.append(el('strong','',display.name),el('small','',`${display.width} × ${display.height} · 缩放 ${Math.round(display.scale*100)}%`));button.append(el('span','monitor-icon'),copy);if(display.id===data.selected_monitor)button.append(el('span','check','✓'));button.onclick=()=>run('select_monitor',{monitorId:display.id});return button;}));lastDisplays=displaySig;}
@@ -83,6 +85,7 @@ $('open-folder').onclick=()=>invoke('open_wallpaper_folder').catch(error=>toast(
 $('import-folder').onclick=()=>run('import_wallpaper',{kind:'folder'},'壁纸已导入');$('import-zip').onclick=()=>run('import_wallpaper',{kind:'zip'},'壁纸已导入');
 $('pause').onclick=()=>{const selected=current();if(selected)run('pause_wallpaper',{monitorId:state.selected_monitor,paused:!selected.paused});};
 $('remove').onclick=()=>run('remove_wallpaper',{monitorId:state.selected_monitor},'已恢复该屏幕的原桌面');
+$('feed-aquarium').onclick=()=>run('feed_aquarium',{monitorId:state.selected_monitor},'已投喂，回到桌面看看鱼儿吧。');
 $('auto-pause').onchange=()=>run('auto_pause',{enabled:$('auto-pause').checked});
 $('preview').onclick=()=>invoke('capture_desktop',{monitorId:state.selected_monitor}).then(()=>toast('桌面预览已保存')).catch(error=>toast(String(error)));
 $('show-desktop').onclick=()=>invoke('show_desktop',{monitorId:state.selected_monitor}).catch(error=>toast(String(error)));

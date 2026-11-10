@@ -21,6 +21,7 @@ use tauri::{
 };
 
 const WALLPAPER_SCRIPT: &str = include_str!("../wallpaper-mode.js");
+const AQUARIUM_FEED_SCRIPT: &str = include_str!("../aquarium-feed.js");
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct Selection {
@@ -416,6 +417,58 @@ fn set_auto(app: &AppHandle, enabled: bool) {
     rebuild_tray(app);
     let _ = app.emit("host-updated", ());
 }
+fn feed_aquarium(app: &AppHandle, monitor_id: &str) -> Result<(), String> {
+    let host = app.state::<Host>();
+    let _operation = host.operations.lock().unwrap();
+    if !desktop::displays()
+        .iter()
+        .any(|display| display.id == monitor_id)
+    {
+        return Err("显示器已断开连接。".into());
+    }
+    let window_label = {
+        let data = host.data.lock().unwrap();
+        let selected = data
+            .settings
+            .assignments
+            .get(monitor_id)
+            .ok_or("该屏幕尚未设置壁纸。")?;
+        if selected.module_id != "aquarium" {
+            return Err("请先将当前屏幕切换到静水之间水族箱。".into());
+        }
+        if selected.paused {
+            return Err("水族箱已暂停，请先继续播放。".into());
+        }
+        data.running
+            .get(monitor_id)
+            .ok_or("当前屏幕的水族箱尚未就绪。")?
+            .label
+            .clone()
+    };
+    let window = app
+        .get_webview_window(&window_label)
+        .ok_or("水族箱窗口尚未就绪。")?;
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    window
+        .eval_with_callback(AQUARIUM_FEED_SCRIPT, move |reply| {
+            let _ = send.try_send(reply);
+        })
+        .map_err(|e| format!("投喂未能送达水族箱：{e}"))?;
+    let reply = receive
+        .recv_timeout(Duration::from_secs(3))
+        .map_err(|_| "水族箱暂未响应，请稍后再试。")?;
+    let result: serde_json::Value =
+        serde_json::from_str(&reply).map_err(|_| "水族箱未确认投喂，请稍后再试。")?;
+    if result.get("ok").and_then(|value| value.as_bool()) != Some(true) {
+        return Err(result
+            .get("message")
+            .and_then(|value| value.as_str())
+            .unwrap_or("水族箱未确认投喂，请稍后再试。")
+            .to_string());
+    }
+    log(app, &format!("Fed aquarium on {monitor_id}: {result}"));
+    Ok(())
+}
 fn quit(app: &AppHandle) {
     app.state::<Host>().exiting.store(true, Ordering::SeqCst);
     for (label, window) in app.webview_windows() {
@@ -475,6 +528,15 @@ fn rebuild_tray(app: &AppHandle) {
             )?)?;
         }
         menu.append(&PredefinedMenuItem::separator(app)?)?;
+        if let Some(aquarium) = current.filter(|w| w.module_id == "aquarium") {
+            menu.append(&MenuItem::with_id(
+                app,
+                "feed-aquarium",
+                "投喂鱼儿",
+                !aquarium.paused,
+                None::<&str>,
+            )?)?;
+        }
         menu.append(&CheckMenuItem::with_id(
             app,
             "pause-current",
@@ -555,6 +617,8 @@ fn tray_action(app: &AppHandle, id: &str) {
             select(&app, display)
         } else if let Some(module) = id.strip_prefix("wallpaper:") {
             apply(&app, &view.selected_monitor, module)
+        } else if id == "feed-aquarium" {
+            feed_aquarium(&app, &view.selected_monitor)
         } else {
             match id.as_str() {
                 "pause-current" => {
@@ -835,6 +899,7 @@ pub fn run() {
             commands::select_monitor,
             commands::apply_wallpaper,
             commands::pause_wallpaper,
+            commands::feed_aquarium,
             commands::remove_wallpaper,
             commands::auto_pause,
             commands::hide_manager,

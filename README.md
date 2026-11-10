@@ -1,6 +1,6 @@
 # 壁纸盒子 · Wallpaper Box
 
-Windows 动态壁纸程序，支持显示器选择、壁纸切换、系统托盘和暂停恢复。0.2.0 内置水族箱与松风镇，直接从本地播放，无需 Docker。可从独立的 [whoarei/wallpapers](https://github.com/whoarei/wallpapers) 壁纸库逐项下载、更新和回退，也可导入自己的网页壁纸。
+Windows 动态壁纸程序，支持显示器选择、壁纸切换、系统托盘和暂停恢复。0.2.1 内置水族箱与松风镇，直接从本地播放，无需 Docker。可从独立的 [whoarei/wallpapers](https://github.com/whoarei/wallpapers) 壁纸库逐项下载、更新和回退，也可导入自己的网页壁纸。
 
 ## 使用
 
@@ -11,7 +11,13 @@ Windows 动态壁纸程序，支持显示器选择、壁纸切换、系统托盘
 3. 左键托盘图标打开管理窗口，右键快速切换、暂停或退出。关闭管理窗口会收起到托盘。
 4. 在“在线壁纸”点击“检查更新”，再选择某张壁纸的“下载 / 更新”。检查只获取清单和封面，ZIP 按选择逐项下载，不会自动下载全库。
 
+水族箱投喂：选择正在播放水族箱的显示器，点击管理窗口的“投喂鱼儿”，或从托盘右键菜单执行同名操作。入口只对当前屏幕的水族箱显示；手动暂停时先点“继续”。遮挡导致的自动暂停不阻止投喂，回到桌面后鱼儿继续游动进食。加载未完成、页面自身暂停或鱼食尚未吃完时会给出提示。
+
+壁纸模式保持鼠标穿透，桌面图标照常操作；原来的点击水面、投喂按钮和 `E` 键属于浏览器独立页面的交互方式。程序不安装鼠标 / 键盘全局钩子，也不注册投喂全局快捷键。
+
 内置和已下载壁纸均可离线播放，无需 GitHub 登录。壁纸更新验证大小和 SHA-256，保留上一活动版本供回退；更新壁纸不需要重编译主程序。
+
+0.2.1 的投喂修复在宿主中实现，复用水族箱已有投喂逻辑，无需更新壁纸库。两张内置壁纸版本仍为 `1.0.0`，其 `minAppVersion` 仍为 `0.2.0`。
 
 ## 添加自己的壁纸
 
@@ -42,8 +48,8 @@ HTML、脚本、样式与图片使用相对路径。文件夹名使用小写字�
 ## 项目目录
 
 - `wallpaper-host/`：Tauri 2 宿主、嵌入式管理界面、原生目录发现、本地协议、在线更新与打包校验。
-- `wallpapers/{aquarium,pinewind-town}/`：0.2.0 随包的两张壁纸快照。
-- `display-service/`：保留的 Legacy Docker 浏览器开发示例，0.2.0 运行和安装包不依赖它。
+- `wallpapers/{aquarium,pinewind-town}/`：0.2.1 随包的两张壁纸快照。
+- `display-service/`：保留的 Legacy Docker 浏览器开发示例，0.2.1 运行和安装包不依赖它。
 - `.github/workflows/windows.yml`：主程序 CI 与标签发布。
 - [HTML 技术方案](display-service/public/docs/architecture.html)：单文件离线文档，含架构、模块规范、权限、迁移及发布流程，支持 10 套配色和保存 PDF。
 
@@ -59,11 +65,11 @@ npm ci --ignore-scripts
 npm run check:version
 npm run bundle
 ./scripts/package-release.ps1
-./scripts/verify-release.ps1 -Directory ../release/v0.2.0
-node scripts/verify-installer.mjs ../release/v0.2.0
+./scripts/verify-release.ps1 -Directory ../release/v0.2.1
+node scripts/verify-installer.mjs ../release/v0.2.1
 ```
 
-产物位于 `release/v0.2.0/`：NSIS 安装程序、便携 ZIP、逐文件 `release-manifest.json` 与 `SHA256SUMS.txt`。打包脚本核对必需资源、文件大小和 SHA-256；安装包校验脚本通过 7-Zip 读取载荷并与便携清单逐项对照，同时确认安装包没有 `portable.flag`。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。
+产物位于 `release/v0.2.1/`：NSIS 安装程序、便携 ZIP、逐文件 `release-manifest.json` 与 `SHA256SUMS.txt`。打包脚本核对必需资源、文件大小和 SHA-256；安装包校验脚本通过 7-Zip 读取载荷并与便携清单逐项对照，同时确认安装包没有 `portable.flag`。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。
 
 Rust 行为检查：
 
@@ -72,7 +78,9 @@ cargo fmt --check --manifest-path wallpaper-host/src-tauri/Cargo.toml
 cargo test --locked --release --features custom-protocol --manifest-path wallpaper-host/src-tauri/Cargo.toml
 ```
 
-管理界面的按需下载、更新/回退和网络失败流程可运行 `npm --prefix wallpaper-host run test:ui`。该测试使用锁定版本的 Playwright Core 和本机 Edge，以模拟 IPC 验证真实界面，不访问在线仓库；可用 `EDGE_PATH` 指定浏览器路径。CI 同样执行此检查。
+管理界面的按需下载、更新/回退、网络失败和水族箱投喂入口可运行 `npm --prefix wallpaper-host run test:ui`。该测试使用锁定版本的 Playwright Core 和本机 Edge，以模拟 IPC 验证真实界面，不访问在线仓库；可用 `EDGE_PATH` 指定浏览器路径。实际投喂行为另需验证鱼食增加、暂停拒绝与饱食提示；最终执行结果见对应版本验收记录。CI 同样执行管理界面检查。
+
+`npm --prefix wallpaper-host run test:aquarium` 使用真实内置水族箱页面，验证宿主投喂脚本和原投喂规则，不模拟页面资源。
 
 只构建开发用 EXE 可运行 `wallpaper-host/build.ps1`。文档可编辑源为 `display-service/docs/architecture-source.cjs`，生成 spec 后使用 `rtd-html-docs` 的 `render.mjs` 更新 HTML。真实设备验收和云端发布结果应以对应版本的发版记录为准。
 
@@ -83,8 +91,8 @@ CI 固定工具链、依赖锁文件和 Action 提交，检查版本、JavaScrip
 版本与验收完成后：
 
 ```powershell
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 gh run list --repo whoarei/wallpaper-box --workflow windows.yml
 ```
 

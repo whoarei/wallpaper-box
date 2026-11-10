@@ -90,6 +90,25 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback }) {
     calls.push({ command, args: copy(args) });
     switch (command) {
       case 'get_state': return copy(state);
+      case 'select_monitor':
+        if (!state.displays.some(display => display.id === args.monitorId)) {
+          throw new Error('Test IPC: unknown monitor');
+        }
+        state.selected_monitor = args.monitorId;
+        return copy(state);
+      case 'pause_wallpaper': {
+        const playing = state.wallpapers.find(wallpaper => wallpaper.display_id === args.monitorId);
+        if (!playing) throw new Error('Test IPC: no wallpaper to pause');
+        playing.paused = args.paused;
+        return copy(state);
+      }
+      case 'feed_aquarium': {
+        const playing = state.wallpapers.find(wallpaper => wallpaper.display_id === args.monitorId);
+        if (playing?.module_id !== 'aquarium' || playing.paused) {
+          throw new Error('Test IPC: cannot feed this display');
+        }
+        return copy(state);
+      }
       case 'check_online':
         if (pendingFailure) {
           pendingFailure = false;
@@ -327,6 +346,41 @@ async function noHorizontalOverflow(page, label) {
       assert.deepEqual(await actions(page), [
         { command: 'rollback_wallpaper', args: { moduleId: 'aquarium' } },
       ]);
+    });
+
+    await test('aquarium feeding targets the selected screen and respects wallpaper and pause state', fixture => {
+      fixture.state.wallpapers.push({ display_id: 'secondary', module_id: 'aquarium',
+        name: '水族箱', paused: false, auto_paused: true });
+    }, async page => {
+      const feed = page.locator('#feed-aquarium');
+      await visible(feed);
+      assert.equal(await feed.isEnabled(), true);
+      await feed.click();
+      await page.getByRole('button', { name: '选择 副显示器', exact: true }).click();
+      await page.waitForFunction(() => document.getElementById('current-status').textContent === '遮挡，自动暂停');
+      assert.equal(await feed.isEnabled(), true, 'Occlusion must allow queuing food before returning to the desktop');
+      await feed.click();
+      await moduleCard(page, '#modules', '松风镇').getByRole('button', { name: '设为该屏幕壁纸', exact: true }).click();
+      await page.waitForFunction(() => document.getElementById('feed-aquarium').hidden);
+      assert.equal(await feed.isVisible(), false, 'Feeding must be hidden for other wallpaper modules');
+      await page.getByRole('button', { name: '选择 主显示器', exact: true }).click();
+      await visible(feed);
+      await page.locator('#pause').click();
+      await page.waitForFunction(() => document.getElementById('feed-aquarium').disabled);
+      assert.equal(await feed.isDisabled(), true, 'Manual pause must disable feeding');
+      await page.locator('#pause').click();
+      await page.waitForFunction(() => !document.getElementById('feed-aquarium').disabled);
+      assert.equal(await feed.isEnabled(), true);
+      const calls = await actions(page);
+      assert.deepEqual(calls.filter(call => call.command === 'feed_aquarium'), [
+        { command: 'feed_aquarium', args: { monitorId: 'primary' } },
+        { command: 'feed_aquarium', args: { monitorId: 'secondary' } },
+      ]);
+      assert.deepEqual(calls.filter(call => call.command === 'pause_wallpaper'), [
+        { command: 'pause_wallpaper', args: { monitorId: 'primary', paused: true } },
+        { command: 'pause_wallpaper', args: { monitorId: 'primary', paused: false } },
+      ]);
+      assert.equal(calls.some(call => ['check_online', 'install_online'].includes(call.command)), false);
     });
 
     console.log(`\n${passed} UI contracts passed; viewport 780x600; zero horizontal overflow; zero JavaScript errors.`);

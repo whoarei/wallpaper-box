@@ -5,6 +5,7 @@ fn main() {
         "select_monitor",
         "apply_wallpaper",
         "pause_wallpaper",
+        "feed_aquarium",
         "remove_wallpaper",
         "auto_pause",
         "hide_manager",

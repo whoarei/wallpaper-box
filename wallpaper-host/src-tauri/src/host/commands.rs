@@ -100,6 +100,20 @@ pub async fn pause_wallpaper(
     .map_err(|e| e.to_string())
 }
 #[tauri::command]
+pub async fn feed_aquarium(
+    app: AppHandle,
+    window: WebviewWindow,
+    monitor_id: String,
+) -> Result<View, String> {
+    manager(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        super::feed_aquarium(&app, &monitor_id)?;
+        Ok(snapshot(&app))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
 pub async fn remove_wallpaper(
     app: AppHandle,
     window: WebviewWindow,

@@ -5,7 +5,7 @@
   "windows": ["manager"],
   "permissions": [
     "core:default", "allow-get-state", "allow-refresh-modules", "allow-select-monitor",
-    "allow-apply-wallpaper", "allow-pause-wallpaper", "allow-remove-wallpaper", "allow-auto-pause",
+    "allow-apply-wallpaper", "allow-pause-wallpaper", "allow-feed-aquarium", "allow-remove-wallpaper", "allow-auto-pause",
     "allow-hide-manager", "allow-quit-app", "allow-capture-desktop", "allow-show-desktop",
     "allow-check-online", "allow-install-online", "allow-rollback-wallpaper", "allow-import-wallpaper", "allow-open-wallpaper-folder"
   ]

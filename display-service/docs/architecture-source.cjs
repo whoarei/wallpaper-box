@@ -8,7 +8,7 @@ const code = s => '<pre><code>' + escape(s) + '</code></pre>';
 const table = (heads, rows) => '<div class="table-wrap"><table><thead><tr>' + heads.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' + rows.map(row => '<tr>' + row.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
 
 const diagram = `<figure class="architecture-diagram"><div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 485" role="img" aria-labelledby="architecture-title architecture-desc">
-<title id="architecture-title">壁纸盒子 0.2.0 本地优先架构</title><desc id="architecture-desc">管理界面和托盘调用 Rust 宿主；宿主合并内置壁纸与用户壁纸，通过 WebView 自定义协议将本地文件提供给桌面壁纸窗口。检查更新只读取 GitHub 清单，用户选择某个壁纸后才下载其 ZIP，验证后写入用户壁纸目录。</desc>
+<title id="architecture-title">壁纸盒子 0.2.1 本地优先架构</title><desc id="architecture-desc">管理界面和托盘调用 Rust 宿主；宿主合并内置壁纸与用户壁纸，通过 WebView 自定义协议将本地文件提供给桌面壁纸窗口。检查更新只读取 GitHub 清单，用户选择某个壁纸后才下载其 ZIP，验证后写入用户壁纸目录。</desc>
 <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8Z" fill="var(--accent, #b7432a)"/></marker></defs>
 <g font-family="Microsoft YaHei, sans-serif" text-anchor="middle" fill="var(--ink, #404040)">
 <g stroke="var(--diagram-line, #b8c7d3)" fill="var(--surface-raised, #fff)"><rect x="25" y="165" width="190" height="90" rx="10"/><rect x="290" y="25" width="240" height="85" rx="10"/><rect x="600" y="25" width="255" height="85" rx="10"/><rect x="785" y="165" width="190" height="90" rx="10"/><rect x="25" y="365" width="235" height="90" rx="10"/><rect x="365" y="365" width="280" height="90" rx="10"/></g>
@@ -25,16 +25,17 @@ const spec = {
   project: 'Wallpaper Box',
   subtitle: '离线动态壁纸、原生目录发现与在线内容更新',
   documentId: 'screen-garden-architecture',
-  updated: '2026-11-10',
-  version: '0.2.0',
+  updated: '2026-11-11',
+  version: '0.2.1',
   eyebrow: 'Windows / Tauri 2 / 本地优先',
-  introHtml: '<p class="lead">壁纸盒子将 HTML 动态场景作为独立内容模块，通过 Tauri 与 WebView2 显示在 Windows 桌面层。0.2.0 随包提供水族箱和松风镇，直接从本地文件播放；新增壁纸可放入用户目录，也可从官方 GitHub 内容库逐项下载。</p><div class="callout"><strong>核心变化：</strong>主程序不再依赖 Docker 内容服务，不启动本机 HTTP 服务器。壁纸内容与程序版本独立，官方内容安装和更新无需重新编译主程序。</div>',
+  introHtml: '<p class="lead">壁纸盒子将 HTML 动态场景作为独立内容模块，通过 Tauri 与 WebView2 显示在 Windows 桌面层。0.2.1 随包提供水族箱和松风镇，直接从本地文件播放；新增壁纸可放入用户目录，也可从官方 GitHub 内容库逐项下载。</p><div class="callout"><strong>核心变化：</strong>主程序不再依赖 Docker 内容服务，不启动本机 HTTP 服务器。壁纸内容与程序版本独立，官方内容安装和更新无需重新编译主程序。</div>',
   sections: [
     {id:'overview', title:'目标与边界', html:
       '<p>运行环境为 Windows x64、Explorer 桌面与 WebView2 Runtime。安装版使用当前用户安装；便携版解压后运行。内置壁纸和已下载壁纸均可离线播放。</p>' +
-      table(['能力','0.2.0 约定'],[
+      table(['能力','0.2.1 约定'],[
         ['桌面显示','选择显示器，为每屏切换壁纸；托盘提供切换、暂停、查看桌面和退出操作'],
-        ['内置内容','<code>aquarium</code> 水族箱与 <code>pinewind-town</code> 松风镇，两张完整快照'],
+        ['内置内容','<code>aquarium</code> 水族箱与 <code>pinewind-town</code> 松风镇，内容版本均为 1.0.0，最低程序版本仍为 0.2.0'],
+        ['水族箱互动','管理窗口和托盘提供“投喂鱼儿”；不依赖桌面点击或全局输入钩子'],
         ['新增内容','本地文件夹 / ZIP 导入，或手动放入用户 <code>local/</code>；官方内容逐项下载安装'],
         ['网络使用','检查更新取清单及封面；点击某张壁纸的下载 / 更新才取该张 ZIP'],
         ['运行进程','Tauri 宿主及 WebView2；不启动 Docker、Node 或 Nginx'],
@@ -52,6 +53,7 @@ const spec = {
       ])},
     {id:'wallpaper-host', title:'Tauri 动态壁纸与系统托盘', html:
       '<h3>日常操作</h3><ol><li>运行 <code>wallpaper-box.exe</code>。首次启动默认在主显示器使用水族箱，后续读取已有每屏选择与暂停状态。</li><li>在管理界面选择显示器，再从“我的壁纸”中选择场景。每块屏幕使用独立壁纸窗口。</li><li>左键托盘图标打开管理窗口；右键选择显示器、切换壁纸、暂停当前或全部、关闭当前壁纸、查看桌面或退出。</li><li>关闭管理窗口会收起到托盘。使用“退出壁纸盒子”结束程序并恢复原桌面背景。</li></ol>' +
+      '<h3>水族箱投喂（0.2.1）</h3><p>选择正在播放 <code>aquarium</code> 的显示器，使用管理窗口或托盘右键菜单的“投喂鱼儿”。入口只在该屏幕使用水族箱时显示，手动暂停时禁用。遮挡自动暂停时允许先投喂，回到桌面恢复动画后鱼儿继续进食。加载中、页面自身暂停、食物未吃完或暂未响应时，程序显示对应提示。</p><p>宿主通过 <code>aquarium-feed.js</code> 调用现有 <code>#feed.click()</code>，沿用食物上限、鱼群吸引和涟漪逻辑；<code>eval_with_callback</code> 检查 <code>totalFed</code> 增加后才确认成功。修复在宿主层实现，不修改旧壁纸包，两张内置内容仍为 1.0.0，元数据 minAppVersion 仍为 0.2.0，无需为投喂更新内容仓库。</p><div class="callout">壁纸窗口保持鼠标穿透，原页面 HUD 隐藏。点击水面、原页面投喂按钮和 E 键用于浏览器独立模式；原生桌面投喂由管理窗口或托盘触发。程序不安装鼠标 / 键盘全局钩子，不注册投喂全局快捷键。</div>' +
       '<h3>桌面层与资源节约</h3><p>经典桌面通过 WorkerW 子窗口承载壁纸；部分较新 Windows 11 使用 Progman 下的透明合成子窗口。宿主只操作自己的 HWND，不移动 Explorer 图标窗口。窗口以物理像素定位，维护循环检测显示器连接、位置和桌面层变化。</p><p>壁纸窗口鼠标穿透，原页面说明控件在壁纸模式下隐藏。宿主对 requestAnimationFrame 动画提供暂停包装；单个普通窗口覆盖屏幕达到阈值时可自动暂停，恢复可见后继续。手动暂停优先，多个小窗口合计遮挡不作为当前检测依据。实际 CPU / GPU 占用随分辨率、场景和显示器数量变化。</p>' +
       '<h3>设置与诊断</h3>' + code(String.raw`%APPDATA%/local.screen-garden.wallpaper/
 ├─ settings.json              每屏选择、选中屏幕与暂停设置
@@ -59,12 +61,12 @@ const spec = {
 ├─ host.log                   启动、应用与恢复记录
 ├─ webview/                   WebView2 用户数据
 └─ preview-wallpaper-*.png     用户触发的桌面预览`) +
-      '<p>壁纸文件与设置分开保存。0.2.0 保留应用标识和原设置位置，不将本机设置、诊断、截图或 WebView 数据打入发布包。程序不注册 Windows 服务或开机启动。</p>'},
+      '<p>壁纸文件与设置分开保存。0.2.1 保留应用标识和原设置位置，不将本机设置、诊断、截图或 WebView 数据打入发布包。程序不注册 Windows 服务或开机启动。</p>'},
     {id:'release', title:'Windows 安装包与 GitHub CI 发布', html:
-      '<p>程序仓库为 <a href="https://github.com/whoarei/wallpaper-box">whoarei/wallpaper-box</a>，本次程序版本为 <code>0.2.0</code>。Windows x64 NSIS 安装版与便携 ZIP 均包含两张壁纸、使用说明和本离线 HTML；不包含旧 Docker 展示服务。</p>' +
+      '<p>程序仓库为 <a href="https://github.com/whoarei/wallpaper-box">whoarei/wallpaper-box</a>，本次程序版本为 <code>0.2.1</code>。Windows x64 NSIS 安装版与便携 ZIP 均包含两张壁纸、使用说明和本离线 HTML；不包含旧 Docker 展示服务。</p>' +
       table(['产物','用途'],[
-        ['<code>wallpaper-box_0.2.0_x64-setup.exe</code>','当前用户安装；缺少 WebView2 时下载 Microsoft 运行时'],
-        ['<code>wallpaper-box_0.2.0_windows-x64-portable.zip</code>','完整解压后运行；专有 <code>portable.flag</code> 决定用户壁纸存储位置'],
+        ['<code>wallpaper-box_0.2.1_x64-setup.exe</code>','当前用户安装；缺少 WebView2 时下载 Microsoft 运行时'],
+        ['<code>wallpaper-box_0.2.1_windows-x64-portable.zip</code>','完整解压后运行；专有 <code>portable.flag</code> 决定用户壁纸存储位置'],
         ['<code>release-manifest.json</code>','版本、平台、提交和便携包逐文件大小 / SHA-256'],
         ['<code>SHA256SUMS.txt</code>','安装包、便携 ZIP 与清单的外层 SHA-256']
       ]) +
@@ -74,12 +76,12 @@ npm ci --ignore-scripts
 npm run check:version
 npm run bundle
 ./scripts/package-release.ps1
-./scripts/verify-release.ps1 -Directory ../release/v0.2.0
-node scripts/verify-installer.mjs ../release/v0.2.0`) +
+./scripts/verify-release.ps1 -Directory ../release/v0.2.1
+node scripts/verify-installer.mjs ../release/v0.2.1`) +
       '<p><code>package-release.ps1</code> 按 Tauri 资源映射生成便携包与清单，并调用便携校验。<code>verify-release.ps1</code> 检查必需路径、重复文件、每个文件大小和 SHA-256，并禁止 UserData、设置、下载缓存、密钥与编译产物入包。<code>verify-installer.mjs</code> 使用 7-Zip 读取 NSIS 载荷，与同版本清单核对；它确认安装包不含 <code>portable.flag</code>，该标记仅允许存在于便携包。默认 7-Zip 路径为 <code>C:\\Program Files\\7-Zip\\7z.exe</code>，可作为脚本第二个参数覆盖。</p>' +
       '<h3>CI 与程序发布</h3><p><code>.github/workflows/windows.yml</code> 在 main、PR 和手动触发时构建并上传 Actions Artifact；版本标签 <code>vX.Y.Z</code> 进入发布流程。CI 使用固定 Action 提交、工具链与锁文件，执行版本、JavaScript、Rust 格式和测试检查，再构建安装包与便携包。发布任务使用 GitHub 自动提供的 GITHUB_TOKEN，先创建草稿、上传四个产物并回下载校验，成功后公开 Release；失败保留草稿，已发布版本不直接覆盖。</p>' +
-      code('git tag v0.2.0\ngit push origin v0.2.0\ngh run list --repo whoarei/wallpaper-box --workflow windows.yml') +
-      '<p>发布前同步 Cargo.toml、tauri.conf.json、package.json、package-lock.json 与随包 README，并准备 <code>.github/release-notes/v0.2.0.md</code>。标签动作应在本地验证、产物复核和验收完成之后执行。主程序升级和壁纸库发布使用不同仓库、标签及版本号。</p><div class="callout amber">当前未配置 Authenticode 签名或程序自动升级。构建完成、真实安装测试和 GitHub 云端发布是不同的验收项；本技术方案不将尚未执行的步骤记为通过。</div>'},
+      code('git tag v0.2.1\ngit push origin v0.2.1\ngh run list --repo whoarei/wallpaper-box --workflow windows.yml') +
+      '<p>发布前同步 Cargo.toml、tauri.conf.json、package.json、package-lock.json 与随包 README，并准备 <code>.github/release-notes/v0.2.1.md</code>。标签动作应在本地验证、产物复核和验收完成之后执行。主程序升级和壁纸库发布使用不同仓库、标签及版本号。</p><div class="callout amber">当前未配置 Authenticode 签名或程序自动升级。构建完成、真实安装测试和 GitHub 云端发布是不同的验收项；本技术方案不将尚未执行的步骤记为通过。</div>'},
     {id:'layout', title:'目录布局与内容归属', html:
       code(String.raw`desktop/
 ├─ wallpapers/                       主程序随包快照（两张）
@@ -131,16 +133,17 @@ node scripts/verify-installer.mjs ../release/v0.2.0`) +
       '<p>官方仓库为 <a href="https://github.com/whoarei/wallpapers">whoarei/wallpapers</a>，稳定清单入口为 <a href="https://github.com/whoarei/wallpapers/releases/latest/download/catalog.json">releases/latest/download/catalog.json</a>。客户端匿名读取公开 Release，无需 GitHub 登录或个人令牌。</p><h3>用户操作与下载边界</h3><ol><li>打开“在线壁纸”，点击“检查更新”。程序只请求清单并显示封面、可安装版本和更新状态。</li><li>用户选择某一张壁纸的“下载 / 更新”，程序才下载该条目的一个版本 ZIP；不会自动安装全库。</li><li>校验 ZIP 大小和 SHA-256，在用户暂存目录内受限解压；再核对元数据、入口和兼容性。</li><li>将完整版本写入 <code>online/&lt;id&gt;/&lt;version&gt;/</code>，原子替换 active.json 的活动指针。</li><li>保留上一活动版本，提供回退；安装和播放不要求持续联网。</li></ol>' +
       code(JSON.stringify({current:'1.1.0',previous:'1.0.0'},null,2)) +
       '<p><code>previous</code> 也可以是 <code>builtin</code>，用于回到内置快照。回退交换 current 与 previous；更新失败不得把不完整目录设为活动版本。下载与导入路径检查拒绝链接、越界、大小写重名、设备名和非法 ZIP 路径，并限制文件数量及解压大小。</p><p>断网时可继续播放现有壁纸；最近可用清单缓存在原 AppData 设置目录的 online-catalog.json。SHA-256 用于比对发布清单和下载文件的一致性，内容仍由官方仓库维护；程序将管理能力限制在管理窗口，自定义壁纸窗口没有下载或文件管理权限。</p>' +
-      '<h3>官方库独立发布</h3><p>维护流程见 <a href="https://github.com/whoarei/wallpapers#readme">壁纸仓库 README</a>：新增 <code>wallpapers/&lt;id&gt;/</code> 和完整元数据，修改内容时提升该壁纸版本，独立提升 library.json 的清单版本，运行 <code>python scripts/build.py</code>，检查后提交并推送 <code>library-vX.Y.Z</code> 标签。内容 CI 生成每张 ZIP、封面、catalog.json 和校验文件，公开 Release 后稳定入口指向新清单。</p><p>主程序 0.2.0 内置仍为原来的两张壁纸。“通往别处的窗户”由内容仓库另行新增并发布，用于验证用户检查更新、单项下载及离线应用全流程；它不需要加入 EXE 或重新发布主程序。</p>'},
+      '<h3>官方库独立发布</h3><p>维护流程见 <a href="https://github.com/whoarei/wallpapers#readme">壁纸仓库 README</a>：新增 <code>wallpapers/&lt;id&gt;/</code> 和完整元数据，修改内容时提升该壁纸版本，独立提升 library.json 的清单版本，运行 <code>python scripts/build.py</code>，检查后提交并推送 <code>library-vX.Y.Z</code> 标签。内容 CI 生成每张 ZIP、封面、catalog.json 和校验文件，公开 Release 后稳定入口指向新清单。</p><p>主程序 0.2.1 内置仍为原来的两张壁纸。“通往别处的窗户”由内容仓库另行新增并发布，用于验证用户检查更新、单项下载及离线应用全流程；它不需要加入 EXE 或重新发布主程序。</p>'},
     {id:'interfaces', title:'本地协议与权限边界', html:
       table(['接口 / 位置','行为'],[
         ['管理窗口 IPC','仅 manager 窗口可调用；Tauri 命令 ACL 与宿主窗口标签检查同时限制'],
+        ['<code>feed_aquarium</code>','管理窗口或原生托盘操作当前显示器；校验 aquarium 分配与手动暂停，并确认页面回执'],
         ['<code>http://wallpaper.localhost/&lt;id&gt;/&lt;relative&gt;</code>','Tauri 内部协议映射；读取已发现模块中的静态资源'],
         ['资源请求方法','GET / HEAD；支持单个字节范围请求；不提供写入接口'],
         ['管理窗口资源作用域','允许读取模块封面等已发现资源'],
         ['每屏壁纸资源作用域','仅允许读取该窗口被分配的壁纸 ID，跨模块请求被拒绝'],
         ['路径与响应','一次百分号解码、规范化目录边界检查、MIME、no-store、CSP 与 nosniff'],
-        ['旧 <code>/api/modules</code>','仅属于 Legacy 浏览器示例，0.2.0 主程序不再调用']
+        ['旧 <code>/api/modules</code>','仅属于 Legacy 浏览器示例，0.2.1 主程序不再调用']
       ]) +
       '<p>管理窗口可以选择目录、导入、更新与切换壁纸；壁纸页面只负责显示自身内容。协议处理器对实际文件做规范化边界检查，拒绝跨壁纸目录读取；未知窗口标签不给予默认全库权限。完整单文件响应上限为 64 MiB，单次范围响应上限为 8 MiB，避免无界读取。</p><p>这些能力隔离避免壁纸脚本调用主程序管理命令。自定义壁纸本身仍是用户导入的网页内容，应按其来源选择；本协议不提供任意系统文件访问或模块后端进程启动。</p>'},
     {id:'deployment', title:'安装、离线使用与日常维护', html:
@@ -153,19 +156,20 @@ node scripts/verify-installer.mjs ../release/v0.2.0`) +
         ['升级主程序','退出托盘程序，安装新版本；用户壁纸与 AppData 设置分开保留'],
         ['只更新壁纸库','在内容仓库发布新清单与包；无需重新构建主程序']
       ]) +
-      '<p>便携目录需要写权限以创建 UserData。在线下载仅在使用该功能时需要网络；没有 WebView2 的机器首次安装运行时仍需联网或事先准备运行时。原 Docker 容器可按需保留用于浏览器开发，0.2.0 正常播放不需要它们运行。</p>'},
+      '<p>便携目录需要写权限以创建 UserData。在线下载仅在使用该功能时需要网络；没有 WebView2 的机器首次安装运行时仍需联网或事先准备运行时。原 Docker 容器可按需保留用于浏览器开发，0.2.1 正常播放不需要它们运行。</p>'},
     {id:'migration', title:'从 Docker 版迁移与状态兼容', html:
-      '<p>旧展示服务位于 <code>display-service/</code>，作为 Legacy 浏览器开发示例保留。0.2.0 使用根目录 <code>wallpapers/aquarium</code> 和 <code>wallpapers/pinewind-town</code> 两张快照打包，不再从 8088 获取模块或启动 Compose。</p><p>既有自定义网页可从旧 <code>display-service/modules/&lt;slug&gt;</code> 复制到用户 <code>local/&lt;slug&gt;</code>，或通过“导入文件夹”接入；检查相对资源路径和元数据后刷新。旧目录里的其他模块不会未经选择自动导入。</p><p>应用标识不变，原显示器选择、壁纸 ID 与手动暂停设置继续沿用；原两张壁纸 ID 保持 aquarium / pinewind-town。用户自定义内容在 0.2.0 使用 local: 前缀，需要在管理界面重新选择对应模块。</p><div class="callout amber">网页 localStorage 按来源隔离。旧 <code>http://127.0.0.1:8088</code> 与新的 wallpaper.localhost 来源不同，种花记录、页面内设置等不保证自动迁移；需要时应为具体壁纸单独增加导出 / 导入。保留宿主 settings.json 不代表网页存储全部兼容。</div>'},
+      '<p>旧展示服务位于 <code>display-service/</code>，作为 Legacy 浏览器开发示例保留。0.2.1 使用根目录 <code>wallpapers/aquarium</code> 和 <code>wallpapers/pinewind-town</code> 两张快照打包，不再从 8088 获取模块或启动 Compose。</p><p>既有自定义网页可从旧 <code>display-service/modules/&lt;slug&gt;</code> 复制到用户 <code>local/&lt;slug&gt;</code>，或通过“导入文件夹”接入；检查相对资源路径和元数据后刷新。旧目录里的其他模块不会未经选择自动导入。</p><p>应用标识不变，原显示器选择、壁纸 ID 与手动暂停设置继续沿用；原两张壁纸 ID 保持 aquarium / pinewind-town。用户自定义内容在 0.2.1 使用 local: 前缀，需要在管理界面重新选择对应模块。</p><div class="callout amber">网页 localStorage 按来源隔离。旧 <code>http://127.0.0.1:8088</code> 与新的 wallpaper.localhost 来源不同，种花记录、页面内设置等不保证自动迁移；需要时应为具体壁纸单独增加导出 / 导入。保留宿主 settings.json 不代表网页存储全部兼容。</div>'},
     {id:'verification', title:'验收与回归检查', html:
-      '<p>以下是 0.2.0 的验收范围，最终执行结果应随发版记录补齐。测试清单列出预期行为，不代表所有真实设备场景已经验证。</p>' +
+      '<p>以下是 0.2.1 的验收范围，最终执行结果应随发版记录补齐。测试清单列出预期行为，不代表所有真实设备场景已经验证。</p>' +
       table(['范围','必须确认的行为'],[
         ['离线与资源','Docker 停止且网络不可用时，两张内置壁纸可打开、切换和重启恢复'],
         ['本地发现','添加 local 模块、坏元数据隔离、同名自定义模块不会覆盖内置'],
         ['路径与权限','拒绝穿越 / 二次解码 / 设备名；壁纸不能读取其他模块或调用管理 IPC'],
         ['在线更新','检查不下全库；单项下载通过大小 / SHA-256；失败保留旧活动版本'],
         ['版本与回退','官方更新覆盖同 ID 内置；回退上一版本与 builtin；重启后继续生效'],
-        ['全新在线壁纸','内容库发布“通往别处的窗户”后，0.2.0 不重编即可发现、下载、应用'],
+        ['全新在线壁纸','内容库发布“通往别处的窗户”后，0.2.1 不重编即可发现、下载、应用'],
         ['导入','文件夹与 ZIP、可选一层包装目录、危险压缩路径和超限包拒绝'],
+        ['水族箱投喂','管理窗口 / 托盘入口和屏幕选择、手动暂停禁用、自动暂停可投喂、食物增加及饱食提示'],
         ['桌面与显示器','真实主屏效果、托盘、暂停、退出恢复、多屏 / DPI / 断连和 Explorer 恢复'],
         ['发布包','ZIP / NSIS 文件逐项一致，安装包无 portable.flag，无 UserData / 私密文件'],
         ['文档','10 套配色、刷新恢复、无脚本阅读、移动布局、打印配色与离线打开']
@@ -176,7 +180,7 @@ cargo test --locked --release --features custom-protocol --manifest-path wallpap
 # 生成技术文档
 node display-service/docs/architecture-source.cjs
 node <rtd-html-docs>/scripts/render.mjs --input display-service/docs/architecture.spec.json --output display-service/public/docs/architecture.html --force`) +
-      '<p>文档浏览器验证使用 RTD 技能附带 verify.mjs 与已有 Playwright / Edge 环境，报告和截图放在临时目录，不打入发布包。旧 Node registry 测试仍可用于 Legacy 示例，不能代替新原生目录、协议与在线安装测试。</p>'},
+      '<p>管理界面的模拟 IPC 检查执行 <code>npm --prefix wallpaper-host run test:ui</code>，覆盖按需下载、更新 / 回退、错误保留及投喂入口；<code>npm --prefix wallpaper-host run test:aquarium</code> 使用真实内置水族箱页面，检查投喂后食物增加、暂停拒绝和饱食提示。测试项目及真实设备执行结果以发版记录为准，不将计划项计为通过。</p><p>文档浏览器验证使用 RTD 技能附带 verify.mjs 与已有 Playwright / Edge 环境，报告和截图放在临时目录，不打入发布包。旧 Node registry 测试仍可用于 Legacy 示例，不能代替新原生目录、协议与在线安装测试。</p>'},
     {id:'troubleshooting', title:'排查、扩展与参考', html:
       table(['现象','检查方向'],[
         ['壁纸列表为空或模块消失','查看管理界面警告；确认用户目录、合法名称、入口、JSON 与 minAppVersion'],
@@ -186,11 +190,13 @@ node <rtd-html-docs>/scripts/render.mjs --input display-service/docs/architectur
         ['更改网页后仍是旧画面','刷新目录后重新应用壁纸；自动发现不等于网页热替换'],
         ['便携目录无法写入','完整解压到有写权限的位置，确认 portable.flag 与 EXE 同目录'],
         ['屏幕或桌面层异常','查看 diagnostics.json / host.log；确认 Explorer、WebView2 和显示器状态'],
-        ['种花等页面状态丢失','检查旧 / 新网页来源差异；宿主设置与网页 localStorage 是两类数据']
+        ['种花等页面状态丢失','检查旧 / 新网页来源差异；宿主设置与网页 localStorage 是两类数据'],
+        ['桌面点击或 E 键不能投喂','壁纸鼠标穿透且不接收全局按键；在管理窗口或托盘选择“投喂鱼儿”'],
+        ['投喂入口不见或禁用','确认选中显示器正在播放 aquarium；手动暂停时先继续，加载中或饱食时按提示稍后重试']
       ]) +
-      '<h3>后续扩展</h3><p>普通网页壁纸通过 module.json 与内容目录扩展，不要求特殊 SDK。新增宿主能力、权限或新的模块类型需要主程序升级；纯内容和既有 web 模块的更新通过内容库独立发布。若要把本地目录分享为浏览器网站，可继续参考 Legacy Compose 示例，但它与 0.2.0 桌面运行链路独立。</p><h3>实现参考</h3><ul><li><a href="https://github.com/whoarei/wallpaper-box">壁纸盒子源码与程序 Release</a></li><li><a href="https://github.com/whoarei/wallpapers#readme">官方壁纸库规范与发布流程</a></li><li><a href="https://v2.tauri.app/learn/system-tray/">Tauri 系统托盘</a>与<a href="https://v2.tauri.app/security/capabilities/">能力与权限</a></li><li><a href="https://v2.tauri.app/distribute/windows-installer/">Tauri Windows Installer</a></li><li><a href="https://learn.microsoft.com/en-us/windows/win32/shell/ishelldispatch4-toggledesktop">Windows Shell ToggleDesktop</a></li></ul>'}
+      '<h3>后续扩展</h3><p>普通网页壁纸通过 module.json 与内容目录扩展，不要求特殊 SDK。新增宿主能力、权限或新的模块类型需要主程序升级；纯内容和既有 web 模块的更新通过内容库独立发布。若要把本地目录分享为浏览器网站，可继续参考 Legacy Compose 示例，但它与 0.2.1 桌面运行链路独立。</p><h3>实现参考</h3><ul><li><a href="https://github.com/whoarei/wallpaper-box">壁纸盒子源码与程序 Release</a></li><li><a href="https://github.com/whoarei/wallpapers#readme">官方壁纸库规范与发布流程</a></li><li><a href="https://v2.tauri.app/learn/system-tray/">Tauri 系统托盘</a>与<a href="https://v2.tauri.app/security/capabilities/">能力与权限</a></li><li><a href="https://v2.tauri.app/distribute/windows-installer/">Tauri Windows Installer</a></li><li><a href="https://learn.microsoft.com/en-us/windows/win32/shell/ishelldispatch4-toggledesktop">Windows Shell ToggleDesktop</a></li></ul>'}
   ],
-  footer: 'Wallpaper Box 0.2.0 · 本地优先的模块化动态壁纸'
+  footer: 'Wallpaper Box 0.2.1 · 本地优先的模块化动态壁纸'
 };
 
 fs.writeFileSync(path.join(__dirname, 'architecture.spec.json'), JSON.stringify(spec, null, 2) + '\n');

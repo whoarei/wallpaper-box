@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-feed-aquarium"
+description = "Enables the feed_aquarium command without any pre-configured scope."
+commands.allow = ["feed_aquarium"]
+
+[[permission]]
+identifier = "deny-feed-aquarium"
+description = "Denies the feed_aquarium command without any pre-configured scope."
+commands.deny = ["feed_aquarium"]
