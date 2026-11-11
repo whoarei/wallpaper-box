@@ -54,6 +54,7 @@ impl Default for Settings {
 struct Running {
     generation: u64,
     desktop_clicks: u64,
+    z_order_repairs: u64,
     label: String,
     module_root: PathBuf,
     proof: Attachment,
@@ -95,6 +96,7 @@ pub struct WallpaperView {
     paused: bool,
     auto_paused: bool,
     desktop_clicks: u64,
+    z_order_repairs: u64,
     proof: Attachment,
 }
 #[derive(Serialize)]
@@ -195,6 +197,7 @@ fn snapshot(app: &AppHandle) -> View {
                 paused: selection.paused,
                 auto_paused: running.auto_paused,
                 desktop_clicks: running.desktop_clicks,
+                z_order_repairs: running.z_order_repairs,
                 proof,
             })
         })
@@ -327,6 +330,7 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
             Running {
                 generation: NEXT_SURFACE.fetch_add(1, Ordering::Relaxed),
                 desktop_clicks: 0,
+                z_order_repairs: 0,
                 label: window_label,
                 module_root: module.root.clone(),
                 proof: proof.clone(),
@@ -924,7 +928,16 @@ fn maintenance(app: AppHandle, first: bool) {
                 if let Some(window) = app.get_webview_window(&label(&id)) {
                     if let Ok(handle) = window.hwnd() {
                         let raw = handle.0 as isize;
-                        desktop::maintain_z_order(raw);
+                        let repairs = desktop::maintain_z_order(raw);
+                        if repairs != 0 {
+                            if let Some(running) = host.data.lock().unwrap().running.get_mut(&id) {
+                                running.z_order_repairs += repairs;
+                            }
+                            log(
+                                &app,
+                                &format!("Repaired desktop Z order {id}: {repairs} moves"),
+                            );
+                        }
                         let proof = desktop::inspect(raw);
                         if !proof.attached
                             || proof.x != display.x

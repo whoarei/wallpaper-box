@@ -436,12 +436,47 @@ pub fn show_desktop() -> Result<(), String> {
     }
 }
 
-pub fn maintain_z_order(handle: isize) {
+fn lowering_needed(order: &[isize], moving: isize, anchor: isize) -> bool {
+    if moving == 0 || anchor == 0 {
+        return false;
+    }
+    match (
+        order.iter().position(|&h| h == moving),
+        order.iter().position(|&h| h == anchor),
+    ) {
+        (Some(moving), Some(anchor)) => moving < anchor,
+        _ => false,
+    }
+}
+
+unsafe fn child_order(parent: HWND) -> Vec<isize> {
+    let mut order = Vec::new();
+    let mut child = GetTopWindow(parent);
+    // Explorer may change its child windows while we inspect them. An incomplete
+    // or cyclic snapshot must not cause a speculative reorder.
+    while !child.is_null() && order.len() < 512 {
+        if order.contains(&(child as isize)) {
+            return vec![];
+        }
+        order.push(child as isize);
+        child = GetWindow(child, GW_HWNDNEXT);
+    }
+    if child.is_null() {
+        order
+    } else {
+        vec![]
+    }
+}
+
+/// Repair relative desktop layering without reordering healthy wallpaper siblings.
+/// Multiple wallpaper windows can all be below the icons; they must not each
+/// demand the single slot immediately after the icon window every two seconds.
+pub fn maintain_z_order(handle: isize) -> u64 {
     unsafe {
         let hwnd = handle as HWND;
         let parent = GetParent(hwnd);
         if window_class(parent) != "Progman" {
-            return;
+            return 0;
         }
         let icons = FindWindowExW(
             parent,
@@ -450,8 +485,10 @@ pub fn maintain_z_order(handle: isize) {
             null(),
         );
         let worker = FindWindowExW(parent, null_mut(), wide("WorkerW").as_ptr(), null());
-        if !icons.is_null() {
-            SetWindowPos(
+        let mut order = child_order(parent);
+        let mut repairs = 0;
+        if lowering_needed(&order, handle, icons as isize) {
+            if SetWindowPos(
                 hwnd,
                 icons,
                 0,
@@ -459,10 +496,14 @@ pub fn maintain_z_order(handle: isize) {
                 0,
                 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
+            ) != 0
+            {
+                repairs += 1;
+                order = child_order(parent);
+            }
         }
-        if !worker.is_null() {
-            SetWindowPos(
+        if lowering_needed(&order, worker as isize, handle) {
+            if SetWindowPos(
                 worker,
                 HWND_BOTTOM,
                 0,
@@ -470,7 +511,67 @@ pub fn maintain_z_order(handle: isize) {
                 0,
                 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
+            ) != 0
+            {
+                repairs += 1;
+            }
         }
+        repairs
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::lowering_needed;
+
+    const ICONS: isize = 1;
+    const PRIMARY: isize = 2;
+    const SECONDARY: isize = 3;
+    const BACKDROP: isize = 4;
+
+    fn maintain(order: &mut Vec<isize>, wallpaper: isize) -> usize {
+        let mut moves = 0;
+        if lowering_needed(order, wallpaper, ICONS) {
+            order.retain(|&h| h != wallpaper);
+            let index = order.iter().position(|&h| h == ICONS).unwrap();
+            order.insert(index + 1, wallpaper);
+            moves += 1;
+        }
+        if lowering_needed(order, BACKDROP, wallpaper) {
+            order.retain(|&h| h != BACKDROP);
+            order.push(BACKDROP);
+            moves += 1;
+        }
+        moves
+    }
+
+    #[test]
+    fn healthy_dual_monitor_layering_is_a_fixed_point_in_either_wallpaper_order() {
+        for mut order in [
+            vec![ICONS, PRIMARY, SECONDARY, BACKDROP],
+            vec![ICONS, SECONDARY, PRIMARY, BACKDROP],
+        ] {
+            let original = order.clone();
+            for _ in 0..30 {
+                assert_eq!(maintain(&mut order, PRIMARY), 0);
+                assert_eq!(maintain(&mut order, SECONDARY), 0);
+                assert_eq!(order, original);
+            }
+        }
+    }
+
+    #[test]
+    fn displaced_layers_are_repaired_once_then_remain_stable() {
+        let mut order = vec![PRIMARY, BACKDROP, ICONS, SECONDARY];
+        assert_eq!(maintain(&mut order, PRIMARY), 2);
+        assert_eq!(order, vec![ICONS, PRIMARY, SECONDARY, BACKDROP]);
+        for _ in 0..30 {
+            assert_eq!(maintain(&mut order, SECONDARY), 0);
+            assert_eq!(maintain(&mut order, PRIMARY), 0);
+        }
+        assert!(!lowering_needed(&order, 0, ICONS));
+        assert!(!lowering_needed(&order, PRIMARY, 0));
+        assert!(!lowering_needed(&order, PRIMARY, 999));
+        assert!(!lowering_needed(&[], PRIMARY, ICONS));
     }
 }
