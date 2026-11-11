@@ -1,3 +1,5 @@
+mod geometry;
+use geometry::Bounds;
 use serde::Serialize;
 use std::{
     ffi::c_void,
@@ -27,6 +29,7 @@ pub struct Display {
     pub width: i32,
     pub height: i32,
     pub scale: f64,
+    pub work_area: Bounds,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -61,6 +64,11 @@ pub fn displays() -> Vec<Display> {
         info.monitorInfo.cbSize = size_of::<MONITORINFOEXW>() as u32;
         if GetMonitorInfoW(handle, &mut info as *mut _ as *mut MONITORINFO) != 0 {
             let rect = info.monitorInfo.rcMonitor;
+            let work = info.monitorInfo.rcWork;
+            let work_area =
+                Bounds::from_edges(work.left, work.top, work.right, work.bottom).clipped_to(
+                    Bounds::from_edges(rect.left, rect.top, rect.right, rect.bottom),
+                );
             let mut dx = 96;
             let mut dy = 96;
             let _ = GetDpiForMonitor(handle, MDT_EFFECTIVE_DPI, &mut dx, &mut dy);
@@ -79,6 +87,7 @@ pub fn displays() -> Vec<Display> {
                 width: rect.right - rect.left,
                 height: rect.bottom - rect.top,
                 scale: dx as f64 / 96.0,
+                work_area,
             });
         }
         1
@@ -150,6 +159,7 @@ fn shell() -> Result<Shell, String> {
 /// Attach only our own wallpaper HWND. Explorer's icon window is never reparented.
 pub fn attach(handle: isize, display: &Display) -> Result<Attachment, String> {
     let shell = shell()?;
+    let bounds = display.work_area;
     unsafe {
         let hwnd = handle as HWND;
         let parent = if shell.raised {
@@ -185,8 +195,8 @@ pub fn attach(handle: isize, display: &Display) -> Result<Attachment, String> {
             return Err(format!("挂载桌面失败：Windows 错误 {}", GetLastError()));
         }
         let mut point = POINT {
-            x: display.x,
-            y: display.y,
+            x: bounds.x,
+            y: bounds.y,
         };
         MapWindowPoints(null_mut(), parent, &mut point, 1);
         let after = if shell.raised {
@@ -199,8 +209,8 @@ pub fn attach(handle: isize, display: &Display) -> Result<Attachment, String> {
             after,
             point.x,
             point.y,
-            display.width,
-            display.height,
+            bounds.width,
+            bounds.height,
             SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
         ) == 0
         {
@@ -293,7 +303,7 @@ pub fn covering_window(display: &Display, ignore: &[isize]) -> Option<String> {
         if GetWindowRect(hwnd, &mut rect) == 0 {
             return 1;
         }
-        let d = state.display;
+        let d = state.display.work_area;
         let width = (rect.right.min(d.x + d.width) - rect.left.max(d.x)).max(0) as i64;
         let height = (rect.bottom.min(d.y + d.height) - rect.top.max(d.y)).max(0) as i64;
         if width * height * 100 >= d.width as i64 * d.height as i64 * 95 {

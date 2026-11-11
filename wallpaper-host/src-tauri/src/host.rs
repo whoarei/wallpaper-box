@@ -327,8 +327,8 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
         WebviewWindowBuilder::new(app, &window_label, WebviewUrl::CustomProtocol(url))
             .title(format!("壁纸盒子 · {} · {}", module.name, display.name))
             .inner_size(
-                display.width as f64 / display.scale,
-                display.height as f64 / display.scale,
+                display.work_area.width as f64 / display.scale,
+                display.work_area.height as f64 / display.scale,
             )
             .decorations(false)
             .shadow(false)
@@ -989,11 +989,12 @@ fn maintenance(app: AppHandle, first: bool) {
                             );
                         }
                         let proof = desktop::inspect(raw);
+                        let bounds = display.work_area;
                         if !proof.attached
-                            || proof.x != display.x
-                            || proof.y != display.y
-                            || proof.width != display.width
-                            || proof.height != display.height
+                            || proof.x != bounds.x
+                            || proof.y != bounds.y
+                            || proof.width != bounds.width
+                            || proof.height != bounds.height
                         {
                             match desktop::attach(raw, display) {
                                 Ok(new_proof) => {
