@@ -1,6 +1,6 @@
 [package]
 name = "screen-garden"
-version = "0.4.0"
+version = "0.5.2"
 description = "Wallpaper Box desktop wallpaper host"
 edition = "2021"
 default-run = "wallpaper-box"

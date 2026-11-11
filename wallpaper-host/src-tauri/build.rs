@@ -18,6 +18,7 @@ fn main() {
         "show_desktop",
         "check_online",
         "install_online",
+        "download_action",
         "rollback_wallpaper",
         "import_wallpaper",
         "open_wallpaper_folder",
