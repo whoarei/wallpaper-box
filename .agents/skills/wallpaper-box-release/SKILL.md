@@ -5,7 +5,7 @@ description: "准备或发布 whoarei/wallpaper-box 主程序的新版本时使�
 
 # 壁纸盒子主程序发布
 
-在仓库根目录执行。先读 `README.md` 的“本地构建与核对”“主程序发布”、`.github/workflows/windows.yml` 和 `.github/scripts/publish-release.ps1`，以当前文件为准。
+在仓库根目录执行。先读 `README.md`、`docs/guide.md` 的“本地构建与核对”“主程序发布”、`.github/workflows/windows.yml` 和 `.github/scripts/publish-release.ps1`，以当前文件为准。
 
 本 skill 用于 `whoarei/wallpaper-box` 的 Windows x64 主程序。`whoarei/wallpapers` 的内容库使用另一套版本与 `library-vX.Y.Z` 标签，不在这里发布。仅整理 skill、修改代码或制作原型不触发发布。
 
@@ -68,7 +68,7 @@ gh release view --repo whoarei/wallpaper-box --json tagName,isDraft,isPrerelease
 | `wallpaper-host/ui/index.html` | `#version` 的初始版本占位（若仍为固定文本） |
 | `.github/release-notes/vX.Y.Z.md` | 文件名、标题与本次说明 |
 
-更新根 README 和随包说明中描述当前版本的文字。历史迁移说明、依赖版本、壁纸模块版本及 `minAppVersion` 各有含义，不能全局替换。保持依赖锁定，不借发版升级无关依赖。
+更新根 README、`docs/guide.md` 和随包说明中描述当前版本的文字。历史迁移说明、依赖版本、壁纸模块版本及 `minAppVersion` 各有含义，不能全局替换。保持依赖锁定，不借发版升级无关依赖。
 
 运行 `npm --prefix wallpaper-host run check:version`。该脚本目前只核对部分清单，**通过不代替上表逐项核对**。同时审阅 diff，确保发布说明描述实际完成的功能，并如实标注未运行的设备验收。
 
