@@ -1351,10 +1351,13 @@ mod tests {
 
     #[test]
     fn disabled_startup_preference_survives_settings_round_trip() {
-        let settings: Settings = serde_json::from_str(r#"{"auto_start":false}"#).unwrap();
+        let saved = r#"{"selected_monitor":"display-2","assignments":{"display-2":{"module_id":"aquarium"}},"auto_start":false}"#;
+        let settings: Settings = serde_json::from_str(saved).unwrap();
         let reloaded: Settings =
             serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
         assert!(!reloaded.auto_start);
+        assert_eq!(reloaded.selected_monitor, "display-2");
+        assert_eq!(reloaded.assignments["display-2"].module_id, "aquarium");
         assert!(Settings::default().auto_start);
     }
 }
