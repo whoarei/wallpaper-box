@@ -1,4 +1,4 @@
-壁纸盒子 0.5.1 · Windows x64
+壁纸盒子 0.5.2 · Windows x64
 
 首次使用
 1. 使用 NSIS 安装程序安装，运行 wallpaper-box.exe；0.3.1 起仅发布安装版。
