@@ -31,7 +31,17 @@
    <h3 class="section-label" id="app-update-title">程序更新</h3><div class="setting-row"><span><strong>壁纸盒子</strong><small>当前 v<span id="version">0.5.2</span><span id="app-update-latest-wrap" hidden> · 新版 v<span id="app-update-latest"></span></span></small></span><button id="check-app-update" class="text-button">检查更新</button></div>
    <p id="app-update-status" class="app-update-status" role="status" aria-live="polite"></p><div id="app-update-progress-wrap" class="app-update-progress-wrap" hidden><progress id="app-update-progress" max="100" aria-label="程序安装包下载进度"></progress><span id="app-update-size"></span></div><div id="app-update-error" class="error" role="alert" hidden></div><details id="app-update-notes-wrap" class="app-update-notes" hidden><summary>更新说明</summary><pre id="app-update-notes"></pre></details><div class="app-update-actions"><button id="download-app-update" class="quiet" hidden>重试下载</button><button id="install-app-update" class="update-install" hidden>重启并升级</button></div>
   </section>
+  <button id="about-open" class="setting-row about-entry" aria-haspopup="dialog" aria-controls="about-dialog"><strong>关于壁纸盒子</strong><span aria-hidden="true">›</span></button>
   <p class="settings-note">有新版时会在后台下载并验证，由你决定何时重启升级。关闭窗口后，壁纸仍会继续播放。</p><button id="quit" class="text-button danger">退出程序</button>
+ </div>
+</dialog>
+<dialog id="about-dialog" aria-labelledby="about-title" aria-describedby="about-description">
+ <div class="dialog-heading"><h2 id="about-title">关于壁纸盒子</h2><button class="icon-button" data-close aria-label="关闭关于">×</button></div>
+ <div class="dialog-body">
+  <div class="about-brand"><img class="about-icon" src="icon.png" alt="" width="72" height="72"><h3>壁纸盒子</h3><p class="about-version">版本 <span id="about-version">正在读取</span> · Windows x64</p></div>
+  <p id="about-description" class="about-description">让喜欢的风景，随时在身边。<br>支持多显示器、离线播放与点击互动的动态壁纸程序。</p><p class="about-author">作者 · whoarei</p>
+  <div class="about-links"><a href="https://github.com/whoarei/wallpaper-box" data-about-link="project">项目主页 <span aria-hidden="true">↗</span></a><a href="https://github.com/whoarei/wallpaper-box/issues" data-about-link="issues">问题反馈 <span aria-hidden="true">↗</span></a></div>
+  <details class="about-licenses"><summary>第三方许可</summary><p>主要组件及其许可：</p><ul><li><a href="https://github.com/tauri-apps/tauri" data-about-link="tauri">Tauri ↗</a> · MIT / Apache-2.0</li><li><a href="https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution" data-about-link="webview2">Microsoft Edge WebView2 ↗</a> · Microsoft 软件许可条款</li></ul><p>各组件的版权及许可归其各自权利人所有。</p></details>
  </div>
 </dialog>
 <dialog id="app-update-confirm" class="app-update-confirm" aria-labelledby="app-update-confirm-title" aria-describedby="app-update-confirm-copy"><div class="dialog-body"><h2 id="app-update-confirm-title">重启并升级？</h2><p id="app-update-confirm-copy"></p><div class="app-update-actions"><button id="cancel-app-update" class="quiet">暂不升级</button><button id="confirm-app-update" class="update-install">确认升级</button></div></div></dialog>

@@ -105,6 +105,7 @@ async function changeDownload(moduleId,action='enqueue'){
 }
 function appUpdate(){return state?.app_update||{phase:'idle',current_version:state?.version,version:null};}
 function showDialog(id){const dialog=$(id);if(!dialog.open)dialog.showModal();}
+function openAbout(){closePlaybackMenu();showDialog('about-dialog');}
 function openAppUpdate(){showDialog('settings-dialog');$('app-update-panel').scrollIntoView({block:'nearest'});}
 function closePlaybackMenu(){$('playback-menu').open=false;}
 async function direct(command,args={},message=''){
@@ -131,6 +132,7 @@ function moduleDetails(module){
 function renderAppUpdate(){
  const update=appUpdate(),phase=update.phase||'idle',ready=phase==='ready',working=['checking','downloading','installing'].includes(phase);
  $('version').textContent=update.current_version||state?.version||'';
+ $('about-version').textContent=$('version').textContent||'正在读取';
  $('app-update-latest-wrap').hidden=!update.version;$('app-update-latest').textContent=update.version||'';
  $('app-update-toggle').hidden=!ready;
  const status={idle:'自动检查更新已开启。',checking:'正在检查程序更新…',downloading:'正在后台下载，完成后将验证安装包。',ready:`v${update.version||''} 已下载并验证，可以重启升级。`,up_to_date:'已是最新版本。',installing:'正在启动安装程序…',error:'程序更新暂时未能完成。'};
@@ -264,6 +266,9 @@ $('reload').onclick=()=>{closePlaybackMenu();const playing=current();if(playing)
 $('show-desktop').onclick=()=>{closePlaybackMenu();direct('show_desktop',{monitorId:state.selected_monitor});};
 $('hide').onclick=()=>{closePlaybackMenu();direct('hide_manager');};$('quit').onclick=()=>direct('quit_app');
 $('settings-open').onclick=()=>showDialog('settings-dialog');
+$('about-open').onclick=openAbout;
+document.querySelectorAll('[data-about-link]').forEach(link=>link.onclick=event=>{event.preventDefault();direct('open_about_link',{link:link.dataset.aboutLink});});
+window.__TAURI__.event.listen('show-about',openAbout).catch(error=>toast('关于入口暂时不可用：'+String(error)));
 $('app-update-toggle').onclick=openAppUpdate;
 document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>button.closest('dialog').close());
 document.querySelectorAll('dialog').forEach(dialog=>dialog.addEventListener('click',event=>{

@@ -1,6 +1,7 @@
 fn main() {
     let commands = &[
         "get_state",
+        "open_about_link",
         "check_app_update",
         "download_app_update",
         "install_app_update",

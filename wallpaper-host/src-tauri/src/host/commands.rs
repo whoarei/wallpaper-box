@@ -39,6 +39,39 @@ pub(super) fn reload(app: &AppHandle, id: &str) {
 }
 
 #[tauri::command]
+pub fn open_about_link(window: WebviewWindow, link: String) -> Result<(), String> {
+    manager(&window)?;
+    // Accept named destinations only; wallpaper pages cannot open arbitrary URLs.
+    let url = match link.as_str() {
+        "project" => "https://github.com/whoarei/wallpaper-box",
+        "issues" => "https://github.com/whoarei/wallpaper-box/issues",
+        "tauri" => "https://github.com/tauri-apps/tauri",
+        "webview2" => {
+            "https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution"
+        }
+        _ => return Err("未知的关于链接。".into()),
+    };
+    use windows::{
+        core::{w, HSTRING, PCWSTR},
+        Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL},
+    };
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            w!("open"),
+            &HSTRING::from(url),
+            PCWSTR::null(),
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if result.0 as isize <= 32 {
+        return Err("无法打开默认浏览器，请稍后重试。".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn get_state(app: AppHandle, window: WebviewWindow) -> Result<View, String> {
     manager(&window)?;
     tauri::async_runtime::spawn_blocking(move || snapshot(&app))

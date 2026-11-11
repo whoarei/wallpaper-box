@@ -29,14 +29,14 @@ function loadPlaywright() {
 
 const uiRoot = path.resolve(__dirname, '../wallpaper-host/ui');
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8' };
+  '.css': 'text/css; charset=utf-8', '.png': 'image/png' };
 
 function serveUi() {
   const server = http.createServer((request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (pathname === '/favicon.ico') { response.writeHead(204).end(); return; }
     const filename = pathname === '/' ? 'index.html' : pathname.slice(1);
-    if (!['index.html', 'app.js', 'app.css'].includes(filename)) {
+    if (!['index.html', 'app.js', 'app.css', 'icon.png'].includes(filename)) {
       response.writeHead(404).end(); return;
     }
     response.writeHead(200, { 'Content-Type': mime[path.extname(filename)], 'Cache-Control': 'no-store' });
@@ -89,11 +89,13 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
   failPreview, deferApply, deferInstall, deferCancellation, importedModule }) {
   const copy = value => JSON.parse(JSON.stringify(value));
   const calls = [];
+  const listeners = new Map();
   const previous = new Map();
   let pendingFailure = !!failCheck;
   let finishOperation;
   window.__uiTest = {
     calls,
+    emit(name) { listeners.get(name)?.({ event: name, payload: null }); },
     failNextCheck() { pendingFailure = true; },
     state() { return copy(state); },
     setAppUpdate(patch) { Object.assign(state.app_update, copy(patch)); },
@@ -124,7 +126,10 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
     const task=state.downloads.find(t=>t.id===id);if(!task)throw new Error('Missing download');
     installItem(task.item);state.downloads=state.downloads.filter(t=>t.id!==id);pump();
   }
-  window.__TAURI__ = { core: { invoke: async (command, args = {}) => {
+  window.__TAURI__ = { event: { listen: async (name, handler) => {
+    listeners.set(name, handler);
+    return () => listeners.delete(name);
+  } }, core: { invoke: async (command, args = {}) => {
     calls.push({ command, args: copy(args) });
     switch (command) {
       case 'get_state': return copy(state);
@@ -135,6 +140,7 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
       case 'auto_pause': state.auto_pause = args.enabled; return copy(state);
       case 'refresh_modules': return copy(state);
       case 'open_wallpaper_folder':
+      case 'open_about_link':
       case 'hide_manager':
       case 'quit_app': return null;
       case 'capture_desktop':
@@ -341,6 +347,54 @@ async function noHorizontalOverflow(page, label) {
       await page.keyboard.press('Escape');
       assert.equal(await page.locator('#remove').isVisible(), false);
       assert.deepEqual(await actions(page), []);
+    });
+
+    await test('about shows the installed version and opens links through native IPC', fixture => {
+      fixture.state.version = '8.7.6';
+    }, async page => {
+      await page.locator('#settings-open').click();
+      await page.getByRole('button', { name: '关于壁纸盒子', exact: true }).click();
+      const about = page.getByRole('dialog', { name: '关于壁纸盒子', exact: true });
+      await visible(about);
+      assert.equal(await page.locator('#about-version').textContent(), '8.7.6');
+      assert.equal(await about.locator('img').evaluate(image => image.complete && image.naturalWidth > 0), true);
+      assert.match(await about.textContent(), /作者 · whoarei/);
+      await about.getByRole('link', { name: /项目主页/ }).click();
+      await about.getByRole('link', { name: /问题反馈/ }).click();
+      await about.locator('summary').click();
+      assert.match(await about.textContent(), /MIT \/ Apache-2.0/);
+      await about.getByRole('link', { name: /Tauri/ }).click();
+      await about.getByRole('link', { name: /Microsoft Edge WebView2/ }).click();
+      assert.deepEqual(await actions(page), ['project', 'issues', 'tauri', 'webview2'].map(link => ({
+        command: 'open_about_link', args: { link },
+      })));
+      for (const [width, height] of [[1080, 760], [780, 600]]) {
+        await page.setViewportSize({ width, height });
+        const box = await about.boundingBox();
+        assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= width && box.y + box.height <= height,
+          `About stays inside ${width}x${height}: ${JSON.stringify(box)}`);
+        await noHorizontalOverflow(page, `about at ${width}x${height}`);
+      }
+      await screenshot(page, 'about-licenses');
+      await page.keyboard.press('Escape');
+      assert.equal(await about.isVisible(), false);
+      assert.equal(await page.locator('#settings-dialog').isVisible(), true);
+      assert.equal(await page.locator('#about-open').evaluate(button => button === document.activeElement), true);
+    });
+
+    await test('tray about events reuse the same panel without changing playback', null, async page => {
+      await page.evaluate(() => { window.__uiTest.emit('show-about'); window.__uiTest.emit('show-about'); });
+      const about = page.getByRole('dialog', { name: '关于壁纸盒子', exact: true });
+      await visible(about);
+      assert.equal(await page.locator('#settings-dialog').isVisible(), false);
+      assert.equal(await page.locator('#about-version').textContent(), '0.2.0');
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
+      assert.deepEqual(await actions(page), []);
+      await screenshot(page, 'about');
+      await about.getByRole('button', { name: '关闭关于', exact: true }).click();
+      assert.equal(await about.isVisible(), false);
+      await page.getByRole('button', { name: '将松风镇应用到主显示器', exact: true }).click();
+      await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
     });
 
     await test('playback controls remain reachable while browsing a larger collection', fixture => {

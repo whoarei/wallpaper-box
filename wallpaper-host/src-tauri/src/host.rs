@@ -791,6 +791,13 @@ fn rebuild_tray(app: &AppHandle) {
         )?)?;
         menu.append(&MenuItem::with_id(
             app,
+            "about",
+            "关于壁纸盒子",
+            true,
+            None::<&str>,
+        )?)?;
+        menu.append(&MenuItem::with_id(
+            app,
             "quit",
             "退出壁纸盒子",
             true,
@@ -807,6 +814,15 @@ fn rebuild_tray(app: &AppHandle) {
 }
 
 fn tray_action(app: &AppHandle, id: &str) {
+    if id == "about" {
+        show_manager(app);
+        if let Some(window) = app.get_webview_window("manager") {
+            if let Err(message) = window.emit("show-about", ()) {
+                error(app, format!("打开关于失败：{message}"));
+            }
+        }
+        return;
+    }
     if id == "open-manager" {
         show_manager(app);
         return;
@@ -1112,6 +1128,7 @@ pub fn run() {
         }))
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
+            commands::open_about_link,
             commands::check_app_update,
             commands::download_app_update,
             commands::install_app_update,
