@@ -2,6 +2,8 @@
 'use strict';
 const invoke=window.__TAURI__.core.invoke,$=id=>document.getElementById(id);
 let state=null,localBusy=false,remoteBusy=false,activeTab='local',lastDisplays='',lastModules='',lastOnline='',toastTimer,localError='',remoteError='';
+let proxyBusy=false,proxyDirty=false,lastProxy='',proxyStatus='',proxyError='';
+const onlineCovers=new Map();
 let appUpdateBusy=false,appUpdateError='',lastAppPhase='',confirmAppVersion=null,previewBusy=false,renderEpoch=0,lastCurrentArt='',polling=false;
 function el(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;}
 function current(){return state?.wallpapers.find(w=>w.display_id===state.selected_monitor);}
@@ -23,6 +25,44 @@ function compare(a,b){
 }
 function bytes(n){return n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.ceil(n/1024))+' KB';}
 function image(card,url,name){if(!url){card.append(el('div','cover-fallback',name));return;}const img=el('img','cover');img.src=url;img.alt=name+'封面';img.referrerPolicy='no-referrer';img.onerror=()=>img.replaceWith(el('div','cover-fallback',name));card.append(img);}
+function onlineImage(card,item,data){
+ if(!item.coverUrl&&!item.cover_url){image(card,null,item.name);return;}
+ const img=el('img','cover');img.alt=item.name+'封面';card.append(img);
+ const key=JSON.stringify([item.coverUrl||item.cover_url,data.proxy]);
+ let pending=onlineCovers.get(key);
+ if(!pending){
+  pending=invoke('load_online_cover',{moduleId:item.id});onlineCovers.set(key,pending);
+  if(onlineCovers.size>64)onlineCovers.delete(onlineCovers.keys().next().value);
+  pending.catch(()=>{if(onlineCovers.get(key)===pending)onlineCovers.delete(key);});
+ }
+ img.onerror=()=>img.replaceWith(el('div','cover-fallback',item.name));
+ pending.then(url=>{if(img.isConnected)img.src=url;}).catch(()=>img.replaceWith(el('div','cover-fallback',item.name)));
+}
+function proxyDraft(){return {mode:$('proxy-mode').value,url:$('proxy-mode').value==='manual'?$('proxy-url').value.trim():''};}
+function renderProxy(){
+ const saved=state?.proxy||{mode:'system',url:''},signature=JSON.stringify(saved);
+ if(!proxyDirty&&signature!==lastProxy){$('proxy-mode').value=saved.mode;$('proxy-url').value=saved.url||'';lastProxy=signature;}
+ const mode=$('proxy-mode').value;
+ $('proxy-manual').hidden=mode!=='manual';
+ $('proxy-description').textContent=mode==='system'?'优先使用代理环境变量，未设置时读取 Windows 系统代理；不支持 PAC 自动配置脚本。':mode==='direct'?'直接连接网络，忽略系统代理和代理环境变量。':'所有在线请求均使用此代理；SOCKS5H 由代理解析域名。';
+ for(const id of ['proxy-mode','proxy-url','test-proxy','save-proxy'])$(id).disabled=proxyBusy||!state;
+ $('save-proxy').disabled=proxyBusy||!state||!proxyDirty;
+ $('proxy-status').hidden=!proxyStatus;$('proxy-status').textContent=proxyStatus;
+ $('proxy-error').hidden=!proxyError;$('proxy-error').textContent=proxyError;
+}
+function editProxy(){proxyDirty=true;proxyStatus='';proxyError='';renderProxy();}
+async function runProxy(save){
+ if(proxyBusy||!state)return;
+ const proxy=proxyDraft();
+ if(proxy.mode==='manual'&&!proxy.url){proxyError='请输入完整的代理地址，例如 http://127.0.0.1:7890。';renderProxy();$('proxy-url').focus();return;}
+ proxyBusy=true;proxyError='';proxyStatus=save?'正在保存…':'正在使用当前填写的配置连接 GitHub…';renderProxy();
+ try{
+  const result=await invoke(save?'set_proxy':'test_proxy',{proxy});
+  if(save){proxyDirty=false;lastProxy='';renderEpoch++;render(result);proxyStatus='已保存，从下一次网络请求生效。';}
+  else proxyStatus='已成功连接 GitHub。'+(proxyDirty?'当前配置尚未保存。':'');
+ }catch(error){proxyStatus='';proxyError=String(error);}
+ finally{proxyBusy=false;renderProxy();}
+}
 function appUpdate(){return state?.app_update||{phase:'idle',current_version:state?.version,version:null};}
 function showDialog(id){const dialog=$(id);if(!dialog.open)dialog.showModal();}
 function openAppUpdate(){showDialog('settings-dialog');$('app-update-panel').scrollIntoView({block:'nearest'});}
@@ -102,7 +142,7 @@ function renderBusy(){
  document.querySelectorAll('.wallpaper-preview').forEach(button=>button.disabled=previewBusy);
 }
 function render(data){
- state=data;$('version').textContent=data.version;renderAppUpdate();
+ state=data;$('version').textContent=data.version;renderAppUpdate();renderProxy();
  const monitor=data.displays.find(d=>d.id===data.selected_monitor),playing=current();
  const visibleError=localError||data.last_error||(activeTab==='local'?remoteError:'');$('error').hidden=!visibleError;$('error').textContent=visibleError;
  $('auto-pause').checked=data.auto_pause;
@@ -140,12 +180,12 @@ function render(data){
  const onlineError=remoteError||online.last_error||online.lastError||'';$('online-error').hidden=!onlineError;$('online-error').textContent=onlineError;
  const checked=online.checked_at??online.checkedAt??0;
  $('online-status').textContent=checked?`${online.cached?'使用缓存清单 · ':''}上次检查 ${new Date(checked*1000).toLocaleString('zh-CN')} · ${items.length} 张壁纸，仅按需下载`:'检查清单即可浏览，不会自动下载壁纸包。';
- const onlineSig=JSON.stringify([items,data.modules.map(m=>[m.id,m.version,m.source]),data.version,data.transfer?.id]);
+ const onlineSig=JSON.stringify([items,data.modules.map(m=>[m.id,m.version,m.source]),data.version,data.transfer?.id,data.proxy]);
  if(onlineSig!==lastOnline){$('online-modules').replaceChildren(...items.map(item=>{
   const local=data.modules.find(m=>m.id===item.id),compatible=compare(data.version,item.minAppVersion||item.min_app_version||'0.2.0')>=0;
   const newer=local&&compare(item.version,local.version)>0,current=local?.source==='online'&&compare(item.version,local.version)===0;
   const downloading=data.transfer?.id===item.id,card=el('article','module');
-  image(card,local?.cover?data.service+local.cover:item.coverUrl||item.cover_url,item.name);
+  if(local?.cover)image(card,data.service+local.cover,item.name);else onlineImage(card,item,data);
   const copy=el('div','module-copy'),heading=el('div','module-heading');heading.append(el('h3','',item.name));if(newer)heading.append(el('span','used update-label','可更新'));else if(local)heading.append(el('span','used',local.source==='builtin'?'已内置':'已下载'));copy.append(heading);
   copy.append(el('p','',item.description),el('div','module-meta',`v${item.version} · ${bytes(item.size)}${local?' · 本机 v'+local.version:''}`));
   let text=downloading?'下载中…':!compatible?'需要程序 '+(item.minAppVersion||item.min_app_version):current?'已是最新':newer?'更新到 v'+item.version:local?.source==='builtin'?'下载独立副本':'下载壁纸';
@@ -180,6 +220,8 @@ $('preview').onclick=()=>{closePlaybackMenu();direct('capture_desktop',{monitorI
 $('reload').onclick=()=>{closePlaybackMenu();const playing=current();if(playing)run('apply_wallpaper',{monitorId:state.selected_monitor,moduleId:playing.module_id},'壁纸已重新加载');};
 $('show-desktop').onclick=()=>{closePlaybackMenu();direct('show_desktop',{monitorId:state.selected_monitor});};
 $('hide').onclick=()=>{closePlaybackMenu();direct('hide_manager');};$('quit').onclick=()=>direct('quit_app');
+$('proxy-mode').onchange=editProxy;$('proxy-url').oninput=editProxy;
+$('save-proxy').onclick=()=>runProxy(true);$('test-proxy').onclick=()=>runProxy(false);
 $('settings-open').onclick=()=>showDialog('settings-dialog');
 $('app-update-toggle').onclick=openAppUpdate;
 document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>button.closest('dialog').close());

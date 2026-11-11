@@ -5,6 +5,7 @@ mod catalog;
 mod desktop;
 mod desktop_input;
 mod host;
+mod network;
 mod online;
 mod packages;
 mod picker;

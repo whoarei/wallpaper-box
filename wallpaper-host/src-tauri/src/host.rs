@@ -36,6 +36,8 @@ struct Settings {
     assignments: BTreeMap<String, Selection>,
     #[serde(default = "yes")]
     auto_pause: bool,
+    #[serde(default)]
+    proxy: crate::network::ProxySettings,
 }
 fn yes() -> bool {
     true
@@ -46,6 +48,7 @@ impl Default for Settings {
             selected_monitor: String::new(),
             assignments: BTreeMap::new(),
             auto_pause: true,
+            proxy: crate::network::ProxySettings::default(),
         }
     }
 }
@@ -114,6 +117,7 @@ pub struct View {
     modules: Vec<Module>,
     wallpapers: Vec<WallpaperView>,
     auto_pause: bool,
+    proxy: crate::network::ProxySettings,
     last_error: Option<String>,
 }
 
@@ -216,6 +220,7 @@ fn snapshot(app: &AppHandle) -> View {
         modules: data.modules.clone(),
         wallpapers,
         auto_pause: data.settings.auto_pause,
+        proxy: data.settings.proxy.clone(),
         last_error: data.last_error.clone(),
     }
 }
@@ -225,6 +230,16 @@ fn diagnostics(app: &AppHandle) {
     if let Ok(bytes) = serde_json::to_vec_pretty(&view) {
         let _ = fs::write(host.dir.join("diagnostics.json"), bytes);
     }
+}
+
+pub(crate) fn proxy_settings(app: &AppHandle) -> crate::network::ProxySettings {
+    app.state::<Host>()
+        .data
+        .lock()
+        .unwrap()
+        .settings
+        .proxy
+        .clone()
 }
 
 fn refresh(app: &AppHandle) -> Result<(), String> {
@@ -1100,6 +1115,9 @@ pub fn run() {
             commands::feed_aquarium,
             commands::remove_wallpaper,
             commands::auto_pause,
+            commands::set_proxy,
+            commands::test_proxy,
+            commands::load_online_cover,
             commands::hide_manager,
             commands::quit_app,
             commands::capture_desktop,
@@ -1230,4 +1248,20 @@ pub fn run() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_settings_gain_system_proxy_without_losing_playback_preferences() {
+        let saved = r#"{"selected_monitor":"display-2","assignments":{"display-2":{"module_id":"aquarium","paused":true}},"auto_pause":false}"#;
+        let settings: Settings = serde_json::from_str(saved).unwrap();
+        assert_eq!(settings.proxy, crate::network::ProxySettings::default());
+        assert_eq!(settings.selected_monitor, "display-2");
+        assert_eq!(settings.assignments["display-2"].module_id, "aquarium");
+        assert!(settings.assignments["display-2"].paused);
+        assert!(!settings.auto_pause);
+    }
 }

@@ -63,6 +63,7 @@ function fixtures() {
       remote('window-to-elsewhere', '通往别处的窗户', '1.0.0'),
     ] },
     state: { version: '0.2.0', service: 'http://wallpaper.localhost', auto_pause: true,
+      proxy: { mode: 'system', url: '' },
       selected_monitor: 'primary', displays: [
         { id: 'primary', name: '主显示器', width: 3840, height: 2160, scale: 1.5 },
         { id: 'secondary', name: '副显示器', width: 1920, height: 1080, scale: 1 },
@@ -77,8 +78,11 @@ function fixtures() {
 // This fixture owns native state. UI updates only through the production invoke
 // API and its ordinary one-second polling, matching a Tauri manager window.
 function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppCheck, failAppInstall,
-  failPreview, deferApply, deferInstall }) {
+  failPreview, deferApply, deferInstall, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy }) {
   const copy = value => JSON.parse(JSON.stringify(value));
+  if (persistProxy && sessionStorage.getItem('native-proxy')) {
+    state.proxy = JSON.parse(sessionStorage.getItem('native-proxy'));
+  }
   const calls = [];
   const previous = new Map();
   let pendingFailure = !!failCheck;
@@ -100,6 +104,18 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
         if (!state.modules.some(module => module.id === args.moduleId)) throw '壁纸不存在';
         return null;
       case 'auto_pause': state.auto_pause = args.enabled; return copy(state);
+      case 'set_proxy':
+        if (failProxySave) throw '代理设置保存失败，请检查设置目录是否可写。';
+        state.proxy = { mode: args.proxy.mode, url: args.proxy.mode === 'manual' ? new URL(args.proxy.url).href : '' };
+        if (persistProxy) sessionStorage.setItem('native-proxy', JSON.stringify(state.proxy));
+        return copy(state);
+      case 'test_proxy':
+        if (deferProxyTest) await new Promise(resolve => { finishOperation = resolve; });
+        if (failProxyTest) throw '连接 GitHub 失败，请检查代理设置和网络后重试。';
+        return null;
+      case 'load_online_cover':
+        if (failCover) throw '封面下载失败。';
+        return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jDZkAAAAASUVORK5CYII=';
       case 'refresh_modules': return copy(state);
       case 'open_wallpaper_folder':
       case 'hide_manager':
@@ -392,6 +408,117 @@ async function noHorizontalOverflow(page, label) {
         { command: 'refresh_modules', args: {} },
         { command: 'open_wallpaper_folder', args: {} },
       ]);
+    });
+
+    await test('old settings default to system proxy and unsaved drafts survive polling', fixture => {
+      delete fixture.state.proxy;
+      fixture.persistProxy = true;
+    }, async page => {
+      await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#proxy-mode').inputValue(), 'system');
+      assert.equal(await page.locator('#proxy-manual').isVisible(), false);
+      assert.equal(await page.locator('#save-proxy').isDisabled(), true);
+      await page.locator('#proxy-mode').selectOption('manual');
+      await page.locator('#proxy-url').fill('socks5h://127.0.0.1:1080');
+      await page.waitForTimeout(1150);
+      assert.equal(await page.locator('#proxy-url').inputValue(), 'socks5h://127.0.0.1:1080');
+      assert.equal(await page.locator('#proxy-mode').inputValue(), 'manual');
+      assert.deepEqual(await actions(page), [], 'Editing must not change the active proxy');
+      await screenshot(page, 'proxy-manual-draft');
+      await page.locator('#save-proxy').click();
+      await page.waitForFunction(() => document.getElementById('proxy-status').textContent.includes('已保存'));
+      assert.equal(await page.locator('#proxy-url').inputValue(), 'socks5h://127.0.0.1:1080');
+      assert.equal(await page.locator('#save-proxy').isDisabled(), true);
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
+      await page.reload();await ready(page);await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#proxy-mode').inputValue(), 'manual');
+      assert.equal(await page.locator('#proxy-url').inputValue(), 'socks5h://127.0.0.1:1080');
+      await page.locator('#proxy-mode').selectOption('direct');
+      await page.locator('#save-proxy').click();
+      await page.waitForFunction(() => document.getElementById('save-proxy').disabled);
+      assert.equal(await page.locator('#proxy-manual').isVisible(), false);
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.state().proxy), { mode: 'direct', url: '' });
+      await page.locator('#proxy-mode').selectOption('system');
+      await page.locator('#save-proxy').click();
+      await page.waitForFunction(() => document.getElementById('save-proxy').disabled);
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.state().proxy), { mode: 'system', url: '' });
+    });
+
+    await test('proxy connection test uses the draft without saving and blocks duplicate submissions', fixture => {
+      fixture.deferProxyTest = true;
+    }, async page => {
+      await page.locator('#settings-open').click();
+      await page.locator('#proxy-mode').selectOption('manual');
+      await page.locator('#proxy-url').fill('http://127.0.0.1:7890');
+      await page.locator('#test-proxy').evaluate(button => { button.click();button.click(); });
+      await page.waitForFunction(() => document.getElementById('test-proxy').disabled);
+      assert.equal(await page.locator('#proxy-mode').isDisabled(), true);
+      assert.equal(await page.locator('#save-proxy').isDisabled(), true);
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.state().proxy), { mode: 'system', url: '' });
+      await page.evaluate(() => window.__uiTest.finishOperation());
+      await page.waitForFunction(() => document.getElementById('proxy-status').textContent.includes('尚未保存'));
+      assert.equal(await page.locator('#save-proxy').isEnabled(), true);
+      assert.deepEqual(await actions(page), [{ command: 'test_proxy', args: { proxy: { mode: 'manual', url: 'http://127.0.0.1:7890' } } }]);
+    });
+
+    await test('empty proxy addresses and failed saves keep drafts and the active configuration', fixture => {
+      fixture.failProxySave = true;
+    }, async page => {
+      await page.locator('#settings-open').click();
+      await page.locator('#proxy-mode').selectOption('manual');
+      await page.locator('#save-proxy').click();
+      await visible(page.locator('#proxy-error'));
+      assert.deepEqual(await actions(page), []);
+      await page.locator('#proxy-url').fill('http://127.0.0.1:7890');
+      await page.locator('#save-proxy').click();
+      await page.waitForFunction(() => document.getElementById('proxy-error').textContent.includes('保存失败'));
+      await page.waitForTimeout(1150);
+      assert.equal(await page.locator('#proxy-url').inputValue(), 'http://127.0.0.1:7890');
+      assert.equal(await page.locator('#save-proxy').isEnabled(), true);
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.state().proxy), { mode: 'system', url: '' });
+    });
+
+    await test('proxy test errors persist without blocking offline playback', fixture => {
+      fixture.failProxyTest = true;
+    }, async page => {
+      await page.locator('#settings-open').click();
+      await page.locator('#test-proxy').click();
+      await visible(page.locator('#proxy-error'));
+      await page.waitForTimeout(1150);
+      assert.match(await page.locator('#proxy-error').textContent(), /连接 GitHub 失败/);
+      assert.equal(await page.locator('#test-proxy').isEnabled(), true);
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: '将松风镇应用到主显示器', exact: true }).click();
+      await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
+    });
+
+    await test('online covers load through native IPC and reload after proxy changes', fixture => {
+      fixture.catalog.wallpapers[2].coverUrl = 'https://github.com/whoarei/wallpapers/releases/download/library-v1.1.0/window-to-elsewhere-1.0.0-cover.png';
+    }, async page => {
+      await page.locator('#tab-online').click();
+      const cover = moduleCard(page, '#online-modules', '通往别处的窗户').locator('img');
+      await cover.waitFor();
+      await page.waitForFunction(() => document.querySelector('#online-modules img')?.naturalWidth > 0);
+      assert.match(await cover.getAttribute('src'), /^data:image\/png;base64,/);
+      await page.locator('#settings-open').click();
+      await page.locator('#proxy-mode').selectOption('direct');
+      await page.locator('#save-proxy').click();
+      await page.waitForFunction(() => window.__uiTest.calls.filter(call => call.command === 'load_online_cover').length === 2);
+      assert.deepEqual((await actions(page)).filter(call => call.command === 'load_online_cover'), [
+        { command: 'load_online_cover', args: { moduleId: 'window-to-elsewhere' } },
+        { command: 'load_online_cover', args: { moduleId: 'window-to-elsewhere' } },
+      ]);
+    });
+
+    await test('failed native cover downloads retain a usable wallpaper card', fixture => {
+      fixture.failCover = true;
+      fixture.catalog.wallpapers[2].coverUrl = 'https://github.com/whoarei/wallpapers/releases/download/library-v1.1.0/window-to-elsewhere-1.0.0-cover.png';
+    }, async page => {
+      await page.locator('#tab-online').click();
+      const card = moduleCard(page, '#online-modules', '通往别处的窗户');
+      await visible(card.locator('.cover-fallback'));
+      assert.equal(await card.getByRole('button', { name: '下载壁纸', exact: true }).isEnabled(), true);
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
     });
 
     await test('pending apply blocks duplicate clicks and monitor changes until native completion', fixture => {

@@ -180,6 +180,70 @@ pub fn auto_pause(app: AppHandle, window: WebviewWindow, enabled: bool) -> Resul
     set_auto(&app, enabled);
     Ok(snapshot(&app))
 }
+
+#[tauri::command]
+pub async fn set_proxy(
+    app: AppHandle,
+    window: WebviewWindow,
+    proxy: crate::network::ProxySettings,
+) -> Result<View, String> {
+    manager(&window)?;
+    let proxy = proxy.normalized()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        {
+            let mut data = host.data.lock().unwrap();
+            let mut settings = data.settings.clone();
+            settings.proxy = proxy;
+            // Commit to disk before changing the live policy. Failed saves leave
+            // both the current configuration and the manager draft intact.
+            catalog::atomic_json(&host.dir.join("settings.json"), &settings)
+                .map_err(|_| "代理设置保存失败，请检查设置目录是否可写。")?;
+            data.settings = settings;
+        }
+        let _ = app.emit("host-updated", ());
+        Ok(snapshot(&app))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn test_proxy(
+    window: WebviewWindow,
+    proxy: crate::network::ProxySettings,
+) -> Result<(), String> {
+    manager(&window)?;
+    tauri::async_runtime::spawn_blocking(move || crate::network::test_connection(&proxy))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn load_online_cover(
+    app: AppHandle,
+    window: WebviewWindow,
+    module_id: String,
+) -> Result<String, String> {
+    manager(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        let (item, proxy) = {
+            let data = host.data.lock().unwrap();
+            let item = data
+                .online
+                .catalog
+                .as_ref()
+                .and_then(|catalog| catalog.wallpapers.iter().find(|item| item.id == module_id))
+                .cloned()
+                .ok_or("在线壁纸不存在。")?;
+            (item, data.settings.proxy.clone())
+        };
+        crate::online::cover(&item, &proxy)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
 #[tauri::command]
 pub fn hide_manager(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     manager(&window)?;
@@ -249,7 +313,8 @@ pub async fn check_online(app: AppHandle, window: WebviewWindow) -> Result<View,
             .updates
             .try_lock()
             .map_err(|_| "正在处理壁纸，请稍后再试。")?;
-        match crate::online::check(&host.dir) {
+        let proxy = proxy_settings(&app);
+        match crate::online::check(&host.dir, &proxy) {
             Ok(state) => {
                 host.data.lock().unwrap().online = state;
                 Ok(snapshot(&app))
@@ -292,7 +357,8 @@ pub async fn install_online(
             received: 0,
             total: item.size,
         });
-        let result = crate::online::install(&host.library, &item, |received, total| {
+        let proxy = proxy_settings(&app);
+        let result = crate::online::install(&host.library, &item, &proxy, |received, total| {
             if let Some(transfer) = host.data.lock().unwrap().transfer.as_mut() {
                 transfer.received = received;
                 transfer.total = total;

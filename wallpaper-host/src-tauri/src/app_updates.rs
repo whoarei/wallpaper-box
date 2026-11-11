@@ -1,8 +1,9 @@
 //! Program updates: bounded HTTPS downloads, signed-version validation and
 //! explicit installation. Wallpaper-content updates remain independent.
 use crate::catalog;
+use crate::network::{self, ProxySettings};
 use chrono::Local;
-use reqwest::{blocking::Client, redirect::Policy, Url};
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -126,45 +127,13 @@ fn daily_due(day: &str, current_day: &str) -> bool {
     day != current_day
 }
 
-fn client() -> Result<Client, String> {
-    Client::builder()
-        .https_only(true)
-        .http1_only()
-        .user_agent(format!("WallpaperBox/{}", catalog::APP_VERSION))
-        .connect_timeout(Duration::from_secs(12))
-        .timeout(Duration::from_secs(180))
-        .redirect(Policy::custom(|attempt| {
-            let u = attempt.url();
-            let allowed = matches!(
-                u.host_str(),
-                Some(
-                    "github.com"
-                        | "release-assets.githubusercontent.com"
-                        | "objects.githubusercontent.com"
-                        | "github-releases.githubusercontent.com"
-                )
-            );
-            if attempt.previous().len() > 6
-                || !allowed
-                || u.scheme() != "https"
-                || u.port().is_some()
-                || !u.username().is_empty()
-                || u.password().is_some()
-            {
-                attempt.error("Unexpected program-update redirect")
-            } else {
-                attempt.follow()
-            }
-        }))
-        .build()
-        .map_err(|e| format!("无法初始化程序更新连接：{}", e.without_url()))
-}
 fn fetch(
+    proxy: &ProxySettings,
     address: &str,
     maximum: u64,
     mut progress: impl FnMut(u64, Option<u64>),
 ) -> Result<Vec<u8>, String> {
-    let response = client()?
+    let response = network::github_client(proxy)?
         .get(address)
         .send()
         .map_err(|e| format!("程序更新连接失败：{}", e.without_url()))?;
@@ -331,7 +300,8 @@ pub fn check(app: &AppHandle) -> Result<(), String> {
         let _ = catalog::atomic_json(&updater.root.join("schedule.json"), &data.schedule);
     }
     let result = (|| {
-        let bytes = fetch(ENDPOINT, MAX_MANIFEST, |_, _| {})?;
+        let proxy = crate::host::proxy_settings(app);
+        let bytes = fetch(&proxy, ENDPOINT, MAX_MANIFEST, |_, _| {})?;
         let json: Value = serde_json::from_slice(&bytes).map_err(|_| "无法读取程序更新清单。")?;
         let candidate = restore(app, json)?;
         if let Some(candidate) = candidate {
@@ -382,7 +352,9 @@ fn download_inner(app: &AppHandle, candidate: &Update) -> Result<(), String> {
         data.view.received = 0;
         data.view.total = None;
     }
+    let proxy = crate::host::proxy_settings(app);
     let bytes = fetch(
+        &proxy,
         candidate.download_url.as_str(),
         MAX_INSTALLER,
         |received, total| {

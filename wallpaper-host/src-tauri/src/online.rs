@@ -1,9 +1,10 @@
 //! Official GitHub catalog and versioned, rollback-friendly wallpaper updates.
+use crate::network::{self, ProxySettings};
 use crate::{
     catalog::{self, Active, Library},
     packages,
 };
-use reqwest::{blocking::Client, redirect::Policy, Url};
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -179,43 +180,14 @@ pub fn validate_catalog(catalog: &RemoteCatalog) -> Result<(), String> {
     Ok(())
 }
 
-fn client() -> Result<Client, String> {
-    Client::builder()
-        .https_only(true)
-        .http1_only()
-        .user_agent(format!("WallpaperBox/{}", catalog::APP_VERSION))
-        .connect_timeout(Duration::from_secs(12))
-        .timeout(Duration::from_secs(180))
-        .redirect(Policy::custom(|attempt| {
-            let url = attempt.url();
-            let host = url.host_str().unwrap_or("");
-            let allowed = host == "github.com"
-                || host == "release-assets.githubusercontent.com"
-                || host == "objects.githubusercontent.com"
-                || host == "github-releases.githubusercontent.com";
-            if attempt.previous().len() > 6
-                || url.scheme() != "https"
-                || !allowed
-                || !url.username().is_empty()
-                || url.password().is_some()
-                || url.port().is_some()
-            {
-                attempt.error("Unexpected GitHub download redirect")
-            } else {
-                attempt.follow()
-            }
-        }))
-        .build()
-        .map_err(|e| format!("无法初始化 HTTPS：{}", e.without_url()))
-}
-
 fn fetch(
+    proxy: &ProxySettings,
     address: &str,
     maximum: u64,
     expected: Option<u64>,
     progress: &impl Fn(u64, u64),
 ) -> Result<Vec<u8>, String> {
-    let client = client()?;
+    let client = network::github_client(proxy)?;
     let mut last_error = String::new();
     for attempt in 0..3 {
         let result = (|| -> Result<Vec<u8>, String> {
@@ -282,8 +254,8 @@ pub fn load_cache(cache_dir: &Path) -> State {
     result.unwrap_or_default()
 }
 
-pub fn check(cache_dir: &Path) -> Result<State, String> {
-    let bytes = fetch(CATALOG_URL, MAX_CATALOG_BYTES, None, &|_, _| {})?;
+pub fn check(cache_dir: &Path, proxy: &ProxySettings) -> Result<State, String> {
+    let bytes = fetch(proxy, CATALOG_URL, MAX_CATALOG_BYTES, None, &|_, _| {})?;
     let catalog: RemoteCatalog =
         serde_json::from_slice(&bytes).map_err(|e| format!("在线壁纸清单格式无效：{e}"))?;
     validate_catalog(&catalog)?;
@@ -411,6 +383,7 @@ pub fn install_bytes(
 pub fn install(
     library: &Library,
     item: &RemoteWallpaper,
+    proxy: &ProxySettings,
     progress: impl Fn(u64, u64),
 ) -> Result<(), String> {
     validate_wallpaper(item)?;
@@ -419,12 +392,38 @@ pub fn install(
     }
     reject_downgrade(library, item)?;
     let bytes = fetch(
+        proxy,
         &item.download_url,
         packages::MAX_PACKAGE_BYTES,
         Some(item.size),
         &progress,
     )?;
     install_bytes(library, item, &bytes)
+}
+
+/// Covers use the native client too, so WebView proxy defaults cannot bypass
+/// manual/direct mode. Only catalog-validated release assets can be requested.
+pub fn cover(item: &RemoteWallpaper, proxy: &ProxySettings) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    validate_wallpaper(item)?;
+    let address = item.cover_url.as_deref().ok_or("该壁纸没有在线封面。")?;
+    let url = Url::parse(address).map_err(|_| "封面地址无效。")?;
+    let extension = url
+        .path()
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let mime = match extension.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "avif" => "image/avif",
+        _ => return Err("不支持的封面格式。".into()),
+    };
+    let bytes = fetch(proxy, address, 2 * 1024 * 1024, None, &|_, _| {})?;
+    Ok(format!("data:{mime};base64,{}", STANDARD.encode(bytes)))
 }
 
 fn reparsed(path: &Path) -> Result<bool, String> {
