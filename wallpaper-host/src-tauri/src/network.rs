@@ -367,15 +367,19 @@ mod tests {
         let output = Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "network::tests::environment_probe", "--ignored"])
             .env("WALLPAPER_TEST_ORIGIN", address)
-            .env("HTTP_PROXY", proxy_address)
             .env_remove("http_proxy")
             .env_remove("HTTPS_PROXY")
             .env_remove("https_proxy")
             .env_remove("ALL_PROXY")
             .env_remove("all_proxy")
-            .env("NO_PROXY", "")
             .env_remove("no_proxy")
             .env_remove("REQUEST_METHOD")
+            // Windows environment names are case-insensitive: remove inherited
+            // aliases before setting overrides, or env_remove erases them too.
+            .env("HTTP_PROXY", proxy_address)
+            // A nonempty explicit bypass list also isolates this test from the
+            // machine's Windows registry proxy exclusions for loopback hosts.
+            .env("NO_PROXY", "wallpaper-box-test.invalid")
             .output()
             .unwrap();
         assert!(
