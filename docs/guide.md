@@ -29,7 +29,7 @@
 
 网络传输直接写入各自的临时文件，安装依次执行；最多 5 项任务占用处理位置，包含等待安装和安装中的任务。仅安装时读取一个完整 ZIP，避免并行下载同时占用多个完整包的内存。任务队列仅保留在本次运行中，关闭程序会停止下载。
 
-0.5.2 保留 0.2.1 的投喂修复：在宿主中复用水族箱已有投喂逻辑，无需更新壁纸库。两张内置壁纸版本仍为 `1.0.0`，其 `minAppVersion` 仍为 `0.2.0`。
+0.6.0 保留 0.2.1 的投喂修复：在宿主中复用水族箱已有投喂逻辑，无需更新壁纸库。两张内置壁纸版本仍为 `1.0.0`，其 `minAppVersion` 仍为 `0.2.0`。
 
 ## 程序在线升级
 
@@ -70,7 +70,7 @@ HTML、脚本、样式与图片使用相对路径。文件夹名使用小写字�
 ## 项目目录
 
 - `wallpaper-host/`：Tauri 2 宿主、嵌入式管理界面、原生目录发现、本地协议、在线更新与打包校验。
-- `wallpapers/{aquarium,pinewind-town}/`：0.5.2 随包的两张壁纸快照。
+- `wallpapers/{aquarium,pinewind-town}/`：0.6.0 随包的两张壁纸快照。
 - `display-service/`：保留的 Legacy Docker 浏览器开发示例，桌面程序运行和安装包不依赖它。
 - `.github/workflows/windows.yml`：主程序 CI 与标签发布。
 - [HTML 技术方案](../display-service/public/docs/architecture.html)：单文件离线文档，含架构、模块规范、权限、迁移及发布流程，支持 10 套配色和保存 PDF。
@@ -87,11 +87,11 @@ npm ci --ignore-scripts
 npm run check:version
 npm run bundle
 ./scripts/package-release.ps1 -RequireSigned
-./scripts/verify-release.ps1 -Directory ../release/v0.5.2 -RequireSigned
-node scripts/verify-installer.mjs ../release/v0.5.2
+./scripts/verify-release.ps1 -Directory ../release/v0.6.0 -RequireSigned
+node scripts/verify-installer.mjs ../release/v0.6.0
 ```
 
-产物位于 `release/v0.5.2/`，共五项：`wallpaper-box_0.5.2_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
+产物位于 `release/v0.6.0/`，共五项：`wallpaper-box_0.6.0_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
 
 Rust 行为检查：
 
@@ -115,8 +115,8 @@ CI 固定工具链、依赖锁文件和 Action 提交，检查版本、JavaScrip
 版本与验收完成后：
 
 ```powershell
-git tag v0.5.2
-git push origin v0.5.2
+git tag v0.6.0
+git push origin v0.6.0
 gh run list --repo whoarei/wallpaper-box --workflow windows.yml
 ```
 
@@ -124,7 +124,7 @@ gh run list --repo whoarei/wallpaper-box --workflow windows.yml
 
 签名私钥只保存在工作区之外：本地通过 `TAURI_SIGNING_PRIVATE_KEY_PATH` 指向密钥文件，GitHub Actions 通过 `TAURI_SIGNING_PRIVATE_KEY` Secret 注入；当前密钥密码为空，`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 使用空值。程序内置公钥，安装包和仓库不包含私钥。签名调用带上 `--app-version`，将版本写入经过签名的可信注释。更新签名采用 minisign / Ed25519，用来验证升级包来源和版本；Windows Authenticode 是另一套代码签名，当前安装包尚未配置，因此 Windows 可能仍显示未知发布者。
 
-当前仅支持 Windows x64，暂不包含开机启动。本次文档描述 0.5.2 的实现和验收范围，不表示新版本 CI 或真实跨版本安装已经成功；实际执行结果以发版记录为准。
+当前仅支持 Windows x64，暂不包含开机启动。本次文档描述 0.6.0 的实现和验收范围，不表示新版本 CI 或真实跨版本安装已经成功；实际执行结果以发版记录为准。
 
 ## 官方壁纸库发布
 
