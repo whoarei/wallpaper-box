@@ -13,6 +13,7 @@ fn main() {
         "feed_aquarium",
         "remove_wallpaper",
         "auto_pause",
+        "set_auto_start",
         "set_proxy",
         "set_wallpaper_repositories",
         "test_proxy",

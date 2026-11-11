@@ -37,6 +37,8 @@ struct Settings {
     assignments: BTreeMap<String, Selection>,
     #[serde(default = "yes")]
     auto_pause: bool,
+    #[serde(default = "yes")]
+    auto_start: bool,
     #[serde(default)]
     proxy: crate::network::ProxySettings,
     #[serde(default = "crate::repositories::defaults")]
@@ -51,6 +53,7 @@ impl Default for Settings {
             selected_monitor: String::new(),
             assignments: BTreeMap::new(),
             auto_pause: true,
+            auto_start: true,
             proxy: crate::network::ProxySettings::default(),
             wallpaper_repositories: crate::repositories::defaults(),
         }
@@ -72,6 +75,7 @@ struct Data {
     settings: Settings,
     modules: Vec<Module>,
     online: crate::online::State,
+    auto_start_error: Option<String>,
     warnings: Vec<String>,
     resource_scopes: BTreeMap<String, String>,
     last_error: Option<String>,
@@ -126,6 +130,8 @@ pub struct View {
     modules: Vec<Module>,
     wallpapers: Vec<WallpaperView>,
     auto_pause: bool,
+    auto_start: bool,
+    auto_start_error: Option<String>,
     proxy: crate::network::ProxySettings,
     last_error: Option<String>,
 }
@@ -189,6 +195,11 @@ fn show_manager(app: &AppHandle) {
 
 fn snapshot(app: &AppHandle) -> View {
     let host = app.state::<Host>();
+    let startup = app.state::<crate::autostart::Autostart>().enabled();
+    let (auto_start, auto_start_error) = match startup {
+        Ok(enabled) => (enabled, None),
+        Err(error) => (false, Some(error)),
+    };
     let downloads = host
         .downloads
         .snapshot()
@@ -244,6 +255,8 @@ fn snapshot(app: &AppHandle) -> View {
         modules: data.modules.clone(),
         wallpapers,
         auto_pause: data.settings.auto_pause,
+        auto_start,
+        auto_start_error: auto_start_error.or_else(|| data.auto_start_error.clone()),
         proxy: data.settings.proxy.clone(),
         last_error: data.last_error.clone(),
     }
@@ -1107,6 +1120,7 @@ fn maintenance(app: AppHandle, first: bool) {
 }
 
 pub fn run() {
+    let background = crate::autostart::background_launch(std::env::args_os());
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .register_asynchronous_uri_scheme_protocol("wallpaper", |context, request, responder| {
@@ -1141,8 +1155,10 @@ pub fn run() {
                 responder.respond(crate::protocol::serve(&modules, scope.as_deref(), request));
             });
         })
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            show_manager(app)
+        .plugin(tauri_plugin_single_instance::init(|app, arguments, _| {
+            if !crate::autostart::background_launch(arguments) {
+                show_manager(app)
+            }
         }))
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
@@ -1158,6 +1174,7 @@ pub fn run() {
             commands::feed_aquarium,
             commands::remove_wallpaper,
             commands::auto_pause,
+            commands::set_auto_start,
             commands::set_proxy,
             commands::set_wallpaper_repositories,
             commands::test_proxy,
@@ -1173,7 +1190,7 @@ pub fn run() {
             commands::import_wallpaper,
             commands::open_wallpaper_folder,
         ])
-        .setup(|app| {
+        .setup(move |app| {
             let dir = app.path().app_data_dir()?;
             fs::create_dir_all(&dir)?;
             let resources = app.path().resource_dir()?;
@@ -1192,6 +1209,14 @@ pub fn run() {
                 .ok()
                 .and_then(|b| serde_json::from_slice(&b).ok())
                 .unwrap_or_default();
+            let startup = crate::autostart::Autostart::new(
+                app.config()
+                    .product_name
+                    .as_deref()
+                    .unwrap_or(env!("CARGO_PKG_NAME")),
+            );
+            let startup_error = startup.initialize(settings.auto_start).err();
+            app.manage(startup);
             let online = crate::online::load_cache(&dir, &settings.wallpaper_repositories);
             let displays = desktop::displays();
             if !displays.iter().any(|d| d.id == settings.selected_monitor) {
@@ -1203,6 +1228,7 @@ pub fn run() {
                     settings,
                     modules: vec![],
                     online,
+                    auto_start_error: startup_error.clone(),
                     warnings: vec![],
                     resource_scopes: BTreeMap::new(),
                     last_error: None,
@@ -1217,6 +1243,9 @@ pub fn run() {
                 exiting: AtomicBool::new(false),
             });
             let handle = app.handle().clone();
+            if let Some(error) = startup_error {
+                log(&handle, &format!("Autostart: {error}"));
+            }
             download_workers::start(&handle);
             TrayIconBuilder::with_id("screen-garden")
                 .icon(tray_image())
@@ -1267,6 +1296,9 @@ pub fn run() {
                 Err(message) => log(app.handle(), &message),
             }
             crate::app_updates::start(app.handle().clone());
+            if !background {
+                show_manager(app.handle());
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1314,5 +1346,15 @@ mod tests {
         assert_eq!(settings.assignments["display-2"].module_id, "aquarium");
         assert!(settings.assignments["display-2"].paused);
         assert!(!settings.auto_pause);
+        assert!(settings.auto_start);
+    }
+
+    #[test]
+    fn disabled_startup_preference_survives_settings_round_trip() {
+        let settings: Settings = serde_json::from_str(r#"{"auto_start":false}"#).unwrap();
+        let reloaded: Settings =
+            serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
+        assert!(!reloaded.auto_start);
+        assert!(Settings::default().auto_start);
     }
 }

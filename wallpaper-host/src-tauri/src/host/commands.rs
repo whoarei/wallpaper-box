@@ -215,6 +215,49 @@ pub fn auto_pause(app: AppHandle, window: WebviewWindow, enabled: bool) -> Resul
 }
 
 #[tauri::command]
+pub async fn set_auto_start(
+    app: AppHandle,
+    window: WebviewWindow,
+    enabled: bool,
+) -> Result<View, String> {
+    manager(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        let result = {
+            let mut data = host.data.lock().unwrap();
+            let mut settings = data.settings.clone();
+            settings.auto_start = enabled;
+            let path = host.dir.join("settings.json");
+            catalog::atomic_json(&path, &settings)
+                .map_err(|_| "无法保存开机启动设置，未修改系统启动项。")?;
+            match app
+                .state::<crate::autostart::Autostart>()
+                .set_enabled(enabled)
+            {
+                Ok(()) => {
+                    data.settings = settings;
+                    data.auto_start_error = None;
+                    Ok(())
+                }
+                Err(mut error) => {
+                    if catalog::atomic_json(&path, &data.settings).is_err() {
+                        data.settings = settings;
+                        error.push_str(" 设置文件还原失败，请重新检查此开关。");
+                    }
+                    data.auto_start_error = Some(error.clone());
+                    Err(error)
+                }
+            }
+        };
+        let _ = app.emit("host-updated", ());
+        result?;
+        Ok(snapshot(&app))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn set_proxy(
     app: AppHandle,
     window: WebviewWindow,

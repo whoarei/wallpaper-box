@@ -11,9 +11,11 @@
 3. 左键托盘图标打开管理窗口，右键快速切换、暂停或退出。关闭管理窗口会收起到托盘。
 4. 在“发现”点击“刷新壁纸库”，再选择某张壁纸的“下载 / 更新”。检查只获取清单和封面，ZIP 按选择下载，不会自动下载全库。最多同时处理 5 项下载，超出的按加入顺序等待。
 
-管理界面以壁纸列表为主，暂停和投喂集中在底部播放栏。“更多播放操作”提供查看桌面、保存预览、重新加载和关闭当前屏幕壁纸。导入壁纸、自动暂停、壁纸目录、重新扫描和程序更新位于右上角“设置”；导入可直接选择文件夹或 ZIP。新版就绪只显示提示，由用户打开设置并确认重启升级。
+管理界面以壁纸列表为主，暂停和投喂集中在底部播放栏。“更多播放操作”提供查看桌面、保存预览、重新加载和关闭当前屏幕壁纸。右上角“设置”按“常规、壁纸仓库、网络代理、程序更新”分类，一次显示一组内容。“常规”包含随系统启动、自动暂停、文件夹 / ZIP 导入、壁纸目录和重新扫描；仓库、代理的保存按钮固定在各自页面底部，详细说明默认收起。切换分类会保留尚未保存的输入。新版就绪提示可直接打开“程序更新”，由用户确认重启升级。
 
-“关于壁纸盒子”位于“设置”底部、程序更新之后，也可从托盘右键菜单打开。两个入口共用同一面板，展示当前安装版本、作者、项目主页、问题反馈和主要第三方组件许可；外部链接在系统默认浏览器打开。
+程序首次运行后默认启用“随系统启动”，旧设置也采用此默认值。登录 Windows 时在后台恢复各屏壁纸并留在托盘，不弹出管理窗口；手动打开程序或左键点击托盘则显示管理窗口。在“设置 → 常规”可随时关闭，立即生效，重启和升级后保留选择。启动项仅用于当前用户，不需要管理员权限；程序会保留 Windows 任务管理器中禁用启动项的状态，需要重新启用时可打开此开关。设置失败会在开关旁提示，不影响壁纸播放；正常卸载会移除启动项。
+
+“关于壁纸盒子”和退出入口固定在“设置”底部；关于面板也可从托盘右键菜单打开。两个关于入口共用同一面板，展示当前安装版本、作者、项目主页、问题反馈和主要第三方组件许可；外部链接在系统默认浏览器打开。
 
 水族箱投喂：直接左键单击水族箱所在屏幕的桌面空白水面，鱼食会出现在点击位置。也可选择正在播放水族箱的显示器，点击管理窗口或托盘菜单的“投喂鱼儿”。手动暂停时先点“继续”；遮挡导致的自动暂停允许先投喂，回到桌面后鱼儿继续进食。管理窗口的投喂入口会提示加载中、页面自身暂停或饱食等情况。
 
@@ -29,7 +31,7 @@
 
 网络传输直接写入各自的临时文件，安装依次执行；最多 5 项任务占用处理位置，包含等待安装和安装中的任务。仅安装时读取一个完整 ZIP，避免并行下载同时占用多个完整包的内存。任务队列仅保留在本次运行中，关闭程序会停止下载。
 
-0.7.1 保留 0.2.1 的投喂修复：在宿主中复用水族箱已有投喂逻辑，无需更新壁纸库。两张内置壁纸版本仍为 `1.0.0`，其 `minAppVersion` 仍为 `0.2.0`。
+0.8.0 保留 0.2.1 的投喂修复：在宿主中复用水族箱已有投喂逻辑，无需更新壁纸库。两张内置壁纸版本仍为 `1.0.0`，其 `minAppVersion` 仍为 `0.2.0`。
 
 ## 程序在线升级
 
@@ -43,7 +45,7 @@
 
 ## 壁纸仓库
 
-在“设置 → 壁纸仓库”添加、修改或移除公开的 GitHub、Gitee 仓库 HTTPS 地址，支持 `.git` 后缀；每项有独立的启用开关。“上移”可以调整优先顺序，点击“保存仓库设置”后生效。
+在“设置 → 壁纸仓库”添加、修改或移除公开的 GitHub、Gitee 仓库 HTTPS 地址，支持 `.git` 后缀；每项有独立的启用开关。“上移”可以调整优先顺序，点击页面底部的“保存更改”后生效。
 
 - 默认启用 [Gitee：xishuaiya/wallpapers](https://gitee.com/xishuaiya/wallpapers.git)。
 - 默认关闭 [GitHub：whoarei/wallpapers](https://github.com/whoarei/wallpapers)，可按需开启。
@@ -64,13 +66,13 @@
 - **手动代理**：填写完整地址，例如 `http://127.0.0.1:7890`、`https://proxy.example:443`、`socks5://127.0.0.1:1080` 或 `socks5h://127.0.0.1:1080`。SOCKS5H 通过代理解析目标域名。使用 HTTP 或混合端口时填写 `http://`；当前手动设置不支持带用户名或密码的地址。
 - **直连**：忽略系统代理和代理环境变量，直接访问网络。
 
-“测试连接”使用当前填写的配置连接 GitHub，不会保存；点击“保存代理设置”后，从下一次网络请求起生效，无需重启。正在进行的请求继续使用原配置。设置保存在原有 `settings.json` 中，重启后保留。
+“测试连接”使用当前填写的配置连接 GitHub，不会保存；点击页面底部的“保存更改”后，从下一次网络请求起生效，无需重启。正在进行的请求继续使用原配置。设置保存在原有 `settings.json` 中，重启后保留。
 
 壁纸库清单、在线封面、壁纸包和程序更新共用此配置。代理失败时会报告错误，不会自动切换为直连；HTTPS 校验、下载来源限制和更新签名校验仍然有效。本地壁纸播放不依赖网络。
 
 ## 添加自己的壁纸
 
-在“设置”的“本地壁纸”中选择文件夹或 ZIP 导入，也可打开壁纸文件夹，在 `local/` 中放入完整模块，再点击“刷新”。最小结构：
+在“设置 → 常规”的“本地壁纸”中选择文件夹或 ZIP 导入，也可打开壁纸文件夹，在 `local/` 中放入完整模块，再点击“重新扫描”。最小结构：
 
 ```text
 local/
@@ -97,7 +99,7 @@ HTML、脚本、样式与图片使用相对路径。文件夹名使用小写字�
 ## 项目目录
 
 - `wallpaper-host/`：Tauri 2 宿主、嵌入式管理界面、原生目录发现、本地协议、在线更新与打包校验。
-- `wallpapers/{aquarium,pinewind-town}/`：0.7.1 随包的两张壁纸快照。
+- `wallpapers/{aquarium,pinewind-town}/`：0.8.0 随包的两张壁纸快照。
 - `display-service/`：保留的 Legacy Docker 浏览器开发示例，桌面程序运行和安装包不依赖它。
 - `.github/workflows/windows.yml`：主程序 CI 与标签发布。
 - [HTML 技术方案](../display-service/public/docs/architecture.html)：单文件离线文档，含架构、模块规范、权限、迁移及发布流程，支持 10 套配色和保存 PDF。
@@ -114,11 +116,11 @@ npm ci --ignore-scripts
 npm run check:version
 npm run bundle
 ./scripts/package-release.ps1 -RequireSigned
-./scripts/verify-release.ps1 -Directory ../release/v0.7.1 -RequireSigned
-node scripts/verify-installer.mjs ../release/v0.7.1
+./scripts/verify-release.ps1 -Directory ../release/v0.8.0 -RequireSigned
+node scripts/verify-installer.mjs ../release/v0.8.0
 ```
 
-产物位于 `release/v0.7.1/`，共五项：`wallpaper-box_0.7.1_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
+产物位于 `release/v0.8.0/`，共五项：`wallpaper-box_0.8.0_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
 
 Rust 行为检查：
 
@@ -142,8 +144,8 @@ CI 固定工具链、依赖锁文件和 Action 提交，检查版本、JavaScrip
 版本与验收完成后：
 
 ```powershell
-git tag v0.7.1
-git push origin v0.7.1
+git tag v0.8.0
+git push origin v0.8.0
 gh run list --repo whoarei/wallpaper-box --workflow windows.yml
 ```
 
@@ -151,7 +153,7 @@ gh run list --repo whoarei/wallpaper-box --workflow windows.yml
 
 签名私钥只保存在工作区之外：本地通过 `TAURI_SIGNING_PRIVATE_KEY_PATH` 指向密钥文件，GitHub Actions 通过 `TAURI_SIGNING_PRIVATE_KEY` Secret 注入；当前密钥密码为空，`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 使用空值。程序内置公钥，安装包和仓库不包含私钥。签名调用带上 `--app-version`，将版本写入经过签名的可信注释。更新签名采用 minisign / Ed25519，用来验证升级包来源和版本；Windows Authenticode 是另一套代码签名，当前安装包尚未配置，因此 Windows 可能仍显示未知发布者。
 
-当前仅支持 Windows x64，暂不包含开机启动。本次文档描述 0.7.1 的实现和验收范围，不表示新版本 CI 或真实跨版本安装已经成功；实际执行结果以发版记录为准。
+当前仅支持 Windows x64。版本与真实设备验收范围以发版记录为准。
 
 ## 官方壁纸库发布
 

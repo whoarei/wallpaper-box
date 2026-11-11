@@ -4,6 +4,8 @@ const invoke=window.__TAURI__.core.invoke,$=id=>document.getElementById(id);
 let state=null,localBusy=false,remoteBusy=false,activeTab='local',lastSelectedDisplay='',lastModules='',toastTimer,localError='',remoteError='';
 let appUpdateBusy=false,appUpdateError='',lastAppPhase='',confirmAppVersion=null,previewBusy=false,renderEpoch=0,lastCurrentArt='',polling=false,refreshRequested=false,taskFilter=false;
 const pendingTasks=new Set();
+let settingsTab='general';
+let autoStartBusy=false,autoStartRequested=false,autoStartError='';
 let proxyBusy=false,proxyDirty=false,lastProxy='',proxyStatus='',proxyError='';
 const onlineCovers=new Map();
 const defaultRepositories=[{url:'https://gitee.com/xishuaiya/wallpapers',enabled:true},{url:'https://github.com/whoarei/wallpapers',enabled:false}];
@@ -124,14 +126,16 @@ function onlineImage(card,item,data){
  img.onerror=()=>img.replaceWith(el('div','cover-fallback',item.name));
  pending.then(url=>{if(img.isConnected)img.src=url;}).catch(()=>img.replaceWith(el('div','cover-fallback',item.name)));
 }
+function repositoryName(address){try{const host=new URL(address).hostname;return host==='gitee.com'?'Gitee':host==='github.com'?'GitHub':'自定义仓库';}catch{return address?'自定义仓库':'新仓库';}}
 function renderRepositoryRows(){
  $('repositories-list').replaceChildren(...repositoryDrafts.map((repository,index)=>{
-  const row=el('div','repository-row'),id='repository-url-'+index,label=el('label','',`仓库 ${index+1}`);label.htmlFor=id;
-  const input=el('input','repository-url');input.id=id;input.type='url';input.value=repository.url;input.placeholder='https://gitee.com/所有者/仓库名.git';input.spellcheck=false;input.autocomplete='off';input.oninput=()=>{repository.url=input.value;editRepositories();};
-  const controls=el('div','repository-controls'),toggle=el('label','switch-label'),check=el('input');check.type='checkbox';check.checked=repository.enabled;check.setAttribute('role','switch');check.setAttribute('aria-label',`启用仓库 ${index+1}`);check.onchange=()=>{repository.enabled=check.checked;editRepositories();};toggle.append(el('span','','启用'),check);
-  const up=el('button','text-button','上移');up.setAttribute('aria-label',`上移仓库 ${index+1}`);up.dataset.first=String(index===0);up.onclick=()=>{[repositoryDrafts[index-1],repositoryDrafts[index]]=[repositoryDrafts[index],repositoryDrafts[index-1]];renderRepositoryRows();editRepositories();};
-  const remove=el('button','text-button danger','移除');remove.setAttribute('aria-label',`移除仓库 ${index+1}`);remove.onclick=()=>{repositoryDrafts.splice(index,1);renderRepositoryRows();editRepositories();};
-  controls.append(toggle,up,remove);row.append(label,input,controls,el('p','repository-source-status'));return row;
+  const row=el('div','repository-row'),header=el('div','repository-heading'),id='repository-url-'+index,label=el('label','repository-name',repositoryName(repository.url));label.htmlFor=id;
+  const input=el('input','repository-url');input.id=id;input.type='url';input.value=repository.url;input.setAttribute('aria-label',`仓库地址 ${index+1}`);input.placeholder='https://gitee.com/所有者/仓库名.git';input.spellcheck=false;input.autocomplete='off';input.oninput=()=>{repository.url=input.value;label.textContent=repositoryName(input.value);editRepositories();};
+  const toggle=el('label','switch-label'),check=el('input');check.type='checkbox';check.checked=repository.enabled;check.setAttribute('role','switch');check.setAttribute('aria-label',`启用仓库 ${index+1}`);check.onchange=()=>{repository.enabled=check.checked;editRepositories();};toggle.append(check);header.append(label,toggle);
+  const controls=el('div','repository-controls'),status=el('p','repository-source-status');
+  const up=el('button','text-button','上移');up.setAttribute('aria-label',`上移仓库 ${index+1}`);up.dataset.first=String(index===0);up.onclick=()=>{[repositoryDrafts[index-1],repositoryDrafts[index]]=[repositoryDrafts[index],repositoryDrafts[index-1]];renderRepositoryRows();editRepositories();$('repository-url-'+(index-1)).focus();};
+  const remove=el('button','text-button repository-remove','移除');remove.setAttribute('aria-label',`移除仓库 ${index+1}`);remove.onclick=()=>{repositoryDrafts.splice(index,1);renderRepositoryRows();editRepositories();if(repositoryDrafts.length)$('repository-url-'+Math.min(index,repositoryDrafts.length-1)).focus();else $('add-repository').focus();};
+  controls.append(status,up,remove);row.append(header,input,controls);return row;
  }));
 }
 function renderRepositories(){
@@ -141,11 +145,11 @@ function renderRepositories(){
  $('repositories-list').querySelectorAll('input,button').forEach(node=>node.disabled=busy||node.dataset.first==='true');
  $('add-repository').disabled=busy||repositoryDrafts.length>=16;
  $('save-repositories').disabled=busy||!repositoriesDirty;
- $('repositories-status').hidden=!repositoriesStatus;$('repositories-status').textContent=repositoriesStatus;
+ $('repositories-status').textContent=repositoriesStatus||(repositoriesDirty?'更改尚未保存':'保存后生效');$('repositories-status').dataset.feedback=String(!!repositoriesStatus);
  $('repositories-error').hidden=!repositoriesError;$('repositories-error').textContent=repositoriesError;
  [...$('repositories-list').children].forEach((row,index)=>{
   const draft=repositoryDrafts[index],source=state?.online?.sources?.find(source=>source.repository===draft.url),node=row.querySelector('.repository-source-status');
-  node.textContent=!draft.enabled?'已关闭':source?.last_error?source.last_error:source?.catalog?`${source.cached?'使用缓存 · ':''}${source.catalog.wallpapers.length} 张壁纸`:'保存后可在“发现”刷新壁纸库。';
+  node.textContent=!draft.enabled?'已关闭':source?.last_error?source.last_error:source?.catalog?`${source.cached?'使用缓存 · ':''}${source.catalog.wallpapers.length} 张壁纸`:'已启用';
   node.classList.toggle('failed',!!draft.enabled&&!!source?.last_error);
  });
 }
@@ -157,7 +161,7 @@ async function saveRepositories(){
  try{
   const result=await invoke('set_wallpaper_repositories',{repositories:repositoryDrafts.map(repository=>({url:repository.url.trim(),enabled:repository.enabled}))});
   repositoriesDirty=false;lastRepositories='';remoteError='';onlineCovers.clear();renderEpoch++;render(result);
-  repositoriesStatus='已保存。可在“发现”刷新已启用的壁纸仓库。';
+  repositoriesStatus='已保存，可在“发现”刷新。';
  }catch(error){repositoriesStatus='';repositoriesError=String(error);}
  finally{repositoriesBusy=false;renderRepositories();}
 }
@@ -167,10 +171,10 @@ function renderProxy(){
  if(!proxyDirty&&signature!==lastProxy){$('proxy-mode').value=saved.mode;$('proxy-url').value=saved.url||'';lastProxy=signature;}
  const mode=$('proxy-mode').value;
  $('proxy-manual').hidden=mode!=='manual';
- $('proxy-description').textContent=mode==='system'?'优先使用代理环境变量，未设置时读取 Windows 系统代理；不支持 PAC 自动配置脚本。':mode==='direct'?'直接连接网络，忽略系统代理和代理环境变量。':'所有在线请求均使用此代理；SOCKS5H 由代理解析域名。';
+ $('proxy-description').textContent=mode==='system'?'使用系统配置的代理连接网络。':mode==='direct'?'直接连接网络，不使用代理。':'通过指定的代理连接网络。';
  for(const id of ['proxy-mode','proxy-url','test-proxy','save-proxy'])$(id).disabled=proxyBusy||!state;
  $('save-proxy').disabled=proxyBusy||!state||!proxyDirty;
- $('proxy-status').hidden=!proxyStatus;$('proxy-status').textContent=proxyStatus;
+ $('proxy-status').textContent=proxyStatus||(proxyDirty?'更改尚未保存':'保存后生效');$('proxy-status').dataset.feedback=String(!!proxyStatus);
  $('proxy-error').hidden=!proxyError;$('proxy-error').textContent=proxyError;
 }
 function editProxy(){proxyDirty=true;proxyStatus='';proxyError='';renderProxy();}
@@ -178,18 +182,25 @@ async function runProxy(save){
  if(proxyBusy||!state)return;
  const proxy=proxyDraft();
  if(proxy.mode==='manual'&&!proxy.url){proxyError='请输入完整的代理地址，例如 http://127.0.0.1:7890。';renderProxy();$('proxy-url').focus();return;}
- proxyBusy=true;proxyError='';proxyStatus=save?'正在保存…':'正在使用当前填写的配置连接 GitHub…';renderProxy();
+ proxyBusy=true;proxyError='';proxyStatus=save?'正在保存…':'正在测试连接…';renderProxy();
  try{
   const result=await invoke(save?'set_proxy':'test_proxy',{proxy});
-  if(save){proxyDirty=false;lastProxy='';renderEpoch++;render(result);proxyStatus='已保存，从下一次网络请求生效。';}
-  else proxyStatus='已成功连接 GitHub。'+(proxyDirty?'当前配置尚未保存。':'');
+  if(save){proxyDirty=false;lastProxy='';renderEpoch++;render(result);proxyStatus='已保存，下次请求生效。';}
+  else proxyStatus='已成功连接 GitHub'+(proxyDirty?' · 尚未保存':'。');
  }catch(error){proxyStatus='';proxyError=String(error);}
  finally{proxyBusy=false;renderProxy();}
 }
 function appUpdate(){return state?.app_update||{phase:'idle',current_version:state?.version,version:null};}
 function showDialog(id){const dialog=$(id);if(!dialog.open)dialog.showModal();}
 function openAbout(){closePlaybackMenu();showDialog('about-dialog');}
-function openAppUpdate(){showDialog('settings-dialog');$('app-update-panel').scrollIntoView({block:'nearest'});}
+function selectSettingsTab(name,focus=false){
+ const target=document.querySelector(`[data-settings-tab="${name}"]`);if(!target)return;
+ settingsTab=name;
+ document.querySelectorAll('[data-settings-tab]').forEach(button=>{const selected=button===target;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;$(button.getAttribute('aria-controls')).hidden=!selected;});
+ if(focus)target.focus({preventScroll:true});
+}
+function openSettings(name=settingsTab){selectSettingsTab(name);showDialog('settings-dialog');$('settings-tab-'+name).focus({preventScroll:true});}
+function openAppUpdate(){openSettings('updates');}
 function closePlaybackMenu(){$('playback-menu').open=false;}
 async function direct(command,args={},message=''){
  try{await invoke(command,args);if(message)toast(message);}catch(error){toast(String(error));}
@@ -220,7 +231,7 @@ function renderAppUpdate(){
  $('app-update-toggle').hidden=!ready;
  const status={idle:'自动检查更新已开启。',checking:'正在检查程序更新…',downloading:'正在后台下载，完成后将验证安装包。',ready:`v${update.version||''} 已下载并验证，可以重启升级。`,up_to_date:'已是最新版本。',installing:'正在启动安装程序…',error:'程序更新暂时未能完成。'};
  let description=status[phase]||status.idle;
- if(update.last_checked_at)description+=' 上次检查 '+new Date(update.last_checked_at*1000).toLocaleString('zh-CN');
+ $('app-update-last-checked').hidden=!update.last_checked_at;$('app-update-last-checked').textContent=update.last_checked_at?'上次检查 '+new Date(update.last_checked_at*1000).toLocaleString('zh-CN'):'';
  $('app-update-status').textContent=description;
  $('app-update-progress-wrap').hidden=phase!=='downloading';
  const received=Math.max(0,Number(update.received)||0),total=Number(update.total)||0;
@@ -241,6 +252,19 @@ async function runAppUpdate(command,args={}){
  try{const result=await invoke(command,args);if(result&&epoch===renderEpoch)render(result);}
  catch(error){appUpdateError=String(error);}
  finally{renderEpoch++;appUpdateBusy=false;renderAppUpdate();}
+}
+function renderAutoStart(){
+ $('auto-start').checked=autoStartBusy?autoStartRequested:(state?.auto_start??true);
+ $('auto-start').disabled=autoStartBusy||!state;
+ const error=autoStartError||state?.auto_start_error||'';
+ $('auto-start-error').hidden=!error;$('auto-start-error').textContent=error;
+}
+async function setAutoStart(enabled){
+ if(autoStartBusy||!state)return;
+ autoStartRequested=enabled;autoStartBusy=true;autoStartError='';const epoch=++renderEpoch;renderAutoStart();
+ try{const result=await invoke('set_auto_start',{enabled});if(result&&epoch===renderEpoch)render(result);}
+ catch(error){autoStartError=String(error);}
+ finally{renderEpoch++;autoStartBusy=false;renderAutoStart();update();}
 }
 async function run(command,args={},message='',remote=false){
  if(remote?remoteBusy:localBusy)return;
@@ -269,7 +293,7 @@ function renderBusy(){
  document.querySelectorAll('.wallpaper-preview').forEach(button=>button.disabled=previewBusy);
 }
 function render(data){
- state=data;$('version').textContent=data.version;renderAppUpdate();renderProxy();renderRepositories();
+ state=data;$('version').textContent=data.version;renderAppUpdate();renderAutoStart();renderProxy();renderRepositories();
  const monitor=data.displays.find(d=>d.id===data.selected_monitor),playing=current();
  const visibleError=localError||data.last_error||(activeTab==='local'?remoteError:'');$('error').hidden=!visibleError;$('error').textContent=visibleError;
  $('auto-pause').checked=data.auto_pause;
@@ -344,6 +368,7 @@ $('pause').onclick=()=>{const selected=current();if(selected)run('pause_wallpape
 $('remove').onclick=()=>{closePlaybackMenu();run('remove_wallpaper',{monitorId:state.selected_monitor},'已恢复该屏幕的原桌面');};
 $('feed-aquarium').onclick=()=>run('feed_aquarium',{monitorId:state.selected_monitor},'已投喂，回到桌面看看鱼儿吧。');
 $('auto-pause').onchange=()=>run('auto_pause',{enabled:$('auto-pause').checked});
+$('auto-start').onchange=()=>setAutoStart($('auto-start').checked);
 $('preview').onclick=()=>{closePlaybackMenu();direct('capture_desktop',{monitorId:state.selected_monitor},'桌面预览已保存');};
 $('reload').onclick=()=>{closePlaybackMenu();const playing=current();if(playing)run('apply_wallpaper',{monitorId:state.selected_monitor,moduleId:playing.module_id},'壁纸已重新加载');};
 $('show-desktop').onclick=()=>{closePlaybackMenu();direct('show_desktop',{monitorId:state.selected_monitor});};
@@ -352,7 +377,17 @@ $('add-repository').onclick=()=>{repositoryDrafts.push({url:'',enabled:true});re
 $('save-repositories').onclick=saveRepositories;
 $('proxy-mode').onchange=editProxy;$('proxy-url').oninput=editProxy;
 $('save-proxy').onclick=()=>runProxy(true);$('test-proxy').onclick=()=>runProxy(false);
-$('settings-open').onclick=()=>showDialog('settings-dialog');
+$('settings-open').onclick=()=>openSettings();
+const settingsTabs=[...document.querySelectorAll('[data-settings-tab]')];
+settingsTabs.forEach(button=>button.onclick=()=>selectSettingsTab(button.dataset.settingsTab));
+const settingsNav=document.querySelector('.settings-nav'),compactSettings=matchMedia('(max-width:620px)');
+const orientSettings=()=>settingsNav.setAttribute('aria-orientation',compactSettings.matches?'horizontal':'vertical');orientSettings();compactSettings.addEventListener('change',orientSettings);
+settingsNav.addEventListener('keydown',event=>{
+ const index=settingsTabs.indexOf(event.target);if(index<0)return;
+ const key=event.key;let next;
+ if(key==='Home')next=0;else if(key==='End')next=settingsTabs.length-1;else if(['ArrowDown','ArrowRight'].includes(key))next=(index+1)%settingsTabs.length;else if(['ArrowUp','ArrowLeft'].includes(key))next=(index+settingsTabs.length-1)%settingsTabs.length;else return;
+ event.preventDefault();selectSettingsTab(settingsTabs[next].dataset.settingsTab,true);
+});
 $('about-open').onclick=openAbout;
 document.querySelectorAll('[data-about-link]').forEach(link=>link.onclick=event=>{event.preventDefault();direct('open_about_link',{link:link.dataset.aboutLink});});
 window.__TAURI__.event.listen('show-about',openAbout).catch(error=>toast('关于入口暂时不可用：'+String(error)));

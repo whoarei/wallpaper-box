@@ -36,7 +36,7 @@ function serveUi() {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (pathname === '/favicon.ico') { response.writeHead(204).end(); return; }
     const filename = pathname === '/' ? 'index.html' : pathname.slice(1);
-    if (!['index.html', 'app.js', 'app.css', 'icon.png'].includes(filename)) {
+    if (!['index.html', 'app.js', 'app.css', 'settings.css', 'icon.png'].includes(filename)) {
       response.writeHead(404).end(); return;
     }
     response.writeHead(200, { 'Content-Type': mime[path.extname(filename)], 'Cache-Control': 'no-store' });
@@ -62,7 +62,7 @@ function fixtures() {
       remote('aquarium', '水族箱', '1.1.0'), remote('pinewind-town', '松风镇', '1.0.0'),
       remote('window-to-elsewhere', '通往别处的窗户', '1.0.0'),
     ] },
-    state: { version: '0.2.0', service: 'http://wallpaper.localhost', auto_pause: true,
+    state: { version: '0.2.0', service: 'http://wallpaper.localhost', auto_pause: true, auto_start: true, auto_start_error: null,
       proxy: { mode: 'system', url: '' },
       wallpaper_repositories: [{url:'https://gitee.com/xishuaiya/wallpapers',enabled:true},{url:'https://github.com/whoarei/wallpapers',enabled:false}],
       selected_monitor: 'primary', displays: [
@@ -88,13 +88,16 @@ function parallelDownloads(fixture) {
 // This fixture owns native state. UI updates only through the production invoke
 // API and its ordinary one-second polling, matching a Tauri manager window.
 function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppCheck, failAppInstall,
-  failPreview, deferApply, deferInstall, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures, deferCancellation, importedModule }) {
+  failPreview, deferApply, deferInstall, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures, deferCancellation, importedModule, failAutoStart, deferAutoStart, persistAutoStart }) {
   const copy = value => JSON.parse(JSON.stringify(value));
   if (persistProxy && sessionStorage.getItem('native-proxy')) {
     state.proxy = JSON.parse(sessionStorage.getItem('native-proxy'));
   }
   if (persistRepositories && sessionStorage.getItem('native-repositories')) {
     state.wallpaper_repositories = JSON.parse(sessionStorage.getItem('native-repositories'));
+  }
+  if (persistAutoStart && sessionStorage.getItem('native-auto-start') !== null) {
+    state.auto_start = JSON.parse(sessionStorage.getItem('native-auto-start'));
   }
   const repositoryRequests = [];
   function mergedSources(sources) {
@@ -151,6 +154,12 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
     calls.push({ command, args: copy(args) });
     switch (command) {
       case 'get_state': return copy(state);
+      case 'set_auto_start':
+        if (deferAutoStart) await new Promise(resolve => { finishOperation = resolve; });
+        if (failAutoStart) throw '无法访问 Windows 启动设置（0x80070005）。';
+        state.auto_start = args.enabled;state.auto_start_error = null;
+        if (persistAutoStart) sessionStorage.setItem('native-auto-start', JSON.stringify(args.enabled));
+        return copy(state);
       case 'preview_wallpaper':
         if (failPreview) throw '打开预览失败，请重试。';
         if (!state.modules.some(module => module.id === args.moduleId)) throw '壁纸不存在';
@@ -323,6 +332,12 @@ async function screenshot(page, name) {
   await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, `${name}.png`), fullPage: true });
 }
 
+async function settingsScreenshot(page, name) {
+  if (!process.env.UI_SCREENSHOT_DIR) return;
+  fs.mkdirSync(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+  await page.locator('#settings-dialog').screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, `${name}.png`) });
+}
+
 async function noHorizontalOverflow(page, label) {
   const result = await page.evaluate(() => ({
     viewport: innerWidth,
@@ -395,6 +410,129 @@ async function noHorizontalOverflow(page, label) {
       await page.keyboard.press('Escape');
       assert.equal(await page.locator('#remove').isVisible(), false);
       assert.deepEqual(await actions(page), []);
+    });
+
+    await test('settings categories keep routine controls compact and support keyboard navigation', null, async page => {
+      await page.locator('#settings-open').click();
+      const dialog=page.locator('#settings-dialog');
+      assert.equal(await page.locator('#settings-tab-general').getAttribute('aria-selected'),'true');
+      assert.equal(await page.locator('#auto-pause').isVisible(),true);
+      assert.equal(await page.locator('#repository-url-0').isVisible(),false);
+      assert.equal(await page.locator('#proxy-mode').isVisible(),false);
+      assert.equal(await page.locator('#check-app-update').isVisible(),false);
+      for(const [width,height] of [[1080,760],[780,600]]) {
+        await page.setViewportSize({width,height});
+        const bounds=await dialog.boundingBox();
+        assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=width&&bounds.y+bounds.height<=height,JSON.stringify(bounds));
+        const body=await page.locator('#settings-general-panel .settings-panel-body').evaluate(node=>({height:node.clientHeight,content:node.scrollHeight}));
+        assert.ok(body.content<=body.height,`General settings fit without scrolling: ${JSON.stringify(body)}`);
+      }
+      await settingsScreenshot(page,'settings-general');
+      await page.locator('#settings-tab-general').focus();await page.keyboard.press('ArrowDown');
+      assert.equal(await page.locator('#settings-tab-repositories').getAttribute('aria-selected'),'true');
+      assert.equal(await page.locator('#repository-url-0').isVisible(),true);
+      assert.equal(await page.locator('#auto-pause').isVisible(),false);
+      await settingsScreenshot(page,'settings-repositories');
+      await page.keyboard.press('ArrowDown');
+      assert.equal(await page.locator('#proxy-mode').isVisible(),true);
+      assert.equal(await page.locator('#settings-tab-proxy').evaluate(node=>node===document.activeElement),true);
+      await page.keyboard.press('End');assert.equal(await page.locator('#check-app-update').isVisible(),true);
+      await page.keyboard.press('Home');assert.equal(await page.locator('#auto-pause').isVisible(),true);
+      assert.deepEqual(await actions(page),[],'Navigation must not trigger native changes');
+    });
+
+    await test('startup defaults on and an explicit choice survives polling and reopening', fixture => {
+      fixture.persistAutoStart = true;
+    }, async page => {
+      await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#auto-start').isChecked(),true);
+      assert.deepEqual(await actions(page),[],'Rendering the saved startup state must not modify Windows');
+      await page.locator('#auto-start').uncheck();
+      await page.waitForFunction(()=>!document.getElementById('auto-start').disabled);
+      assert.equal(await page.locator('#auto-start').isChecked(),false);
+      await page.waitForTimeout(1150);
+      await page.keyboard.press('Escape');await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#auto-start').isChecked(),false);
+      await page.reload();await ready(page);await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#auto-start').isChecked(),false);
+      await page.locator('#auto-start').check();
+      await page.waitForFunction(()=>!document.getElementById('auto-start').disabled);
+      assert.equal((await page.evaluate(()=>window.__uiTest.state())).auto_start,true);
+      assert.equal(await page.locator('#current-title').textContent(),'水族箱');
+      assert.deepEqual(await actions(page),[{command:'set_auto_start',args:{enabled:true}}]);
+    });
+
+    await test('startup failures restore the real switch state and stay beside the control', fixture => {
+      fixture.failAutoStart = true;fixture.deferAutoStart = true;
+    }, async page => {
+      await page.locator('#settings-open').click();await page.locator('#auto-start').uncheck();
+      assert.equal(await page.locator('#auto-start').isDisabled(),true);
+      await page.evaluate(()=>{const node=document.getElementById('auto-start');node.dispatchEvent(new Event('change'));});
+      assert.equal((await actions(page)).filter(call=>call.command==='set_auto_start').length,1);
+      await page.evaluate(()=>window.__uiTest.finishOperation());
+      await visible(page.locator('#auto-start-error'));
+      assert.equal(await page.locator('#auto-start').isChecked(),true);
+      assert.equal(await page.locator('#auto-start').isDisabled(),false);
+      await page.waitForTimeout(1150);
+      assert.match(await page.locator('#auto-start-error').textContent(),/Windows 启动设置/);
+      assert.equal(await page.locator('#error').isVisible(),false);
+      await page.locator('#auto-pause').uncheck();
+      await page.waitForFunction(()=>!document.getElementById('auto-pause').disabled);
+      assert.equal(await page.locator('#current-title').textContent(),'水族箱');
+    });
+
+    await test('startup initialization errors show the disabled system state without interrupting playback', fixture => {
+      fixture.state.auto_start = false;fixture.state.auto_start_error = '无法访问 Windows 启动设置。';
+    }, async page => {
+      await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#auto-start').isChecked(),false);
+      await visible(page.locator('#auto-start-error'));
+      assert.equal(await page.locator('#error').isVisible(),false);
+      assert.deepEqual(await actions(page),[]);
+    });
+
+    await test('settings preserve unsaved drafts across categories and adapt to a narrow window', null, async page => {
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-proxy').click();
+      await page.locator('#proxy-mode').selectOption('manual');await page.locator('#proxy-url').fill('http://127.0.0.1:7890');
+      await page.locator('#settings-tab-repositories').click();await page.getByRole('switch',{name:'启用仓库 1',exact:true}).uncheck();
+      await page.locator('#settings-tab-general').click();await page.waitForTimeout(1150);
+      await page.locator('#settings-tab-proxy').click();
+      assert.equal(await page.locator('#proxy-mode').inputValue(),'manual');
+      assert.equal(await page.locator('#proxy-url').inputValue(),'http://127.0.0.1:7890');
+      assert.equal(await page.locator('#save-proxy').isEnabled(),true);
+      await settingsScreenshot(page,'settings-proxy');
+      await page.setViewportSize({width:420,height:680});
+      await page.waitForFunction(()=>document.querySelector('.settings-nav').getAttribute('aria-orientation')==='horizontal');
+      const button=await page.locator('#save-proxy').boundingBox();
+      assert.ok(button.y>=0&&button.y+button.height<=680,JSON.stringify(button));
+      await noHorizontalOverflow(page,'narrow settings');await settingsScreenshot(page,'settings-compact');
+      await page.locator('#settings-tab-repositories').click();
+      assert.equal(await page.getByRole('switch',{name:'启用仓库 1',exact:true}).isChecked(),false);
+      assert.deepEqual(await page.evaluate(()=>window.__uiTest.state().proxy),{mode:'system',url:''});
+      assert.equal(await page.evaluate(()=>window.__uiTest.state().wallpaper_repositories[0].enabled),true);
+      await page.keyboard.press('Escape');await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#settings-tab-repositories').getAttribute('aria-selected'),'true');
+      assert.deepEqual(await actions(page),[],'Drafts and tab changes must not save automatically');
+      await page.setViewportSize({width:780,height:600});
+    });
+
+    await test('long repository lists scroll independently while navigation and save remain reachable', fixture => {
+      for(let index=2;index<16;index++)fixture.state.wallpaper_repositories.push({url:`https://github.com/example/scene-${index}`,enabled:true});
+    }, async page => {
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();
+      assert.equal(await page.locator('#add-repository').isDisabled(),true);
+      const body=page.locator('#settings-repositories-panel .settings-panel-body');
+      assert.equal(await body.evaluate(node=>node.scrollHeight>node.clientHeight),true);
+      await body.evaluate(node=>node.scrollTop=node.scrollHeight);
+      await page.getByRole('switch',{name:'启用仓库 16',exact:true}).uncheck();
+      for(const locator of [page.locator('#save-repositories'),page.locator('#settings-tab-general'),page.locator('#about-open')]) {
+        const box=await locator.boundingBox();assert.ok(box.y>=0&&box.y+box.height<=600,JSON.stringify(box));
+      }
+      await page.locator('#save-repositories').click();
+      await page.waitForFunction(()=>document.getElementById('repositories-status').textContent.includes('已保存'));
+      assert.equal(await page.evaluate(()=>window.__uiTest.state().wallpaper_repositories[15].enabled),false);
+      assert.equal(await page.locator('#current-title').textContent(),'水族箱');
+      assert.equal((await actions(page)).filter(call=>call.command==='set_wallpaper_repositories').length,1);
     });
 
     await test('about shows the installed version and opens links through native IPC', fixture => {
@@ -605,7 +743,7 @@ async function noHorizontalOverflow(page, label) {
     });
 
     await test('default discovery requests only Gitee and keeps GitHub disabled', null, async page => {
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();
       assert.equal(await page.locator('#repository-url-0').inputValue(), 'https://gitee.com/xishuaiya/wallpapers');
       assert.equal(await page.getByRole('switch', { name: '启用仓库 1', exact: true }).isChecked(), true);
       assert.equal(await page.getByRole('switch', { name: '启用仓库 2', exact: true }).isChecked(), false);
@@ -619,7 +757,7 @@ async function noHorizontalOverflow(page, label) {
     await test('custom repository drafts survive polling and normalized ordering persists after reload', fixture => {
       fixture.persistRepositories = true;
     }, async page => {
-      await page.locator('#settings-open').click();await page.locator('#add-repository').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();await page.locator('#add-repository').click();
       await page.locator('#repository-url-2').fill('https://github.com/example/custom.git');
       await page.waitForTimeout(1150);
       assert.equal(await page.locator('#repository-url-2').inputValue(), 'https://github.com/example/custom.git');
@@ -632,7 +770,7 @@ async function noHorizontalOverflow(page, label) {
       assert.equal(await page.locator('#save-repositories').isDisabled(), true);
       await page.setViewportSize({width:1080,height:900});
       await page.locator('#repositories-title').scrollIntoViewIfNeeded();await screenshot(page,'wallpaper-repositories');
-      await page.reload();await ready(page);await page.locator('#settings-open').click();
+      await page.reload();await ready(page);await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();
       assert.equal(await page.locator('#repository-url-0').inputValue(), 'https://github.com/example/custom');
       await page.getByRole('button', { name: '移除仓库 3', exact: true }).click();
       await page.locator('#save-repositories').click();
@@ -646,7 +784,7 @@ async function noHorizontalOverflow(page, label) {
     await test('disabling all repositories skips discovery requests and preserves downloaded wallpapers', fixture => {
       fixture.state.modules[0].source = 'online';
     }, async page => {
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();
       await page.getByRole('switch', { name: '启用仓库 1', exact: true }).uncheck();
       await page.locator('#save-repositories').click();
       await page.waitForFunction(() => document.getElementById('save-repositories').disabled);
@@ -655,7 +793,7 @@ async function noHorizontalOverflow(page, label) {
       assert.match(await page.locator('#online-empty').textContent(), /添加或启用/);
       assert.deepEqual(await page.evaluate(() => window.__uiTest.repositoryRequests), []);
       assert.equal(await page.evaluate(() => window.__uiTest.state().modules.length), 2);
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();
       await page.getByRole('switch', { name: '启用仓库 2', exact: true }).check();
       await page.locator('#save-repositories').click();
       await page.waitForFunction(() => document.getElementById('save-repositories').disabled);
@@ -673,7 +811,7 @@ async function noHorizontalOverflow(page, label) {
       const card=moduleCard(page,'#online-modules','通往别处的窗户');await visible(card);
       assert.match(await card.textContent(), /来源：github.com\/whoarei\/wallpapers/);
       await visible(page.locator('#online-error'));assert.match(await page.locator('#online-error').textContent(), /gitee.com.*仓库暂时不可用/);
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();
       assert.match(await page.locator('.repository-source-status').first().textContent(), /仓库暂时不可用/);
       assert.match(await page.locator('.repository-source-status').nth(1).textContent(), /3 张壁纸/);
       assert.equal(await page.locator('#current-title').textContent(), '水族箱');
@@ -688,12 +826,12 @@ async function noHorizontalOverflow(page, label) {
       const card=moduleCard(page,'#online-modules','水族箱');await visible(card);
       assert.equal(await page.locator('#online-modules .module').count(),3);
       assert.match(await card.textContent(), /来源：gitee.com/);assert.match(await card.textContent(), /v1.1.0/);
-      await page.locator('#settings-open').click();await page.getByRole('button',{name:'上移仓库 2',exact:true}).click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();await page.getByRole('button',{name:'上移仓库 2',exact:true}).click();
       await page.locator('#save-repositories').click();
       await page.waitForFunction(() => document.getElementById('save-repositories').disabled);
       await page.keyboard.press('Escape');
       assert.match(await card.textContent(), /来源：github.com/);assert.match(await card.textContent(), /v2.0.0/);
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();
       await page.getByRole('switch',{name:'启用仓库 1',exact:true}).uncheck();await page.locator('#save-repositories').click();
       await page.waitForFunction(() => document.getElementById('save-repositories').disabled);await page.keyboard.press('Escape');
       assert.match(await card.textContent(), /来源：gitee.com/);assert.match(await card.textContent(), /v1.1.0/);
@@ -703,7 +841,7 @@ async function noHorizontalOverflow(page, label) {
     await test('failed repository saves retain edited addresses and enable switches', fixture => {
       fixture.failRepositorySave = true;
     }, async page => {
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();
       await page.locator('#repository-url-0').fill('https://gitee.com/example/custom.git');
       await page.getByRole('switch',{name:'启用仓库 1',exact:true}).uncheck();
       await page.locator('#save-repositories').click();await visible(page.locator('#repositories-error'));
@@ -719,7 +857,7 @@ async function noHorizontalOverflow(page, label) {
       delete fixture.state.proxy;
       fixture.persistProxy = true;
     }, async page => {
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-proxy').click();
       assert.equal(await page.locator('#proxy-mode').inputValue(), 'system');
       assert.equal(await page.locator('#proxy-manual').isVisible(), false);
       assert.equal(await page.locator('#save-proxy').isDisabled(), true);
@@ -735,7 +873,7 @@ async function noHorizontalOverflow(page, label) {
       assert.equal(await page.locator('#proxy-url').inputValue(), 'socks5h://127.0.0.1:1080');
       assert.equal(await page.locator('#save-proxy').isDisabled(), true);
       assert.equal(await page.locator('#current-title').textContent(), '水族箱');
-      await page.reload();await ready(page);await page.locator('#settings-open').click();
+      await page.reload();await ready(page);await page.locator('#settings-open').click();await page.locator('#settings-tab-proxy').click();
       assert.equal(await page.locator('#proxy-mode').inputValue(), 'manual');
       assert.equal(await page.locator('#proxy-url').inputValue(), 'socks5h://127.0.0.1:1080');
       await page.locator('#proxy-mode').selectOption('direct');
@@ -752,7 +890,7 @@ async function noHorizontalOverflow(page, label) {
     await test('proxy connection test uses the draft without saving and blocks duplicate submissions', fixture => {
       fixture.deferProxyTest = true;
     }, async page => {
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-proxy').click();
       await page.locator('#proxy-mode').selectOption('manual');
       await page.locator('#proxy-url').fill('http://127.0.0.1:7890');
       await page.locator('#test-proxy').evaluate(button => { button.click();button.click(); });
@@ -769,7 +907,7 @@ async function noHorizontalOverflow(page, label) {
     await test('empty proxy addresses and failed saves keep drafts and the active configuration', fixture => {
       fixture.failProxySave = true;
     }, async page => {
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-proxy').click();
       await page.locator('#proxy-mode').selectOption('manual');
       await page.locator('#save-proxy').click();
       await visible(page.locator('#proxy-error'));
@@ -786,7 +924,7 @@ async function noHorizontalOverflow(page, label) {
     await test('proxy test errors persist without blocking offline playback', fixture => {
       fixture.failProxyTest = true;
     }, async page => {
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-proxy').click();
       await page.locator('#test-proxy').click();
       await visible(page.locator('#proxy-error'));
       await page.waitForTimeout(1150);
@@ -805,7 +943,7 @@ async function noHorizontalOverflow(page, label) {
       await cover.waitFor();
       await page.waitForFunction(() => document.querySelector('#online-modules img')?.naturalWidth > 0);
       assert.match(await cover.getAttribute('src'), /^data:image\/png;base64,/);
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-proxy').click();
       await page.locator('#proxy-mode').selectOption('direct');
       await page.locator('#save-proxy').click();
       await page.waitForFunction(() => window.__uiTest.calls.filter(call => call.command === 'load_online_cover').length === 2);
@@ -1160,7 +1298,7 @@ async function noHorizontalOverflow(page, label) {
     await test('background app downloads show progress and ready never installs automatically', fixture => {
       appUpdateFixture(fixture, 'checking');
     }, async page => {
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-updates').click();
       assert.match(await page.locator('#app-update-status').textContent(), /正在检查/);
       assert.deepEqual(await actions(page), [], 'Backend scheduling must not be duplicated by UI startup');
       await page.evaluate(() => window.__uiTest.setAppUpdate({ phase: 'downloading', received: 524288, total: 1048576 }));
@@ -1175,6 +1313,7 @@ async function noHorizontalOverflow(page, label) {
       await page.waitForFunction(() => !document.getElementById('app-update-toggle').hidden);
       assert.equal(await page.locator('#settings-dialog').isVisible(), false, 'Ready notification must not interrupt browsing');
       await page.locator('#app-update-toggle').click();
+      assert.equal(await page.locator('#settings-tab-updates').getAttribute('aria-selected'),'true');
       await visible(page.locator('#install-app-update'));
       assert.match(await page.locator('#app-update-toggle').textContent(), /已就绪/);
       assert.equal(await page.locator('#version').textContent(), '0.3.0');
@@ -1193,7 +1332,7 @@ async function noHorizontalOverflow(page, label) {
     await test('app installation requires a cancelable confirmation and is submitted once', fixture => {
       appUpdateFixture(fixture, 'ready');
     }, async page => {
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-updates').click();
       await visible(page.locator('#install-app-update'));
       await page.locator('#install-app-update').click();
       await visible(page.locator('#app-update-confirm'));
@@ -1218,14 +1357,14 @@ async function noHorizontalOverflow(page, label) {
       appUpdateFixture(fixture, 'idle', { version: null, notes: null });
       fixture.failAppCheck = true;
     }, async page => {
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-updates').click();
       await page.locator('#check-app-update').click();
       await visible(page.locator('#app-update-error'));
       assert.match(await page.locator('#app-update-error').textContent(), /程序更新网络不可用/);
       await page.getByRole('button', { name: '关闭设置', exact: true }).click();
       await moduleCard(page, '#modules', '松风镇').getByRole('button', { name: '应用壁纸', exact: true }).click();
       await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-updates').click();
       await page.waitForTimeout(1150);
       assert.equal(await page.locator('#app-update-error').isVisible(), true);
       assert.match(await page.locator('#app-update-error').textContent(), /程序更新网络不可用/);
@@ -1241,7 +1380,7 @@ async function noHorizontalOverflow(page, label) {
       appUpdateFixture(fixture, 'error', { error: '下载中断，原安装版本仍可使用。' });
       fixture.failAppInstall = true;
     }, async page => {
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-updates').click();
       assert.match(await page.locator('#app-update-error').textContent(), /下载中断/);
       await page.locator('#download-app-update').click();
       await page.waitForFunction(() => document.getElementById('app-update-progress').value === 25);
@@ -1265,7 +1404,7 @@ async function noHorizontalOverflow(page, label) {
     await test('installation pins the version shown in confirmation when backend state changes before IPC', fixture => {
       appUpdateFixture(fixture, 'ready');
     }, async page => {
-      await page.locator('#settings-open').click();
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-updates').click();
       await page.locator('#install-app-update').click();
       await visible(page.locator('#app-update-confirm'));
       assert.match(await page.locator('#app-update-confirm-copy').textContent(), /v0\.3\.1/);
