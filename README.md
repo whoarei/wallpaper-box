@@ -29,4 +29,4 @@
 
 支持 **Windows x64**，需要 WebView2，安装程序会在缺少时自动下载。
 
-[详细使用与开发说明](docs/guide.md) · [官方壁纸内容库](https://github.com/whoarei/wallpapers)
+[详细使用与开发说明](docs/guide.md) · [默认 Gitee 壁纸库](https://gitee.com/xishuaiya/wallpapers) · [GitHub 壁纸库](https://github.com/whoarei/wallpapers)
