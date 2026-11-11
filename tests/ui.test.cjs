@@ -29,14 +29,14 @@ function loadPlaywright() {
 
 const uiRoot = path.resolve(__dirname, '../wallpaper-host/ui');
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8' };
+  '.css': 'text/css; charset=utf-8', '.png': 'image/png' };
 
 function serveUi() {
   const server = http.createServer((request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (pathname === '/favicon.ico') { response.writeHead(204).end(); return; }
     const filename = pathname === '/' ? 'index.html' : pathname.slice(1);
-    if (!['index.html', 'app.js', 'app.css'].includes(filename)) {
+    if (!['index.html', 'app.js', 'app.css', 'icon.png'].includes(filename)) {
       response.writeHead(404).end(); return;
     }
     response.writeHead(200, { 'Content-Type': mime[path.extname(filename)], 'Cache-Control': 'no-store' });
@@ -54,7 +54,7 @@ function fixtures() {
   const modules = [module('aquarium', '水族箱'), module('pinewind-town', '松风镇')];
   const remote = (id, name, version) => ({ id, name, subtitle: 'OFFICIAL WALLPAPER',
     description: '由官方壁纸库提供，只按需下载这一张壁纸。', version, minAppVersion: '0.2.0',
-    entry: 'index.html', tags: [], size: 12345, unpackedSize: 54321,
+    entry: 'index.html', tags: [], size: 12344, unpackedSize: 54321,
     downloadUrl: `https://github.com/whoarei/wallpapers/releases/download/library-v1.1.0/${id}-${version}.zip`,
     sha256: 'a'.repeat(64), coverUrl: null });
   return {
@@ -66,9 +66,9 @@ function fixtures() {
       proxy: { mode: 'system', url: '' },
       wallpaper_repositories: [{url:'https://gitee.com/xishuaiya/wallpapers',enabled:true},{url:'https://github.com/whoarei/wallpapers',enabled:false}],
       selected_monitor: 'primary', displays: [
-        { id: 'primary', name: '主显示器', width: 3840, height: 2160, scale: 1.5 },
-        { id: 'secondary', name: '副显示器', width: 1920, height: 1080, scale: 1 },
-      ], modules, warnings: [], transfer: null, last_error: null,
+        { id: 'primary', name: '主显示器', primary: true, width: 3840, height: 2160, scale: 1.5 },
+        { id: 'secondary', name: '副显示器', primary: false, width: 1920, height: 1080, scale: 1 },
+      ], modules, warnings: [], downloads: [], last_error: null,
       wallpapers: [{ display_id: 'primary', module_id: 'aquarium', name: '水族箱',
         paused: false, auto_paused: false }],
       online: { catalog: null, checked_at: 0, cached: false, last_error: null },
@@ -76,10 +76,19 @@ function fixtures() {
   };
 }
 
+function parallelDownloads(fixture) {
+  fixture.deferInstall = true;
+  fixture.deferCancellation = true;
+  const template = fixture.catalog.wallpapers[2];
+  for (let i = 4; i <= 8; i++) {
+    fixture.catalog.wallpapers.push({ ...template, id: `scene-${i}`, name: `风景 ${i}` });
+  }
+}
+
 // This fixture owns native state. UI updates only through the production invoke
 // API and its ordinary one-second polling, matching a Tauri manager window.
 function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppCheck, failAppInstall,
-  failPreview, deferApply, deferInstall, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures }) {
+  failPreview, deferApply, deferInstall, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures, deferCancellation, importedModule }) {
   const copy = value => JSON.parse(JSON.stringify(value));
   if (persistProxy && sessionStorage.getItem('native-proxy')) {
     state.proxy = JSON.parse(sessionStorage.getItem('native-proxy'));
@@ -98,18 +107,47 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
       cached:sources.some(source=>source.cached),last_error:sources.filter(source=>source.last_error).map(source=>source.repository+'：'+source.last_error).join('；')||null};
   }
   const calls = [];
+  const listeners = new Map();
   const previous = new Map();
   let pendingFailure = !!failCheck;
   let finishOperation;
   window.__uiTest = {
     calls, repositoryRequests,
+    emit(name) { listeners.get(name)?.({ event: name, payload: null }); },
     failNextCheck() { pendingFailure = true; },
     state() { return copy(state); },
     setAppUpdate(patch) { Object.assign(state.app_update, copy(patch)); },
     finishOperation() { assertPendingOperation(); finishOperation(); finishOperation = null; },
+    setDownload(id, patch) { Object.assign(state.downloads.find(t => t.id === id), copy(patch)); },
+    setCatalog(items) { state.online.catalog.wallpapers = copy(items); },
+    setDisplays(displays) {
+      state.displays = copy(displays);
+      if (!displays.some(d => d.id === state.selected_monitor)) state.selected_monitor = displays[0]?.id || '';
+    },
+    completeDownload,
+    failDownload(id, error = '下载连接中断') { const task=state.downloads.find(t=>t.id===id);task.phase='failed';task.error=error;task.speed=0;pump(); },
+    finishCancellation(id) { state.downloads=state.downloads.filter(t=>t.id!==id);pump(); },
   };
   function assertPendingOperation() { if (!finishOperation) throw new Error('No pending fixture operation'); }
-  window.__TAURI__ = { core: { invoke: async (command, args = {}) => {
+  function pump() {
+    let active=state.downloads.filter(t=>!['queued','failed'].includes(t.phase)).length;
+    for(const task of state.downloads){if(task.phase==='queued'&&active<5){task.phase='downloading';active++;}}
+    let position=0;for(const task of state.downloads)task.queue_position=task.phase==='queued'?++position:null;
+  }
+  function installItem(item) {
+    const index=state.modules.findIndex(module=>module.id===item.id);
+    if(index>=0)previous.set(item.id,copy(state.modules[index]));
+    const installed={id:item.id,name:item.name,subtitle:item.subtitle,description:item.description,href:`/${item.id}/${item.entry}`,cover:null,tags:item.tags,version:item.version,source:'online',rollback_available:index>=0};
+    if(index>=0)state.modules[index]=installed;else state.modules.push(installed);
+  }
+  function completeDownload(id) {
+    const task=state.downloads.find(t=>t.id===id);if(!task)throw new Error('Missing download');
+    installItem(task.item);state.downloads=state.downloads.filter(t=>t.id!==id);pump();
+  }
+  window.__TAURI__ = { event: { listen: async (name, handler) => {
+    listeners.set(name, handler);
+    return () => listeners.delete(name);
+  } }, core: { invoke: async (command, args = {}) => {
     calls.push({ command, args: copy(args) });
     switch (command) {
       case 'get_state': return copy(state);
@@ -144,6 +182,7 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
         return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jDZkAAAAASUVORK5CYII=';
       case 'refresh_modules': return copy(state);
       case 'open_wallpaper_folder':
+      case 'open_about_link':
       case 'hide_manager':
       case 'quit_app': return null;
       case 'capture_desktop':
@@ -152,6 +191,7 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
         state.wallpapers = state.wallpapers.filter(wallpaper => wallpaper.display_id !== args.monitorId);
         return copy(state);
       case 'import_wallpaper':
+        if (importedModule) { state.modules.push(copy(importedModule)); return copy(state); }
         if (args.kind === 'zip') throw 'ZIP 文件无效，请选择完整壁纸包。';
         return null; // Canceling the native picker must not report an import.
       case 'check_app_update':
@@ -206,20 +246,21 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
         }));
         return copy(state);
       case 'install_online': {
-        const item = state.online.catalog?.wallpapers.find(item => item.id === args.moduleId);
-        if (!item) throw new Error('Test IPC: unknown selected wallpaper');
-        if (deferInstall) {
-          state.transfer = { id: item.id, name: item.name, received: 1048576, total: 2097152 };
-          await new Promise(resolve => { finishOperation = resolve; });
-          state.transfer = null;
-        }
-        const index = state.modules.findIndex(module => module.id === item.id);
-        if (index >= 0) previous.set(item.id, copy(state.modules[index]));
-        const installed = { id: item.id, name: item.name, subtitle: item.subtitle,
-          description: item.description, href: `/${item.id}/${item.entry}`, cover: null,
-          tags: item.tags, version: item.version, source: 'online', rollback_available: index >= 0 };
-        if (index >= 0) state.modules[index] = installed; else state.modules.push(installed);
-        state.online.last_error = null;
+        if(state.downloads.some(t=>t.id===args.moduleId))return copy(state);
+        const item=state.online.catalog?.wallpapers.find(item=>item.id===args.moduleId);
+        if(!item)throw new Error('Test IPC: unknown selected wallpaper');
+        state.downloads.push({id:item.id,item:copy(item),phase:'queued',received:deferInstall?item.size/2:0,total:item.size,speed:1024,error:null,queue_position:null});pump();
+        if(deferInstall)finishOperation=()=>completeDownload(item.id);else completeDownload(item.id);
+        return copy(state);
+      }
+      case 'download_action': {
+        const task=state.downloads.find(t=>t.id===args.moduleId);if(!task)return copy(state);
+        if(args.action==='retry'){if(task.phase!=='failed')throw '无需重试';task.phase='queued';task.received=0;task.error=null;pump();}
+        else if(args.action==='cancel'){
+          if(task.phase==='installing')throw '正在安装，请稍后再试';
+          if(deferCancellation&&task.phase==='downloading')task.phase='cancelling';
+          else {state.downloads=state.downloads.filter(t=>t.id!==args.moduleId);pump();}
+        }else throw new Error('Unknown download action');
         return copy(state);
       }
       case 'apply_wallpaper': {
@@ -255,6 +296,10 @@ async function actions(page) {
 
 function moduleCard(page, container, name) {
   return page.locator(`${container} .module`).filter({ has: page.getByRole('heading', { name, exact: true }) });
+}
+
+function monitorChoice(page, id) {
+  return page.locator(`#displays .monitor-choice[data-monitor-id="${id}"]`);
 }
 
 function appUpdateFixture(fixture, phase, extra = {}) {
@@ -340,6 +385,7 @@ async function noHorizontalOverflow(page, label) {
         assert.ok(bounds.width <= width && bounds.height <= height, JSON.stringify({ viewport: [width, height], bounds }));
       }
       assert.equal(await page.locator('#auto-pause').isVisible(), false);
+      assert.equal(await page.locator('#import-open').count(), 0);
       assert.equal(await page.locator('#import-folder').isVisible(), false);
       assert.equal(await page.locator('#remove').isVisible(), false);
       assert.equal(await page.locator('#app-update-toggle').isVisible(), false);
@@ -349,6 +395,54 @@ async function noHorizontalOverflow(page, label) {
       await page.keyboard.press('Escape');
       assert.equal(await page.locator('#remove').isVisible(), false);
       assert.deepEqual(await actions(page), []);
+    });
+
+    await test('about shows the installed version and opens links through native IPC', fixture => {
+      fixture.state.version = '8.7.6';
+    }, async page => {
+      await page.locator('#settings-open').click();
+      await page.getByRole('button', { name: '关于壁纸盒子', exact: true }).click();
+      const about = page.getByRole('dialog', { name: '关于壁纸盒子', exact: true });
+      await visible(about);
+      assert.equal(await page.locator('#about-version').textContent(), '8.7.6');
+      assert.equal(await about.locator('img').evaluate(image => image.complete && image.naturalWidth > 0), true);
+      assert.match(await about.textContent(), /作者 · whoarei/);
+      await about.getByRole('link', { name: /项目主页/ }).click();
+      await about.getByRole('link', { name: /问题反馈/ }).click();
+      await about.locator('summary').click();
+      assert.match(await about.textContent(), /MIT \/ Apache-2.0/);
+      await about.getByRole('link', { name: /Tauri/ }).click();
+      await about.getByRole('link', { name: /Microsoft Edge WebView2/ }).click();
+      assert.deepEqual(await actions(page), ['project', 'issues', 'tauri', 'webview2'].map(link => ({
+        command: 'open_about_link', args: { link },
+      })));
+      for (const [width, height] of [[1080, 760], [780, 600]]) {
+        await page.setViewportSize({ width, height });
+        const box = await about.boundingBox();
+        assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= width && box.y + box.height <= height,
+          `About stays inside ${width}x${height}: ${JSON.stringify(box)}`);
+        await noHorizontalOverflow(page, `about at ${width}x${height}`);
+      }
+      await screenshot(page, 'about-licenses');
+      await page.keyboard.press('Escape');
+      assert.equal(await about.isVisible(), false);
+      assert.equal(await page.locator('#settings-dialog').isVisible(), true);
+      assert.equal(await page.locator('#about-open').evaluate(button => button === document.activeElement), true);
+    });
+
+    await test('tray about events reuse the same panel without changing playback', null, async page => {
+      await page.evaluate(() => { window.__uiTest.emit('show-about'); window.__uiTest.emit('show-about'); });
+      const about = page.getByRole('dialog', { name: '关于壁纸盒子', exact: true });
+      await visible(about);
+      assert.equal(await page.locator('#settings-dialog').isVisible(), false);
+      assert.equal(await page.locator('#about-version').textContent(), '0.2.0');
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
+      assert.deepEqual(await actions(page), []);
+      await screenshot(page, 'about');
+      await about.getByRole('button', { name: '关闭关于', exact: true }).click();
+      assert.equal(await about.isVisible(), false);
+      await page.getByRole('button', { name: '将松风镇应用到主显示器', exact: true }).click();
+      await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
     });
 
     await test('playback controls remain reachable while browsing a larger collection', fixture => {
@@ -383,18 +477,18 @@ async function noHorizontalOverflow(page, label) {
     });
 
     await test('screen selection, empty playback, removal and reload preserve the other screen', null, async page => {
-      await page.locator('#displays').selectOption('secondary');
+      await monitorChoice(page, 'secondary').click();
       await page.waitForFunction(() => document.getElementById('current-title').textContent.includes('尚未设置'));
       assert.equal(await page.locator('#pause').isVisible(), false);
       await page.getByRole('button', { name: '将松风镇应用到副显示器', exact: true }).click();
       await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
       await page.getByRole('button', { name: '更多播放操作', exact: true }).click();
       await page.locator('#reload').click();
-      await page.waitForFunction(() => !document.getElementById('displays').disabled);
+      await page.waitForFunction(() => !document.querySelector('#displays .monitor-choice').disabled);
       await page.getByRole('button', { name: '更多播放操作', exact: true }).click();
       await page.locator('#remove').click();
       await page.waitForFunction(() => document.getElementById('current-title').textContent.includes('尚未设置'));
-      await page.locator('#displays').selectOption('primary');
+      await monitorChoice(page, 'primary').click();
       await page.waitForFunction(() => document.getElementById('current-title').textContent === '水族箱');
       assert.deepEqual((await page.evaluate(() => window.__uiTest.state())).wallpapers.map(item => item.display_id), ['primary']);
       assert.deepEqual((await actions(page)).filter(call => call.command === 'apply_wallpaper'), [
@@ -403,22 +497,90 @@ async function noHorizontalOverflow(page, label) {
       ]);
     });
 
-    await test('one import entry respects native picker cancellation and retains import failures', null, async page => {
-      await page.locator('#import-open').click();
+    await test('settings import actions respect picker cancellation and retain failures beside the controls', null, async page => {
+      await page.locator('#settings-open').click();
       await page.locator('#import-folder').click();
-      await page.waitForFunction(() => !document.getElementById('import-open').disabled);
-      assert.equal(await page.locator('#import-dialog').isVisible(), false);
+      await page.waitForFunction(() => !document.getElementById('import-folder').disabled);
+      assert.equal(await page.locator('#settings-dialog').isVisible(), true);
+      assert.equal(await page.locator('#import-dialog').count(), 0);
       assert.equal(await page.locator('#toast').getAttribute('class'), 'toast', 'Canceling must not claim a successful import');
-      await page.locator('#import-open').click();
       await page.locator('#import-zip').click();
-      await visible(page.locator('#error'));
+      await visible(page.locator('#import-error'));
       await page.waitForTimeout(1150);
-      assert.match(await page.locator('#error').textContent(), /ZIP 文件无效/);
+      assert.match(await page.locator('#import-error').textContent(), /ZIP 文件无效/);
       assert.equal(await page.locator('#modules .module').count(), 2);
       assert.deepEqual(await actions(page), [
         { command: 'import_wallpaper', args: { kind: 'folder' } },
         { command: 'import_wallpaper', args: { kind: 'zip' } },
       ]);
+    });
+
+    await test('successful settings import returns to the local gallery without applying wallpaper', fixture => {
+      fixture.importedModule = { ...fixture.state.modules[1], id: 'imported-scene', name: '导入的风景', source: 'local' };
+    }, async page => {
+      await page.locator('#tab-online').click();
+      await page.locator('#settings-open').click();
+      await page.locator('#import-folder').click();
+      await page.waitForFunction(() => !document.getElementById('settings-dialog').open);
+      assert.equal(await page.locator('#local-panel').isVisible(), true);
+      await visible(moduleCard(page, '#modules', '导入的风景'));
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
+      assert.equal((await actions(page)).filter(call => call.command === 'apply_wallpaper').length, 0);
+    });
+
+    await test('monitor thumbnails show each assignment, preserve portrait shape and select without applying', fixture => {
+      fixture.state.service = '';
+      for (const [index, module] of fixture.state.modules.entries()) {
+        module.cover = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect width="160" height="90" fill="${index ? '#cbdcbb' : '#478580'}"/></svg>`);
+      }
+      Object.assign(fixture.state.displays[1], { width: 1080, height: 1920 });
+      fixture.state.wallpapers.push({ display_id: 'secondary', module_id: 'pinewind-town', name: '松风镇', paused: false, auto_paused: false });
+    }, async page => {
+      const primary = monitorChoice(page, 'primary'), secondary = monitorChoice(page, 'secondary');
+      assert.equal(await primary.getAttribute('aria-pressed'), 'true');
+      assert.equal(await secondary.getAttribute('aria-pressed'), 'false');
+      assert.notEqual(await primary.locator('img').getAttribute('src'), await secondary.locator('img').getAttribute('src'));
+      const shape = await secondary.locator('.monitor-screen').boundingBox();
+      assert.ok(shape.height > shape.width, 'Portrait screens retain their orientation');
+      await secondary.focus();
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => document.querySelector('[data-monitor-id="secondary"]').getAttribute('aria-pressed') === 'true');
+      assert.equal(await page.locator('#current-title').textContent(), '松风镇');
+      assert.equal(await secondary.evaluate(node => node === document.activeElement), true);
+      await page.waitForTimeout(1150);
+      assert.equal(await secondary.evaluate(node => node === document.activeElement), true, 'Polling retains keyboard focus');
+      await secondary.click();
+      assert.deepEqual(await actions(page), [{ command: 'select_monitor', args: { monitorId: 'secondary' } }]);
+      await screenshot(page, 'monitor-thumbnails');
+      const cover = await primary.locator('img').getAttribute('src');
+      await moduleCard(page, '#modules', '水族箱').getByRole('button', { name: '应用壁纸', exact: true }).click();
+      await page.waitForFunction(cover => document.querySelector('[data-monitor-id="secondary"] img')?.getAttribute('src') === cover, cover);
+      assert.equal(await primary.locator('img').getAttribute('src'), cover, 'Updating the chosen screen preserves the other thumbnail');
+    });
+
+    await test('a large monitor group scrolls locally and handles disconnecting and reconnecting screens', fixture => {
+      for (let i = 3; i <= 9; i++) fixture.state.displays.push({
+        ...fixture.state.displays[1], id: `screen-${i}`, name: `显示器 ${i}`,
+      });
+    }, async page => {
+      assert.equal(await page.locator('#displays .monitor-choice').count(), 9);
+      const last = monitorChoice(page, 'screen-9');
+      await last.focus();
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => window.__uiTest.state().selected_monitor === 'screen-9');
+      const bounds = await page.locator('#displays').evaluate(node => ({ width: node.clientWidth, scroll: node.scrollWidth }));
+      assert.ok(bounds.scroll > bounds.width, 'Extra screens scroll inside the selector');
+      await noHorizontalOverflow(page, 'nine monitor thumbnails');
+      const primary = (await page.evaluate(() => window.__uiTest.state())).displays[0];
+      await page.evaluate(display => window.__uiTest.setDisplays([display]), primary);
+      await page.waitForFunction(() => document.querySelectorAll('#displays .monitor-choice').length === 1);
+      assert.equal(await monitorChoice(page, 'primary').getAttribute('aria-pressed'), 'true');
+      await page.evaluate(() => window.__uiTest.setDisplays([]));
+      await page.waitForFunction(() => document.querySelector('#displays').textContent.includes('未检测到'));
+      assert.equal(await page.locator('#modules .apply').first().isDisabled(), true);
+      await page.evaluate(display => window.__uiTest.setDisplays([display]), primary);
+      await page.waitForFunction(() => document.querySelector('[data-monitor-id="primary"]')?.getAttribute('aria-pressed') === 'true');
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
     });
 
     await test('settings invokes the existing pause, scan and folder commands without changing wallpaper', null, async page => {
@@ -671,12 +833,12 @@ async function noHorizontalOverflow(page, label) {
         const button = document.querySelector('[aria-label="将松风镇应用到主显示器"]');
         button.click(); button.click();
       });
-      assert.equal(await page.locator('#displays').isDisabled(), true);
+      assert.equal(await monitorChoice(page, 'primary').isDisabled(), true);
       assert.equal(await page.locator('#pause').isDisabled(), true);
       assert.equal((await actions(page)).filter(call => call.command === 'apply_wallpaper').length, 1);
       await page.evaluate(() => window.__uiTest.finishOperation());
       await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
-      assert.equal(await page.locator('#displays').isEnabled(), true);
+      assert.equal(await monitorChoice(page, 'primary').isEnabled(), true);
     });
 
     await test('pending downloads still show polled progress and allow local wallpaper changes', fixture => {
@@ -684,15 +846,145 @@ async function noHorizontalOverflow(page, label) {
     }, async page => {
       await page.locator('#tab-online').click();
       await moduleCard(page, '#online-modules', '通往别处的窗户').getByRole('button', { name: '下载壁纸', exact: true }).click();
-      await page.waitForFunction(() => document.getElementById('transfer-progress').value === 50);
-      assert.equal(await page.locator('#transfer').isVisible(), true);
+      await page.waitForFunction(() => document.querySelector('#online-modules .task-progress')?.value === 50);
+      assert.equal(await page.locator('#download-filter').isVisible(), true);
       await page.locator('#tab-local').click();
       await page.getByRole('button', { name: '将松风镇应用到主显示器', exact: true }).click();
       await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
       await page.evaluate(() => window.__uiTest.finishOperation());
       await page.waitForFunction(() => document.getElementById('module-count').textContent === '03');
       assert.equal(await page.locator('#current-title').textContent(), '松风镇');
-      assert.equal(await page.locator('#transfer').isVisible(), false);
+      assert.equal(await page.locator('#download-filter').isVisible(), false);
+    });
+
+    await test('five downloads run together while later tasks queue and removal preserves order', parallelDownloads, async page => {
+      await page.locator('#tab-online').click();
+      const ids = await page.locator('#online-modules .download').evaluateAll(buttons => buttons.map(b => b.dataset.moduleId));
+      for (const id of ids.slice(0, 7)) {
+        const button = page.locator(`#online-modules .download[data-module-id="${id}"]`);
+        assert.equal(await button.isEnabled(), true, 'Other cards remain available during downloads');
+        await button.click();
+      }
+      await page.waitForFunction(() => window.__uiTest.state().downloads.length === 7);
+      const tasks = (await page.evaluate(() => window.__uiTest.state())).downloads;
+      assert.equal(tasks.filter(t => t.phase === 'downloading').length, 5);
+      assert.deepEqual(tasks.filter(t => t.phase === 'queued').map(t => [t.id, t.queue_position]), [[ids[5], 1], [ids[6], 2]]);
+      assert.match(await page.locator('#download-filter').textContent(), /下载中 5 · 等待 2/);
+      const queued = page.locator(`#online-modules [data-download-id="${ids[5]}"]`);
+      await queued.hover();
+      await queued.getByRole('button', { name: /移出队列/ }).click();
+      await page.waitForFunction(id => !window.__uiTest.state().downloads.some(t => t.id === id), ids[5]);
+      assert.match(await page.locator(`#online-modules [data-download-id="${ids[6]}"]`).textContent(), /第 1 项/);
+      assert.equal(await page.locator('#transfer').count(), 0, 'No independent transfer panel');
+      for (const [width, height] of [[1080, 760], [780, 600]]) {
+        await page.setViewportSize({ width, height });
+        await page.evaluate(() => scrollTo(0, 0));
+        const bounds = await page.evaluate(() => ({
+          task: document.querySelector('#online-modules .download-task').getBoundingClientRect().bottom,
+          player: document.querySelector('.current').getBoundingClientRect().top,
+        }));
+        assert.ok(bounds.task < bounds.player, `Progress and controls fit above playback at ${width}x${height}: ${JSON.stringify(bounds)}`);
+        await noHorizontalOverflow(page, `parallel downloads at ${width}x${height}`);
+        await screenshot(page, `parallel-downloads-${width}`);
+      }
+    });
+
+    await test('hover and keyboard cancellation preserve focus during progress and await worker shutdown', parallelDownloads, async page => {
+      await page.locator('#tab-online').click();
+      const ids = await page.locator('#online-modules .download').evaluateAll(buttons => buttons.map(b => b.dataset.moduleId));
+      for (const id of ids.slice(0, 6)) await page.locator(`#online-modules .download[data-module-id="${id}"]`).click();
+      const slot = page.locator(`#online-modules [data-download-id="${ids[0]}"]`);
+      const cancel = slot.getByRole('button', { name: /取消下载/ });
+      await page.mouse.move(0, 0);
+      await page.waitForFunction(id => getComputedStyle(document.querySelector(`#online-modules [data-download-id="${id}"] .task-action`)).opacity === '0', ids[0]);
+      await cancel.focus();
+      await page.waitForFunction(() => getComputedStyle(document.activeElement).opacity === '1');
+      await cancel.evaluate(button => { window.__focusedCancel = button; });
+      await page.evaluate(id => window.__uiTest.setDownload(id, { received: 9258, speed: 2048 }), ids[0]);
+      await page.waitForFunction(() => document.querySelector('#online-modules .task-progress').value === 75);
+      assert.equal(await cancel.evaluate(button => button === window.__focusedCancel && button === document.activeElement), true);
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(id => window.__uiTest.state().downloads.find(t => t.id === id).phase === 'cancelling', ids[0]);
+      assert.match(await slot.textContent(), /正在取消/);
+      assert.equal((await page.evaluate(() => window.__uiTest.state())).downloads.find(t => t.id === ids[5]).phase, 'queued');
+      await page.evaluate(id => window.__uiTest.finishCancellation(id), ids[0]);
+      await page.waitForFunction(id => document.querySelector(`#online-modules [data-download-id="${id}"]`)?.dataset.phase === 'downloading', ids[5]);
+      assert.equal((await page.evaluate(() => window.__uiTest.state())).downloads.filter(t => t.phase === 'downloading').length, 5);
+    });
+
+    await test('failed downloads retain their target and expose retry while other cards keep running', parallelDownloads, async page => {
+      await page.locator('#tab-online').click();
+      await page.locator('#online-modules .download[data-module-id="window-to-elsewhere"]').click();
+      await page.locator('#online-modules .download[data-module-id="scene-4"]').click();
+      await page.evaluate(() => {
+        window.__uiTest.failDownload('window-to-elsewhere', '连接中断，原壁纸已保留');
+        const items = window.__uiTest.state().online.catalog.wallpapers;
+        items.find(t => t.id === 'window-to-elsewhere').version = '2.0.0';
+        window.__uiTest.setCatalog(items);
+      });
+      const remote = moduleCard(page, '#online-modules', '通往别处的窗户');
+      const retry = remote.getByRole('button', { name: '重试通往别处的窗户', exact: true });
+      await visible(retry);
+      await page.mouse.move(0, 0);
+      assert.equal(await retry.evaluate(button => getComputedStyle(button).opacity), '1');
+      assert.match(await remote.textContent(), /连接中断，原壁纸已保留/);
+      assert.match(await remote.textContent(), /v1\.0\.0/);
+      assert.doesNotMatch(await remote.textContent(), /v2\.0\.0/);
+      assert.equal((await page.evaluate(() => window.__uiTest.state())).downloads.find(t => t.id === 'scene-4').phase, 'downloading');
+      await screenshot(page, 'download-failure');
+      await retry.click();
+      await page.waitForFunction(() => window.__uiTest.state().downloads.find(t => t.id === 'window-to-elsewhere').phase === 'downloading');
+      assert.equal((await page.evaluate(() => window.__uiTest.state())).downloads.find(t => t.id === 'window-to-elsewhere').item.version, '1.0.0');
+      await page.evaluate(() => window.__uiTest.failDownload('window-to-elsewhere'));
+      await visible(remote.getByRole('button', { name: '移除失败记录：通往别处的窗户', exact: true }));
+      await remote.hover();
+      await remote.getByRole('button', { name: '移除失败记录：通往别处的窗户', exact: true }).click();
+      await page.waitForFunction(() => document.querySelector('#online-modules [data-card-key="window-to-elsewhere"]').textContent.includes('v2.0.0'));
+    });
+
+    await test('the header filters the discovery grid and tasks survive a changed catalog', parallelDownloads, async page => {
+      await page.locator('#tab-online').click();
+      await page.locator('#online-modules .download[data-module-id="window-to-elsewhere"]').click();
+      await page.locator('#online-modules .download[data-module-id="scene-4"]').click();
+      await page.evaluate(() => {
+        window.__uiTest.failDownload('scene-4');
+        window.__uiTest.setCatalog([]);
+      });
+      await page.locator('#tab-local').click();
+      await page.locator('#download-filter').click();
+      assert.equal(await page.locator('#online-panel').isVisible(), true);
+      assert.equal(await page.locator('#download-filter').getAttribute('aria-pressed'), 'true');
+      await page.waitForFunction(() => document.querySelectorAll('#online-modules .module').length === 2);
+      await visible(moduleCard(page, '#online-modules', '通往别处的窗户'));
+      await visible(moduleCard(page, '#online-modules', '风景 4'));
+      assert.equal((await actions(page)).filter(c => c.command === 'check_online').length, 1, 'Filtering must not fetch another catalog');
+      await page.evaluate(() => window.__uiTest.completeDownload('window-to-elsewhere'));
+      await page.waitForFunction(() => document.querySelectorAll('#online-modules .module').length === 1);
+      await page.locator('#clear-download-filter').click();
+      assert.equal(await page.locator('#download-filter').getAttribute('aria-pressed'), 'false');
+      await page.locator('#tab-local').click();
+      assert.equal(await page.locator('#download-filter').getAttribute('aria-pressed'), 'false');
+    });
+
+    await test('100 percent waits for verified installation and completion never switches playback', fixture => {
+      fixture.deferInstall = true;
+    }, async page => {
+      await page.locator('#tab-online').click();
+      const remote = moduleCard(page, '#online-modules', '通往别处的窗户');
+      await remote.getByRole('button', { name: '下载壁纸', exact: true }).click();
+      for (const [phase, label] of [['verifying', '校验中'], ['waiting_install', '等待安装'], ['installing', '安装中']]) {
+        await page.evaluate(phase => window.__uiTest.setDownload('window-to-elsewhere', { phase, received: 12344 }), phase);
+        await page.waitForFunction(label => document.querySelector('#online-modules [data-download-id="window-to-elsewhere"] .task-label')?.textContent === label, label);
+        assert.equal(await remote.getByRole('button', { name: '应用壁纸', exact: true }).count(), 0);
+        assert.equal(await remote.locator('.task-action').isVisible(), false);
+        assert.equal(await page.locator('#current-title').textContent(), '水族箱');
+      }
+      await page.evaluate(() => window.__uiTest.completeDownload('window-to-elsewhere'));
+      await visible(remote.getByRole('button', { name: '应用壁纸', exact: true }));
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
+      assert.equal((await actions(page)).filter(c => c.command === 'apply_wallpaper').length, 0);
+      await remote.getByRole('button', { name: '应用壁纸', exact: true }).click();
+      await page.waitForFunction(() => document.getElementById('current-title').textContent === '通往别处的窗户');
     });
 
     await test('preview errors remain visible without changing playback or auto pause', fixture => {
@@ -739,7 +1031,7 @@ async function noHorizontalOverflow(page, label) {
         { command: 'install_online', args: { moduleId: 'window-to-elsewhere' } },
       ]);
       assert.deepEqual((await actions(page)).map(call => call.command), ['check_online', 'install_online']);
-      assert.equal(await remote.getByRole('button', { name: '已是最新', exact: true }).isDisabled(), true);
+      assert.equal(await remote.getByRole('button', { name: '应用壁纸', exact: true }).isEnabled(), true);
       await page.locator('#tab-local').click();
       const local = moduleCard(page, '#modules', '通往别处的窗户');
       await visible(local);
@@ -801,7 +1093,7 @@ async function noHorizontalOverflow(page, label) {
         'A stable release must update an installed prerelease with the same numeric version');
       assert.equal(await stable.getByRole('button', { name: '更新到 v1.0.0', exact: true }).isEnabled(), true);
       const sameBuild = moduleCard(page, '#online-modules', '松风镇');
-      assert.equal(await sameBuild.getByRole('button', { name: '已是最新', exact: true }).isDisabled(), true,
+      assert.equal(await sameBuild.getByRole('button', { name: '应用壁纸', exact: true }).isEnabled(), true,
         'Build metadata must not change version precedence');
       const incompatible = moduleCard(page, '#online-modules', '通往别处的窗户');
       assert.equal(await incompatible.getByRole('button', { name: '需要程序 0.2.0', exact: true }).isDisabled(), true,
@@ -838,14 +1130,14 @@ async function noHorizontalOverflow(page, label) {
       await visible(feed);
       assert.equal(await feed.isEnabled(), true);
       await feed.click();
-      await page.locator('#displays').selectOption('secondary');
+      await monitorChoice(page, 'secondary').click();
       await page.waitForFunction(() => document.getElementById('current-status').textContent === '遮挡，自动暂停');
       assert.equal(await feed.isEnabled(), true, 'Occlusion must allow queuing food before returning to the desktop');
       await feed.click();
       await moduleCard(page, '#modules', '松风镇').getByRole('button', { name: '应用壁纸', exact: true }).click();
       await page.waitForFunction(() => document.getElementById('feed-aquarium').hidden);
       assert.equal(await feed.isVisible(), false, 'Feeding must be hidden for other wallpaper modules');
-      await page.locator('#displays').selectOption('primary');
+      await monitorChoice(page, 'primary').click();
       await visible(feed);
       await page.locator('#pause').click();
       await page.waitForFunction(() => document.getElementById('feed-aquarium').disabled);

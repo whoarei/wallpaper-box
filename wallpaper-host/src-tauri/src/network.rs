@@ -70,46 +70,74 @@ pub fn github_client(settings: &ProxySettings) -> Result<Client, String> {
     release_client(settings, "github.com")
 }
 
-pub fn release_client(settings: &ProxySettings, host: &str) -> Result<Client, String> {
+fn release_redirects(host: &str) -> Result<Policy, String> {
     let gitee = match host {
         "gitee.com" => true,
         "github.com" => false,
         _ => return Err("不支持的壁纸仓库平台。".into()),
     };
+    Ok(Policy::custom(move |attempt| {
+        let url = attempt.url();
+        let allowed = if gitee {
+            matches!(url.host_str(), Some("gitee.com" | "foruda.gitee.com"))
+        } else {
+            matches!(
+                url.host_str(),
+                Some(
+                    "github.com"
+                        | "api.github.com"
+                        | "release-assets.githubusercontent.com"
+                        | "objects.githubusercontent.com"
+                        | "github-releases.githubusercontent.com"
+                )
+            )
+        };
+        if attempt.previous().len() > 6
+            || !allowed
+            || url.scheme() != "https"
+            || url.port().is_some()
+            || !url.username().is_empty()
+            || url.password().is_some()
+        {
+            attempt.error("Unexpected release download redirect")
+        } else {
+            attempt.follow()
+        }
+    }))
+}
+
+pub fn release_client(settings: &ProxySettings, host: &str) -> Result<Client, String> {
     configure(Client::builder(), settings)?
         .https_only(true)
         .http1_only()
         .user_agent(format!("WallpaperBox/{}", crate::catalog::APP_VERSION))
         .connect_timeout(Duration::from_secs(12))
         .timeout(Duration::from_secs(180))
-        .redirect(Policy::custom(move |attempt| {
-            let url = attempt.url();
-            let allowed = if gitee {
-                matches!(url.host_str(), Some("gitee.com" | "foruda.gitee.com"))
-            } else {
-                matches!(
-                    url.host_str(),
-                    Some(
-                        "github.com"
-                            | "api.github.com"
-                            | "release-assets.githubusercontent.com"
-                            | "objects.githubusercontent.com"
-                            | "github-releases.githubusercontent.com"
-                    )
-                )
-            };
-            if attempt.previous().len() > 6
-                || !allowed
-                || url.scheme() != "https"
-                || url.port().is_some()
-                || !url.username().is_empty()
-                || url.password().is_some()
-            {
-                attempt.error("Unexpected release download redirect")
-            } else {
-                attempt.follow()
-            }
-        }))
+        .redirect(release_redirects(host)?)
+        .build()
+        .map_err(|_| "无法初始化网络连接，请检查代理设置。".into())
+}
+
+pub fn async_release_client(
+    settings: &ProxySettings,
+    host: &str,
+) -> Result<reqwest::Client, String> {
+    let settings = settings.clone().normalized()?;
+    let builder = reqwest::Client::builder();
+    let builder = match settings.mode {
+        ProxyMode::System => builder,
+        ProxyMode::Direct => builder.no_proxy(),
+        ProxyMode::Manual => builder
+            .no_proxy()
+            .proxy(Proxy::all(&settings.url).map_err(|_| "无法配置代理，请检查地址和端口。")?),
+    };
+    builder
+        .https_only(true)
+        .http1_only()
+        .user_agent(format!("WallpaperBox/{}", crate::catalog::APP_VERSION))
+        .connect_timeout(Duration::from_secs(12))
+        .timeout(Duration::from_secs(180))
+        .redirect(release_redirects(host)?)
         .build()
         .map_err(|_| "无法初始化网络连接，请检查代理设置。".into())
 }
@@ -236,6 +264,29 @@ mod tests {
             .join()
             .unwrap()
             .starts_with("CONNECT github.com:443 HTTP/1.1\r\n"));
+    }
+
+    #[test]
+    fn asynchronous_downloads_use_the_manual_proxy() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let settings = manual(&format!("http://{}", listener.local_addr().unwrap()));
+        let request = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let headers = read_headers(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n")
+                .unwrap();
+            headers
+        });
+        let result = tauri::async_runtime::block_on(async {
+            let client = async_release_client(&settings, "gitee.com").unwrap();
+            client.get("https://gitee.com/test").send().await
+        });
+        assert!(result.is_err());
+        assert!(request
+            .join()
+            .unwrap()
+            .starts_with("CONNECT gitee.com:443 HTTP/1.1\r\n"));
     }
 
     #[test]

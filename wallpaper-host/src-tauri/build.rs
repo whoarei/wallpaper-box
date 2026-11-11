@@ -1,6 +1,7 @@
 fn main() {
     let commands = &[
         "get_state",
+        "open_about_link",
         "check_app_update",
         "download_app_update",
         "install_app_update",
@@ -22,6 +23,7 @@ fn main() {
         "show_desktop",
         "check_online",
         "install_online",
+        "download_action",
         "rollback_wallpaper",
         "import_wallpaper",
         "open_wallpaper_folder",
