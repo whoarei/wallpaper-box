@@ -54,7 +54,7 @@ function fixtures() {
   const modules = [module('aquarium', '水族箱'), module('pinewind-town', '松风镇')];
   const remote = (id, name, version) => ({ id, name, subtitle: 'OFFICIAL WALLPAPER',
     description: '由官方壁纸库提供，只按需下载这一张壁纸。', version, minAppVersion: '0.2.0',
-    entry: 'index.html', tags: [], size: 12345, unpackedSize: 54321,
+    entry: 'index.html', tags: [], size: 12344, unpackedSize: 54321,
     downloadUrl: `https://github.com/whoarei/wallpapers/releases/download/library-v1.1.0/${id}-${version}.zip`,
     sha256: 'a'.repeat(64), coverUrl: null });
   return {
@@ -66,7 +66,7 @@ function fixtures() {
       selected_monitor: 'primary', displays: [
         { id: 'primary', name: '主显示器', width: 3840, height: 2160, scale: 1.5 },
         { id: 'secondary', name: '副显示器', width: 1920, height: 1080, scale: 1 },
-      ], modules, warnings: [], transfer: null, last_error: null,
+      ], modules, warnings: [], downloads: [], last_error: null,
       wallpapers: [{ display_id: 'primary', module_id: 'aquarium', name: '水族箱',
         paused: false, auto_paused: false }],
       online: { catalog: null, checked_at: 0, cached: false, last_error: null },
@@ -74,10 +74,19 @@ function fixtures() {
   };
 }
 
+function parallelDownloads(fixture) {
+  fixture.deferInstall = true;
+  fixture.deferCancellation = true;
+  const template = fixture.catalog.wallpapers[2];
+  for (let i = 4; i <= 8; i++) {
+    fixture.catalog.wallpapers.push({ ...template, id: `scene-${i}`, name: `风景 ${i}` });
+  }
+}
+
 // This fixture owns native state. UI updates only through the production invoke
 // API and its ordinary one-second polling, matching a Tauri manager window.
 function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppCheck, failAppInstall,
-  failPreview, deferApply, deferInstall }) {
+  failPreview, deferApply, deferInstall, deferCancellation }) {
   const copy = value => JSON.parse(JSON.stringify(value));
   const calls = [];
   const previous = new Map();
@@ -89,8 +98,28 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
     state() { return copy(state); },
     setAppUpdate(patch) { Object.assign(state.app_update, copy(patch)); },
     finishOperation() { assertPendingOperation(); finishOperation(); finishOperation = null; },
+    setDownload(id, patch) { Object.assign(state.downloads.find(t => t.id === id), copy(patch)); },
+    setCatalog(items) { state.online.catalog.wallpapers = copy(items); },
+    completeDownload,
+    failDownload(id, error = '下载连接中断') { const task=state.downloads.find(t=>t.id===id);task.phase='failed';task.error=error;task.speed=0;pump(); },
+    finishCancellation(id) { state.downloads=state.downloads.filter(t=>t.id!==id);pump(); },
   };
   function assertPendingOperation() { if (!finishOperation) throw new Error('No pending fixture operation'); }
+  function pump() {
+    let active=state.downloads.filter(t=>!['queued','failed'].includes(t.phase)).length;
+    for(const task of state.downloads){if(task.phase==='queued'&&active<5){task.phase='downloading';active++;}}
+    let position=0;for(const task of state.downloads)task.queue_position=task.phase==='queued'?++position:null;
+  }
+  function installItem(item) {
+    const index=state.modules.findIndex(module=>module.id===item.id);
+    if(index>=0)previous.set(item.id,copy(state.modules[index]));
+    const installed={id:item.id,name:item.name,subtitle:item.subtitle,description:item.description,href:`/${item.id}/${item.entry}`,cover:null,tags:item.tags,version:item.version,source:'online',rollback_available:index>=0};
+    if(index>=0)state.modules[index]=installed;else state.modules.push(installed);
+  }
+  function completeDownload(id) {
+    const task=state.downloads.find(t=>t.id===id);if(!task)throw new Error('Missing download');
+    installItem(task.item);state.downloads=state.downloads.filter(t=>t.id!==id);pump();
+  }
   window.__TAURI__ = { core: { invoke: async (command, args = {}) => {
     calls.push({ command, args: copy(args) });
     switch (command) {
@@ -158,20 +187,21 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
           cached: false, last_error: null };
         return copy(state);
       case 'install_online': {
-        const item = state.online.catalog?.wallpapers.find(item => item.id === args.moduleId);
-        if (!item) throw new Error('Test IPC: unknown selected wallpaper');
-        if (deferInstall) {
-          state.transfer = { id: item.id, name: item.name, received: 1048576, total: 2097152 };
-          await new Promise(resolve => { finishOperation = resolve; });
-          state.transfer = null;
-        }
-        const index = state.modules.findIndex(module => module.id === item.id);
-        if (index >= 0) previous.set(item.id, copy(state.modules[index]));
-        const installed = { id: item.id, name: item.name, subtitle: item.subtitle,
-          description: item.description, href: `/${item.id}/${item.entry}`, cover: null,
-          tags: item.tags, version: item.version, source: 'online', rollback_available: index >= 0 };
-        if (index >= 0) state.modules[index] = installed; else state.modules.push(installed);
-        state.online.last_error = null;
+        if(state.downloads.some(t=>t.id===args.moduleId))return copy(state);
+        const item=state.online.catalog?.wallpapers.find(item=>item.id===args.moduleId);
+        if(!item)throw new Error('Test IPC: unknown selected wallpaper');
+        state.downloads.push({id:item.id,item:copy(item),phase:'queued',received:deferInstall?item.size/2:0,total:item.size,speed:1024,error:null,queue_position:null});pump();
+        if(deferInstall)finishOperation=()=>completeDownload(item.id);else completeDownload(item.id);
+        return copy(state);
+      }
+      case 'download_action': {
+        const task=state.downloads.find(t=>t.id===args.moduleId);if(!task)return copy(state);
+        if(args.action==='retry'){if(task.phase!=='failed')throw '无需重试';task.phase='queued';task.received=0;task.error=null;pump();}
+        else if(args.action==='cancel'){
+          if(task.phase==='installing')throw '正在安装，请稍后再试';
+          if(deferCancellation&&task.phase==='downloading')task.phase='cancelling';
+          else {state.downloads=state.downloads.filter(t=>t.id!==args.moduleId);pump();}
+        }else throw new Error('Unknown download action');
         return copy(state);
       }
       case 'apply_wallpaper': {
@@ -414,15 +444,145 @@ async function noHorizontalOverflow(page, label) {
     }, async page => {
       await page.locator('#tab-online').click();
       await moduleCard(page, '#online-modules', '通往别处的窗户').getByRole('button', { name: '下载壁纸', exact: true }).click();
-      await page.waitForFunction(() => document.getElementById('transfer-progress').value === 50);
-      assert.equal(await page.locator('#transfer').isVisible(), true);
+      await page.waitForFunction(() => document.querySelector('#online-modules .task-progress')?.value === 50);
+      assert.equal(await page.locator('#download-filter').isVisible(), true);
       await page.locator('#tab-local').click();
       await page.getByRole('button', { name: '将松风镇应用到主显示器', exact: true }).click();
       await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
       await page.evaluate(() => window.__uiTest.finishOperation());
       await page.waitForFunction(() => document.getElementById('module-count').textContent === '03');
       assert.equal(await page.locator('#current-title').textContent(), '松风镇');
-      assert.equal(await page.locator('#transfer').isVisible(), false);
+      assert.equal(await page.locator('#download-filter').isVisible(), false);
+    });
+
+    await test('five downloads run together while later tasks queue and removal preserves order', parallelDownloads, async page => {
+      await page.locator('#tab-online').click();
+      const ids = await page.locator('#online-modules .download').evaluateAll(buttons => buttons.map(b => b.dataset.moduleId));
+      for (const id of ids.slice(0, 7)) {
+        const button = page.locator(`#online-modules .download[data-module-id="${id}"]`);
+        assert.equal(await button.isEnabled(), true, 'Other cards remain available during downloads');
+        await button.click();
+      }
+      await page.waitForFunction(() => window.__uiTest.state().downloads.length === 7);
+      const tasks = (await page.evaluate(() => window.__uiTest.state())).downloads;
+      assert.equal(tasks.filter(t => t.phase === 'downloading').length, 5);
+      assert.deepEqual(tasks.filter(t => t.phase === 'queued').map(t => [t.id, t.queue_position]), [[ids[5], 1], [ids[6], 2]]);
+      assert.match(await page.locator('#download-filter').textContent(), /下载中 5 · 等待 2/);
+      const queued = page.locator(`#online-modules [data-download-id="${ids[5]}"]`);
+      await queued.hover();
+      await queued.getByRole('button', { name: /移出队列/ }).click();
+      await page.waitForFunction(id => !window.__uiTest.state().downloads.some(t => t.id === id), ids[5]);
+      assert.match(await page.locator(`#online-modules [data-download-id="${ids[6]}"]`).textContent(), /第 1 项/);
+      assert.equal(await page.locator('#transfer').count(), 0, 'No independent transfer panel');
+      for (const [width, height] of [[1080, 760], [780, 600]]) {
+        await page.setViewportSize({ width, height });
+        await page.evaluate(() => scrollTo(0, 0));
+        const bounds = await page.evaluate(() => ({
+          task: document.querySelector('#online-modules .download-task').getBoundingClientRect().bottom,
+          player: document.querySelector('.current').getBoundingClientRect().top,
+        }));
+        assert.ok(bounds.task < bounds.player, `Progress and controls fit above playback at ${width}x${height}: ${JSON.stringify(bounds)}`);
+        await noHorizontalOverflow(page, `parallel downloads at ${width}x${height}`);
+        await screenshot(page, `parallel-downloads-${width}`);
+      }
+    });
+
+    await test('hover and keyboard cancellation preserve focus during progress and await worker shutdown', parallelDownloads, async page => {
+      await page.locator('#tab-online').click();
+      const ids = await page.locator('#online-modules .download').evaluateAll(buttons => buttons.map(b => b.dataset.moduleId));
+      for (const id of ids.slice(0, 6)) await page.locator(`#online-modules .download[data-module-id="${id}"]`).click();
+      const slot = page.locator(`#online-modules [data-download-id="${ids[0]}"]`);
+      const cancel = slot.getByRole('button', { name: /取消下载/ });
+      await page.mouse.move(0, 0);
+      await page.waitForFunction(id => getComputedStyle(document.querySelector(`#online-modules [data-download-id="${id}"] .task-action`)).opacity === '0', ids[0]);
+      await cancel.focus();
+      await page.waitForFunction(() => getComputedStyle(document.activeElement).opacity === '1');
+      await cancel.evaluate(button => { window.__focusedCancel = button; });
+      await page.evaluate(id => window.__uiTest.setDownload(id, { received: 9258, speed: 2048 }), ids[0]);
+      await page.waitForFunction(() => document.querySelector('#online-modules .task-progress').value === 75);
+      assert.equal(await cancel.evaluate(button => button === window.__focusedCancel && button === document.activeElement), true);
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(id => window.__uiTest.state().downloads.find(t => t.id === id).phase === 'cancelling', ids[0]);
+      assert.match(await slot.textContent(), /正在取消/);
+      assert.equal((await page.evaluate(() => window.__uiTest.state())).downloads.find(t => t.id === ids[5]).phase, 'queued');
+      await page.evaluate(id => window.__uiTest.finishCancellation(id), ids[0]);
+      await page.waitForFunction(id => document.querySelector(`#online-modules [data-download-id="${id}"]`)?.dataset.phase === 'downloading', ids[5]);
+      assert.equal((await page.evaluate(() => window.__uiTest.state())).downloads.filter(t => t.phase === 'downloading').length, 5);
+    });
+
+    await test('failed downloads retain their target and expose retry while other cards keep running', parallelDownloads, async page => {
+      await page.locator('#tab-online').click();
+      await page.locator('#online-modules .download[data-module-id="window-to-elsewhere"]').click();
+      await page.locator('#online-modules .download[data-module-id="scene-4"]').click();
+      await page.evaluate(() => {
+        window.__uiTest.failDownload('window-to-elsewhere', '连接中断，原壁纸已保留');
+        const items = window.__uiTest.state().online.catalog.wallpapers;
+        items.find(t => t.id === 'window-to-elsewhere').version = '2.0.0';
+        window.__uiTest.setCatalog(items);
+      });
+      const remote = moduleCard(page, '#online-modules', '通往别处的窗户');
+      const retry = remote.getByRole('button', { name: '重试通往别处的窗户', exact: true });
+      await visible(retry);
+      await page.mouse.move(0, 0);
+      assert.equal(await retry.evaluate(button => getComputedStyle(button).opacity), '1');
+      assert.match(await remote.textContent(), /连接中断，原壁纸已保留/);
+      assert.match(await remote.textContent(), /v1\.0\.0/);
+      assert.doesNotMatch(await remote.textContent(), /v2\.0\.0/);
+      assert.equal((await page.evaluate(() => window.__uiTest.state())).downloads.find(t => t.id === 'scene-4').phase, 'downloading');
+      await screenshot(page, 'download-failure');
+      await retry.click();
+      await page.waitForFunction(() => window.__uiTest.state().downloads.find(t => t.id === 'window-to-elsewhere').phase === 'downloading');
+      assert.equal((await page.evaluate(() => window.__uiTest.state())).downloads.find(t => t.id === 'window-to-elsewhere').item.version, '1.0.0');
+      await page.evaluate(() => window.__uiTest.failDownload('window-to-elsewhere'));
+      await visible(remote.getByRole('button', { name: '移除失败记录：通往别处的窗户', exact: true }));
+      await remote.hover();
+      await remote.getByRole('button', { name: '移除失败记录：通往别处的窗户', exact: true }).click();
+      await page.waitForFunction(() => document.querySelector('#online-modules [data-card-key="window-to-elsewhere"]').textContent.includes('v2.0.0'));
+    });
+
+    await test('the header filters the discovery grid and tasks survive a changed catalog', parallelDownloads, async page => {
+      await page.locator('#tab-online').click();
+      await page.locator('#online-modules .download[data-module-id="window-to-elsewhere"]').click();
+      await page.locator('#online-modules .download[data-module-id="scene-4"]').click();
+      await page.evaluate(() => {
+        window.__uiTest.failDownload('scene-4');
+        window.__uiTest.setCatalog([]);
+      });
+      await page.locator('#tab-local').click();
+      await page.locator('#download-filter').click();
+      assert.equal(await page.locator('#online-panel').isVisible(), true);
+      assert.equal(await page.locator('#download-filter').getAttribute('aria-pressed'), 'true');
+      await page.waitForFunction(() => document.querySelectorAll('#online-modules .module').length === 2);
+      await visible(moduleCard(page, '#online-modules', '通往别处的窗户'));
+      await visible(moduleCard(page, '#online-modules', '风景 4'));
+      assert.equal((await actions(page)).filter(c => c.command === 'check_online').length, 1, 'Filtering must not fetch another catalog');
+      await page.evaluate(() => window.__uiTest.completeDownload('window-to-elsewhere'));
+      await page.waitForFunction(() => document.querySelectorAll('#online-modules .module').length === 1);
+      await page.locator('#clear-download-filter').click();
+      assert.equal(await page.locator('#download-filter').getAttribute('aria-pressed'), 'false');
+      await page.locator('#tab-local').click();
+      assert.equal(await page.locator('#download-filter').getAttribute('aria-pressed'), 'false');
+    });
+
+    await test('100 percent waits for verified installation and completion never switches playback', fixture => {
+      fixture.deferInstall = true;
+    }, async page => {
+      await page.locator('#tab-online').click();
+      const remote = moduleCard(page, '#online-modules', '通往别处的窗户');
+      await remote.getByRole('button', { name: '下载壁纸', exact: true }).click();
+      for (const [phase, label] of [['verifying', '校验中'], ['waiting_install', '等待安装'], ['installing', '安装中']]) {
+        await page.evaluate(phase => window.__uiTest.setDownload('window-to-elsewhere', { phase, received: 12344 }), phase);
+        await page.waitForFunction(label => document.querySelector('#online-modules [data-download-id="window-to-elsewhere"] .task-label')?.textContent === label, label);
+        assert.equal(await remote.getByRole('button', { name: '应用壁纸', exact: true }).count(), 0);
+        assert.equal(await remote.locator('.task-action').isVisible(), false);
+        assert.equal(await page.locator('#current-title').textContent(), '水族箱');
+      }
+      await page.evaluate(() => window.__uiTest.completeDownload('window-to-elsewhere'));
+      await visible(remote.getByRole('button', { name: '应用壁纸', exact: true }));
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
+      assert.equal((await actions(page)).filter(c => c.command === 'apply_wallpaper').length, 0);
+      await remote.getByRole('button', { name: '应用壁纸', exact: true }).click();
+      await page.waitForFunction(() => document.getElementById('current-title').textContent === '通往别处的窗户');
     });
 
     await test('preview errors remain visible without changing playback or auto pause', fixture => {
@@ -469,7 +629,7 @@ async function noHorizontalOverflow(page, label) {
         { command: 'install_online', args: { moduleId: 'window-to-elsewhere' } },
       ]);
       assert.deepEqual((await actions(page)).map(call => call.command), ['check_online', 'install_online']);
-      assert.equal(await remote.getByRole('button', { name: '已是最新', exact: true }).isDisabled(), true);
+      assert.equal(await remote.getByRole('button', { name: '应用壁纸', exact: true }).isEnabled(), true);
       await page.locator('#tab-local').click();
       const local = moduleCard(page, '#modules', '通往别处的窗户');
       await visible(local);
@@ -531,7 +691,7 @@ async function noHorizontalOverflow(page, label) {
         'A stable release must update an installed prerelease with the same numeric version');
       assert.equal(await stable.getByRole('button', { name: '更新到 v1.0.0', exact: true }).isEnabled(), true);
       const sameBuild = moduleCard(page, '#online-modules', '松风镇');
-      assert.equal(await sameBuild.getByRole('button', { name: '已是最新', exact: true }).isDisabled(), true,
+      assert.equal(await sameBuild.getByRole('button', { name: '应用壁纸', exact: true }).isEnabled(), true,
         'Build metadata must not change version precedence');
       const incompatible = moduleCard(page, '#online-modules', '通往别处的窗户');
       assert.equal(await incompatible.getByRole('button', { name: '需要程序 0.2.0', exact: true }).isDisabled(), true,

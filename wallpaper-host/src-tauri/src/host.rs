@@ -1,4 +1,5 @@
 mod commands;
+mod download_workers;
 use crate::{
     catalog::{self, Module},
     desktop::{self, Attachment, Display},
@@ -10,7 +11,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Mutex,
+        Arc, Mutex,
     },
     time::Duration,
 };
@@ -66,7 +67,6 @@ struct Data {
     modules: Vec<Module>,
     online: crate::online::State,
     warnings: Vec<String>,
-    transfer: Option<Transfer>,
     resource_scopes: BTreeMap<String, String>,
     last_error: Option<String>,
     running: BTreeMap<String, Running>,
@@ -75,17 +75,23 @@ pub struct Host {
     data: Mutex<Data>,
     operations: Mutex<()>,
     updates: Mutex<()>,
+    catalog_check: Mutex<()>,
+    downloads: Arc<crate::download_queue::Queue<crate::online::RemoteWallpaper>>,
     library: catalog::Library,
     dir: PathBuf,
     exiting: AtomicBool,
 }
 
 #[derive(Clone, Serialize)]
-struct Transfer {
+struct DownloadView {
     id: String,
-    name: String,
+    item: crate::online::RemoteWallpaper,
+    phase: &'static str,
     received: u64,
     total: u64,
+    speed: u64,
+    error: Option<String>,
+    queue_position: Option<usize>,
 }
 
 #[derive(Serialize)]
@@ -108,7 +114,7 @@ pub struct View {
     online_repository: &'static str,
     user_directory: String,
     warnings: Vec<String>,
-    transfer: Option<Transfer>,
+    downloads: Vec<DownloadView>,
     selected_monitor: String,
     displays: Vec<Display>,
     modules: Vec<Module>,
@@ -176,6 +182,21 @@ fn show_manager(app: &AppHandle) {
 
 fn snapshot(app: &AppHandle) -> View {
     let host = app.state::<Host>();
+    let downloads = host
+        .downloads
+        .snapshot()
+        .into_iter()
+        .map(|task| DownloadView {
+            id: task.id,
+            item: task.item,
+            phase: task.phase.as_str(),
+            received: task.received,
+            total: task.total,
+            speed: task.speed,
+            error: task.error,
+            queue_position: task.queue_position,
+        })
+        .collect();
     let data = host.data.lock().unwrap();
     let wallpapers = data
         .running
@@ -210,7 +231,7 @@ fn snapshot(app: &AppHandle) -> View {
         online_repository: crate::online::REPOSITORY,
         user_directory: display_path(&host.library.user.join("local")),
         warnings: data.warnings.clone(),
-        transfer: data.transfer.clone(),
+        downloads,
         selected_monitor: data.settings.selected_monitor.clone(),
         displays: desktop::displays(),
         modules: data.modules.clone(),
@@ -641,6 +662,7 @@ fn feed_aquarium(app: &AppHandle, monitor_id: &str) -> Result<(), String> {
 }
 fn quit(app: &AppHandle) {
     app.state::<Host>().exiting.store(true, Ordering::SeqCst);
+    app.state::<Host>().downloads.close();
     if let Some(listener) = app.try_state::<crate::desktop_input::Listener>() {
         listener.stop();
     }
@@ -1106,6 +1128,7 @@ pub fn run() {
             commands::show_desktop,
             commands::check_online,
             commands::install_online,
+            commands::download_action,
             commands::rollback_wallpaper,
             commands::import_wallpaper,
             commands::open_wallpaper_folder,
@@ -1141,18 +1164,20 @@ pub fn run() {
                     modules: vec![],
                     online,
                     warnings: vec![],
-                    transfer: None,
                     resource_scopes: BTreeMap::new(),
                     last_error: None,
                     running: BTreeMap::new(),
                 }),
                 operations: Mutex::new(()),
                 updates: Mutex::new(()),
+                catalog_check: Mutex::new(()),
+                downloads: Arc::default(),
                 library,
                 dir,
                 exiting: AtomicBool::new(false),
             });
             let handle = app.handle().clone();
+            download_workers::start(&handle);
             TrayIconBuilder::with_id("screen-garden")
                 .icon(tray_image())
                 .tooltip("壁纸盒子 · 右键切换壁纸")

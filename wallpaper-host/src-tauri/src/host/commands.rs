@@ -7,7 +7,7 @@ fn manager(window: &WebviewWindow) -> Result<(), String> {
     }
     Ok(())
 }
-fn reload(app: &AppHandle, id: &str) {
+pub(super) fn reload(app: &AppHandle, id: &str) {
     let host = app.state::<Host>();
     let _operation = host.operations.lock().unwrap();
     let connected: Vec<_> = desktop::displays().into_iter().map(|d| d.id).collect();
@@ -246,7 +246,7 @@ pub async fn check_online(app: AppHandle, window: WebviewWindow) -> Result<View,
     tauri::async_runtime::spawn_blocking(move || {
         let host = app.state::<Host>();
         let _update = host
-            .updates
+            .catalog_check
             .try_lock()
             .map_err(|_| "正在处理壁纸，请稍后再试。")?;
         match crate::online::check(&host.dir) {
@@ -272,10 +272,6 @@ pub async fn install_online(
     manager(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         let host = app.state::<Host>();
-        let _update = host
-            .updates
-            .try_lock()
-            .map_err(|_| "正在处理壁纸，请稍后再试。")?;
         let item = host
             .data
             .lock()
@@ -286,35 +282,32 @@ pub async fn install_online(
             .and_then(|c| c.wallpapers.iter().find(|m| m.id == module_id))
             .cloned()
             .ok_or("请先检查在线壁纸清单。")?;
-        host.data.lock().unwrap().transfer = Some(Transfer {
-            id: item.id.clone(),
-            name: item.name.clone(),
-            received: 0,
-            total: item.size,
-        });
-        let result = crate::online::install(&host.library, &item, |received, total| {
-            if let Some(transfer) = host.data.lock().unwrap().transfer.as_mut() {
-                transfer.received = received;
-                transfer.total = total;
-            }
-        });
-        host.data.lock().unwrap().transfer = None;
-        if let Err(message) = result {
-            host.data.lock().unwrap().online.last_error = Some(message.clone());
-            return Err(message);
+        crate::online::validate_wallpaper(&item)?;
+        if !item.compatible() {
+            return Err(format!("请先升级壁纸盒子到 {}。", item.min_app_version));
         }
-        host.data.lock().unwrap().online.last_error = None;
-        log(
-            &app,
-            &format!(
-                "Installed {} {}: {:?}",
-                item.id,
-                item.version,
-                host.library.active_path(&item.id)
-            ),
-        );
-        refresh(&app)?;
-        reload(&app, &module_id);
+        host.downloads
+            .enqueue(item.id.clone(), item.clone(), item.size)?;
+        Ok(snapshot(&app))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+pub async fn download_action(
+    app: AppHandle,
+    window: WebviewWindow,
+    module_id: String,
+    action: String,
+) -> Result<View, String> {
+    manager(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        match action.as_str() {
+            "cancel" => host.downloads.cancel(&module_id)?,
+            "retry" => host.downloads.retry(&module_id)?,
+            _ => return Err("未知下载操作。".into()),
+        }
         Ok(snapshot(&app))
     })
     .await
@@ -333,6 +326,14 @@ pub async fn rollback_wallpaper(
             .updates
             .try_lock()
             .map_err(|_| "正在处理壁纸，请稍后再试。")?;
+        if host
+            .downloads
+            .snapshot()
+            .iter()
+            .any(|task| task.id == module_id && task.phase != crate::download_queue::Phase::Failed)
+        {
+            return Err("请先取消这张壁纸的下载，再切换版本。".into());
+        }
         host.library.rollback(&module_id)?;
         refresh(&app)?;
         reload(&app, &module_id);
