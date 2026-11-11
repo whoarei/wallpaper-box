@@ -121,6 +121,17 @@ pub async fn apply_wallpaper(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
+pub async fn preview_wallpaper(
+    app: AppHandle,
+    window: WebviewWindow,
+    module_id: String,
+) -> Result<(), String> {
+    manager(&window)?;
+    tauri::async_runtime::spawn_blocking(move || preview(&app, &module_id))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
 pub async fn pause_wallpaper(
     app: AppHandle,
     window: WebviewWindow,

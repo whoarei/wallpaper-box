@@ -244,6 +244,56 @@ fn refresh(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+fn preview(app: &AppHandle, module_id: &str) -> Result<(), String> {
+    let host = app.state::<Host>();
+    let _operation = host.operations.lock().unwrap();
+    let module = host
+        .data
+        .lock()
+        .unwrap()
+        .modules
+        .iter()
+        .find(|module| module.id == module_id)
+        .cloned()
+        .ok_or("该壁纸已移除，请刷新列表。")?;
+    let url = format!("{}{}", catalog::ORIGIN, module.href)
+        .parse()
+        .map_err(|error| format!("壁纸地址错误：{error}"))?;
+    let profile = host.dir.join("webview").join("preview");
+    fs::create_dir_all(&profile).map_err(|error| error.to_string())?;
+    // Only one live preview is needed. It never enters the desktop assignments
+    // or running surfaces, and receives no manager IPC capability.
+    for (label, window) in app.webview_windows() {
+        if label.starts_with("preview-") {
+            window.destroy().map_err(|error| error.to_string())?;
+        }
+    }
+    let label = format!("preview-{}", NEXT_SURFACE.fetch_add(1, Ordering::Relaxed));
+    host.data
+        .lock()
+        .unwrap()
+        .resource_scopes
+        .insert(label.clone(), module_id.into());
+    let result = WebviewWindowBuilder::new(app, &label, WebviewUrl::CustomProtocol(url))
+        .title(format!("预览 · {}", module.name))
+        .inner_size(960.0, 600.0)
+        .min_inner_size(640.0, 400.0)
+        .center()
+        .data_directory(profile)
+        .on_navigation(|url| {
+            url.scheme() == "http"
+                && url.host_str() == Some("wallpaper.localhost")
+                && url.port().is_none()
+        })
+        .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
+        .build();
+    if let Err(error) = result {
+        host.data.lock().unwrap().resource_scopes.remove(&label);
+        return Err(format!("打开预览失败：{error}"));
+    }
+    Ok(())
+}
+
 fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(), String> {
     let display = desktop::displays()
         .into_iter()
@@ -1045,6 +1095,7 @@ pub fn run() {
             commands::refresh_modules,
             commands::select_monitor,
             commands::apply_wallpaper,
+            commands::preview_wallpaper,
             commands::pause_wallpaper,
             commands::feed_aquarium,
             commands::remove_wallpaper,
@@ -1154,6 +1205,15 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label().starts_with("preview-") && matches!(event, WindowEvent::Destroyed) {
+                if let Some(host) = window.app_handle().try_state::<Host>() {
+                    host.data
+                        .lock()
+                        .unwrap()
+                        .resource_scopes
+                        .remove(window.label());
+                }
+            }
             if window.label() == "manager" {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();

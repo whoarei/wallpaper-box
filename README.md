@@ -7,9 +7,11 @@ Windows 动态壁纸程序，支持显示器选择、壁纸切换、系统托盘
 从 [GitHub Releases](https://github.com/whoarei/wallpaper-box/releases) 下载 Windows x64 NSIS 安装程序。0.3.1 起仅发布安装版。
 
 1. 安装后运行 `wallpaper-box.exe`。运行依赖 WebView2；安装程序在缺少运行时时下载 Microsoft 运行时。
-2. 首次启动在主显示器播放水族箱。选择显示器，再从“我的壁纸”切换场景。
+2. 首次启动在主显示器播放水族箱。从右上角下拉框选择显示器，点击“我的壁纸”的封面即可应用；“预览”在独立窗口播放，不改变当前桌面。
 3. 左键托盘图标打开管理窗口，右键快速切换、暂停或退出。关闭管理窗口会收起到托盘。
-4. 在“在线壁纸”点击“检查更新”，再选择某张壁纸的“下载 / 更新”。检查只获取清单和封面，ZIP 按选择逐项下载，不会自动下载全库。
+4. 在“发现”点击“刷新壁纸库”，再选择某张壁纸的“下载 / 更新”。检查只获取清单和封面，ZIP 按选择逐项下载，不会自动下载全库。
+
+管理界面以壁纸列表为主，暂停和投喂集中在底部播放栏。“更多播放操作”提供查看桌面、保存预览、重新加载和关闭当前屏幕壁纸；“导入壁纸”统一提供文件夹和 ZIP 两种选择。自动暂停、壁纸目录、重新扫描和程序更新位于右上角“设置”。新版就绪只显示提示，由用户打开设置并确认重启升级。
 
 水族箱投喂：直接左键单击水族箱所在屏幕的桌面空白水面，鱼食会出现在点击位置。也可选择正在播放水族箱的显示器，点击管理窗口或托盘菜单的“投喂鱼儿”。手动暂停时先点“继续”；遮挡导致的自动暂停允许先投喂，回到桌面后鱼儿继续进食。管理窗口的投喂入口会提示加载中、页面自身暂停或饱食等情况。
 
@@ -97,6 +99,8 @@ cargo test --locked --release --features custom-protocol --manifest-path wallpap
 只构建开发用 EXE 可运行 `wallpaper-host/build.ps1`。文档可编辑源为 `display-service/docs/architecture-source.cjs`，生成 spec 后使用 `rtd-html-docs` 的 `render.mjs` 更新 HTML。真实设备验收和云端发布结果应以对应版本的发版记录为准。
 
 ## 主程序发布
+
+项目发布 skill：[wallpaper-box-release](.agents/skills/wallpaper-box-release/SKILL.md)。发布前须核对清单、锁文件、随包说明和发布标签，并由用户明确确认本次目标版本；示例中的版本号不能直接作为发布指令。
 
 CI 固定工具链、依赖锁文件和 Action 提交，检查版本、JavaScript、Rust 格式与测试，再生成 NSIS 安装包及更新元数据。main、PR 与手动运行只上传 Actions Artifact；推送 `vX.Y.Z` 标签触发 Release。
 

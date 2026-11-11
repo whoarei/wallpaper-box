@@ -7,6 +7,7 @@ fn main() {
         "refresh_modules",
         "select_monitor",
         "apply_wallpaper",
+        "preview_wallpaper",
         "pause_wallpaper",
         "feed_aquarium",
         "remove_wallpaper",
