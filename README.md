@@ -104,7 +104,7 @@ cargo test --locked --release --features custom-protocol --manifest-path wallpap
 
 ## 主程序发布
 
-项目发布 skill：[wallpaper-box-release](.agents/skills/wallpaper-box-release/SKILL.md)。发布前须核对清单、锁文件、随包说明和发布标签，并由用户明确确认本次目标版本；示例中的版本号不能直接作为发布指令。
+项目发布 skill：[wallpaper-box-release](.agents/skills/wallpaper-box-release/SKILL.md)。先展示修改点，再提供补丁、次版本和主版本三个实际版本选项，推荐项排第一。用户选择后才修改版本文件并执行本次已授权的发布，不再追加文字确认；示例版本、预选推荐项或跳过问题均不构成版本选择。
 
 CI 固定工具链、依赖锁文件和 Action 提交，检查版本、JavaScript、Rust 格式与测试，再生成 NSIS 安装包及更新元数据。main、PR 与手动运行只上传 Actions Artifact；推送 `vX.Y.Z` 标签触发 Release。
 
