@@ -22,6 +22,26 @@
     else{document.dispatchEvent(new Event('visibilitychange'));for(const id of pending.keys())schedule(id);}
     document.documentElement.dataset.wallpaperPaused=String(paused);
   };
+  // The native host has already checked desktop/Explorer hit testing, drag
+  // distance and manual pause. Normalized coordinates handle every monitor DPI.
+  window.__SCREEN_GARDEN_DESKTOP_CLICK = (u,v) => {
+    if(!Number.isFinite(u)||!Number.isFinite(v)||u<0||u>=1||v<0||v>=1||document.readyState==='loading')return {delivered:false};
+    const x=Math.floor(u*innerWidth),y=Math.floor(v*innerHeight),target=document.elementFromPoint(x,y);
+    if(!target)return {delivered:false};
+    const before=window.aquarium?.getState?.().totalFed;
+    const options={bubbles:true,cancelable:true,composed:true,view:window,clientX:x,clientY:y,button:0,detail:1};
+    try {
+      target.dispatchEvent(new PointerEvent('pointerdown',{...options,buttons:1,pointerId:1,pointerType:'mouse',isPrimary:true}));
+      target.dispatchEvent(new MouseEvent('mousedown',{...options,buttons:1}));
+      target.dispatchEvent(new PointerEvent('pointerup',{...options,buttons:0,pointerId:1,pointerType:'mouse',isPrimary:true}));
+      target.dispatchEvent(new MouseEvent('mouseup',{...options,buttons:0}));
+      if(!target.isConnected)return {delivered:false};
+      target.dispatchEvent(new MouseEvent('click',{...options,buttons:0}));
+      const reply={delivered:true,x,y};
+      if(before!==undefined){const after=window.aquarium.getState();reply.added=after.totalFed-before;reply.totalFed=after.totalFed;reply.foods=after.foods;}
+      return reply;
+    }catch{return {delivered:false};}
+  };
   function wallpaperStyle() {
     const style=document.createElement('style');
     style.textContent='.hud,.overlay,.toast,.help-panel,.pause-badge{display:none!important}html,body{cursor:default!important}';

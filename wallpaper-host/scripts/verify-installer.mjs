@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {installerName, stableVersion} from './update-signatures.mjs';
-import {normalizeTauriExe} from './installer-payload.mjs';
+import {normalizeTauriExe, verifyInstallerPaths} from './installer-payload.mjs';
 
 assert.ok(process.argv[2], 'Usage: node verify-installer.mjs <release-directory> [7z.exe]');
 const directory = path.resolve(process.argv[2]);
@@ -30,9 +30,5 @@ for (const file of manifest.installerFiles) {
   }
   assert.equal(createHash('sha256').update(bytes).digest('hex'), file.sha256, `Installer payload checksum differs: ${file.path}`);
 }
-const helpers = new Set(['System.dll','modern-wizard.bmp','nsDialogs.dll','nsis_tauri_utils.dll','StartMenu.dll','NSISdl.dll'].map(name => '$pluginsdir/' + name.toLowerCase()));
-for (const value of listedPaths) {
-  if (value === installer.replaceAll('\\','/') || unique.has(value.toLowerCase()) || helpers.has(value.toLowerCase())) continue;
-  assert.fail(`Unlisted installer payload: ${value}`);
-}
+verifyInstallerPaths(listedPaths, installer, [...unique]);
 console.log(`Installer payload verified: ${unique.size} files; only the Tauri EXE UNK/NSS marker normalized.`);

@@ -200,6 +200,44 @@ function assertOnePortion({ before, reply, after }) {
         'A meal rejected by the real handler must not be acknowledged as successful');
     });
 
+    await test('desktop clicks feed at the original screen position with a complete pointer sequence', true, async page => {
+      const result = await page.evaluate(() => {
+        const canvas = document.getElementById('aquarium'), events = [];
+        for (const type of ['pointerdown','mousedown','pointerup','mouseup','click']) canvas.addEventListener(type, event => events.push({type, x:event.clientX, y:event.clientY, buttons:event.buttons}));
+        const before = window.aquarium.getState(), focused = document.activeElement;
+        const reply = window.__SCREEN_GARDEN_DESKTOP_CLICK(0.72, 0.36);
+        return {reply, before, after:window.aquarium.getState(), events, width:innerWidth, height:innerHeight, focusPreserved:focused===document.activeElement};
+      });
+      assert.equal(result.reply.delivered, true);
+      assert.equal(result.reply.added, 7);
+      assert.equal(result.after.totalFed, result.before.totalFed + 7);
+      assert.deepEqual(result.events.map(event=>event.type), ['pointerdown','mousedown','pointerup','mouseup','click']);
+      assert.deepEqual(result.events.map(event=>event.buttons), [1,1,0,0,0]);
+      for(const event of result.events){assert.equal(event.x,Math.floor(result.width*0.72));assert.equal(event.y,Math.floor(result.height*0.36));}
+      assert.equal(result.focusPreserved, true);
+      await advanceUntilEaten(page, result.before.eaten);
+    });
+
+    await test('desktop input rejects out-of-screen points and can queue food during occlusion', true, async page => {
+      const result = await page.evaluate(() => {
+        const before=window.aquarium.getState();
+        const bad=[[-0.01,0.5],[1,0.5],[0.5,1],[NaN,0.5],[Infinity,0.5],['0.5',0.5]].map(([x,y])=>window.__SCREEN_GARDEN_DESKTOP_CLICK(x,y));
+        const rejected=window.aquarium.getState();
+        window.__SCREEN_GARDEN_SET_PAUSED(true);
+        const queued=window.__SCREEN_GARDEN_DESKTOP_CLICK(0.25,0.4);
+        return {before,bad,rejected,queued,after:window.aquarium.getState()};
+      });
+      assert.ok(result.bad.every(reply=>reply.delivered===false));
+      assert.equal(result.rejected.totalFed,result.before.totalFed);
+      assert.equal(result.queued.added,7);
+      await page.clock.runFor(1000);
+      const frozen=await aquariumState(page);
+      assert.equal(frozen.frames,result.after.frames);
+      assert.equal(frozen.foods,result.after.foods);
+      await page.evaluate(()=>window.__SCREEN_GARDEN_SET_PAUSED(false));
+      await advanceUntilEaten(page,result.before.eaten);
+    });
+
     console.log(`\n${passed} real aquarium regressions passed; zero JavaScript errors; zero external requests.`);
   } finally {
     if (browser) await browser.close();

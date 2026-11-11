@@ -3,6 +3,7 @@
 mod app_updates;
 mod catalog;
 mod desktop;
+mod desktop_input;
 mod host;
 mod online;
 mod packages;

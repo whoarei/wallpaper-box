@@ -9,7 +9,7 @@ use std::{
     fs,
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Mutex,
     },
     time::Duration,
@@ -22,6 +22,7 @@ use tauri::{
 
 const WALLPAPER_SCRIPT: &str = include_str!("../wallpaper-mode.js");
 const AQUARIUM_FEED_SCRIPT: &str = include_str!("../aquarium-feed.js");
+static NEXT_SURFACE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct Selection {
@@ -51,6 +52,8 @@ impl Default for Settings {
 
 #[derive(Clone, Debug)]
 struct Running {
+    generation: u64,
+    desktop_clicks: u64,
     label: String,
     module_root: PathBuf,
     proof: Attachment,
@@ -91,6 +94,7 @@ pub struct WallpaperView {
     name: String,
     paused: bool,
     auto_paused: bool,
+    desktop_clicks: u64,
     proof: Attachment,
 }
 #[derive(Serialize)]
@@ -190,6 +194,7 @@ fn snapshot(app: &AppHandle) -> View {
                 name,
                 paused: selection.paused,
                 auto_paused: running.auto_paused,
+                desktop_clicks: running.desktop_clicks,
                 proof,
             })
         })
@@ -320,6 +325,8 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
         data.running.insert(
             monitor_id.into(),
             Running {
+                generation: NEXT_SURFACE.fetch_add(1, Ordering::Relaxed),
+                desktop_clicks: 0,
                 label: window_label,
                 module_root: module.root.clone(),
                 proof: proof.clone(),
@@ -345,6 +352,113 @@ fn apply(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(), Strin
     let host = app.state::<Host>();
     let _operation = host.operations.lock().unwrap();
     apply_inner(app, monitor_id, module_id)
+}
+fn input_surfaces(app: &AppHandle) -> Vec<crate::desktop_input::Surface> {
+    let Some(host) = app.try_state::<Host>() else {
+        return vec![];
+    };
+    if host.exiting.load(Ordering::Acquire) {
+        return vec![];
+    }
+    let candidates: Vec<_> = {
+        let data = host.data.lock().unwrap();
+        data.running
+            .iter()
+            .filter_map(|(id, running)| {
+                if data.settings.assignments.get(id)?.paused {
+                    return None;
+                }
+                Some((running.generation, running.proof.hwnd as isize))
+            })
+            .collect()
+    };
+    candidates
+        .into_iter()
+        .filter_map(|(generation, hwnd)| {
+            let proof = desktop::inspect(hwnd);
+            if !proof.attached {
+                return None;
+            }
+            Some(crate::desktop_input::Surface {
+                generation,
+                hwnd,
+                x: proof.x,
+                y: proof.y,
+                width: proof.width,
+                height: proof.height,
+            })
+        })
+        .collect()
+}
+fn relay_desktop_click(app: &AppHandle, click: crate::desktop_input::Click) {
+    let Some(host) = app.try_state::<Host>() else {
+        return;
+    };
+    let Ok(_operation) = host.operations.try_lock() else {
+        return;
+    };
+    if !input_surfaces(app).contains(&click.surface) {
+        return;
+    }
+    let (display_id, module_id, window_label) = {
+        let data = host.data.lock().unwrap();
+        let Some((id, running)) = data
+            .running
+            .iter()
+            .find(|(_, running)| running.generation == click.surface.generation)
+        else {
+            return;
+        };
+        let Some(selection) = data.settings.assignments.get(id) else {
+            return;
+        };
+        (
+            id.clone(),
+            selection.module_id.clone(),
+            running.label.clone(),
+        )
+    };
+    let Some(window) = app.get_webview_window(&window_label) else {
+        return;
+    };
+    let script = format!(
+        "window.__SCREEN_GARDEN_DESKTOP_CLICK?.({}, {})",
+        click.x, click.y
+    );
+    let handle = app.clone();
+    let result = window.eval_with_callback(script, move |reply| {
+        let Ok(receipt) = serde_json::from_str::<serde_json::Value>(&reply) else {
+            return;
+        };
+        if receipt.get("delivered").and_then(|v| v.as_bool()) != Some(true) {
+            return;
+        }
+        let Some(host) = handle.try_state::<Host>() else {
+            return;
+        };
+        let matched = {
+            let mut data = host.data.lock().unwrap();
+            if let Some(running) = data
+                .running
+                .get_mut(&display_id)
+                .filter(|r| r.generation == click.surface.generation)
+            {
+                running.desktop_clicks += 1;
+                true
+            } else {
+                false
+            }
+        };
+        if matched {
+            log(
+                &handle,
+                &format!("Desktop click {module_id} on {display_id}: {receipt}"),
+            );
+        }
+    });
+    if let Err(message) = result {
+        log(app, &format!("Desktop click delivery: {message}"));
+    }
 }
 fn remove(app: &AppHandle, monitor_id: &str) {
     let host = app.state::<Host>();
@@ -473,6 +587,9 @@ fn feed_aquarium(app: &AppHandle, monitor_id: &str) -> Result<(), String> {
 }
 fn quit(app: &AppHandle) {
     app.state::<Host>().exiting.store(true, Ordering::SeqCst);
+    if let Some(listener) = app.try_state::<crate::desktop_input::Listener>() {
+        listener.stop();
+    }
     for (label, window) in app.webview_windows() {
         if label.starts_with("wallpaper-") {
             let _ = window.destroy();
@@ -1008,6 +1125,18 @@ pub fn run() {
                 ),
             );
             std::thread::spawn(move || maintenance(handle, first));
+            let input_app = app.handle().clone();
+            let click_app = app.handle().clone();
+            match crate::desktop_input::start(
+                move || input_surfaces(&input_app),
+                move |click| relay_desktop_click(&click_app, click),
+            ) {
+                Ok(listener) => {
+                    app.manage(listener);
+                    log(app.handle(), "Desktop blank-click relay started");
+                }
+                Err(message) => log(app.handle(), &message),
+            }
             crate::app_updates::start(app.handle().clone());
             Ok(())
         })

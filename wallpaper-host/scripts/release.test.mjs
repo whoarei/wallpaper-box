@@ -6,7 +6,18 @@ import path from 'node:path';
 import {test} from 'node:test';
 import {createUpdateManifest} from './create-update-manifest.mjs';
 import {hostRoot, installerName, verifyMinisign, verifyUpdateDirectory} from './update-signatures.mjs';
-import {normalizeTauriExe, normalizedExeHash} from './installer-payload.mjs';
+import {normalizeTauriExe, normalizedExeHash, verifyInstallerPaths} from './installer-payload.mjs';
+
+test('NSIS-generated root uninstaller is allowed without allowing extra executables', () => {
+  const archive = 'C:/release/setup.exe', payload = ['wallpaper-box.exe', 'docs/architecture.html'];
+  const listed = [archive, '$PLUGINSDIR/System.dll', ...payload];
+  verifyInstallerPaths(listed, archive, payload);
+  verifyInstallerPaths([...listed, 'uninstall.exe'], archive, payload);
+  for (const extra of ['assets/uninstall.exe', '$PLUGINSDIR/uninstall.exe', 'other.exe', 'other.dll', 'portable.flag']) {
+    assert.throws(() => verifyInstallerPaths([...listed, extra], archive, payload), /Unlisted installer payload/);
+  }
+  assert.throws(() => verifyInstallerPaths([...listed, 'uninstall.exe', 'UNINSTALL.EXE'], archive, payload), /Duplicate installer path/);
+});
 
 test('installer payload normalization changes only supported Tauri bundle markers', () => {
   const base = Buffer.from('MZ-before__TAURI_BUNDLE_TYPE_VAR_UNK-between__TAURI_BUNDLE_TYPE_VAR_UNK-after');

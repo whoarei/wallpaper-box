@@ -1,6 +1,6 @@
 [package]
 name = "screen-garden"
-version = "0.3.0"
+version = "0.3.1"
 description = "Wallpaper Box desktop wallpaper host"
 edition = "2021"
 default-run = "wallpaper-box"
@@ -27,9 +27,9 @@ zip = { version = "=9.5.0", default-features = false, features = ["deflate-flate
 sha2 = "0.10"
 semver = "1"
 percent-encoding = "2"
-windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_UI_HiDpi", "Win32_System_Threading"] }
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_UI_HiDpi", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_LibraryLoader", "Win32_System_Threading"] }
 png = "0.18"
-windows = { version = "0.62", features = ["Win32_System_Com", "Win32_UI_Shell"] }
+windows = { version = "0.62", features = ["Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Accessibility"] }
 
 [dev-dependencies]
 tempfile = "3"
