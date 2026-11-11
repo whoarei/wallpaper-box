@@ -64,8 +64,8 @@ function fixtures() {
     ] },
     state: { version: '0.2.0', service: 'http://wallpaper.localhost', auto_pause: true,
       selected_monitor: 'primary', displays: [
-        { id: 'primary', name: '主显示器', width: 3840, height: 2160, scale: 1.5 },
-        { id: 'secondary', name: '副显示器', width: 1920, height: 1080, scale: 1 },
+        { id: 'primary', name: '主显示器', primary: true, width: 3840, height: 2160, scale: 1.5 },
+        { id: 'secondary', name: '副显示器', primary: false, width: 1920, height: 1080, scale: 1 },
       ], modules, warnings: [], downloads: [], last_error: null,
       wallpapers: [{ display_id: 'primary', module_id: 'aquarium', name: '水族箱',
         paused: false, auto_paused: false }],
@@ -86,7 +86,7 @@ function parallelDownloads(fixture) {
 // This fixture owns native state. UI updates only through the production invoke
 // API and its ordinary one-second polling, matching a Tauri manager window.
 function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppCheck, failAppInstall,
-  failPreview, deferApply, deferInstall, deferCancellation }) {
+  failPreview, deferApply, deferInstall, deferCancellation, importedModule }) {
   const copy = value => JSON.parse(JSON.stringify(value));
   const calls = [];
   const previous = new Map();
@@ -100,6 +100,10 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
     finishOperation() { assertPendingOperation(); finishOperation(); finishOperation = null; },
     setDownload(id, patch) { Object.assign(state.downloads.find(t => t.id === id), copy(patch)); },
     setCatalog(items) { state.online.catalog.wallpapers = copy(items); },
+    setDisplays(displays) {
+      state.displays = copy(displays);
+      if (!displays.some(d => d.id === state.selected_monitor)) state.selected_monitor = displays[0]?.id || '';
+    },
     completeDownload,
     failDownload(id, error = '下载连接中断') { const task=state.downloads.find(t=>t.id===id);task.phase='failed';task.error=error;task.speed=0;pump(); },
     finishCancellation(id) { state.downloads=state.downloads.filter(t=>t.id!==id);pump(); },
@@ -139,6 +143,7 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
         state.wallpapers = state.wallpapers.filter(wallpaper => wallpaper.display_id !== args.monitorId);
         return copy(state);
       case 'import_wallpaper':
+        if (importedModule) { state.modules.push(copy(importedModule)); return copy(state); }
         if (args.kind === 'zip') throw 'ZIP 文件无效，请选择完整壁纸包。';
         return null; // Canceling the native picker must not report an import.
       case 'check_app_update':
@@ -239,6 +244,10 @@ function moduleCard(page, container, name) {
   return page.locator(`${container} .module`).filter({ has: page.getByRole('heading', { name, exact: true }) });
 }
 
+function monitorChoice(page, id) {
+  return page.locator(`#displays .monitor-choice[data-monitor-id="${id}"]`);
+}
+
 function appUpdateFixture(fixture, phase, extra = {}) {
   fixture.state.version = '0.3.0';
   fixture.state.app_update = { phase, current_version: '0.3.0', version: '0.3.1',
@@ -322,6 +331,7 @@ async function noHorizontalOverflow(page, label) {
         assert.ok(bounds.width <= width && bounds.height <= height, JSON.stringify({ viewport: [width, height], bounds }));
       }
       assert.equal(await page.locator('#auto-pause').isVisible(), false);
+      assert.equal(await page.locator('#import-open').count(), 0);
       assert.equal(await page.locator('#import-folder').isVisible(), false);
       assert.equal(await page.locator('#remove').isVisible(), false);
       assert.equal(await page.locator('#app-update-toggle').isVisible(), false);
@@ -365,18 +375,18 @@ async function noHorizontalOverflow(page, label) {
     });
 
     await test('screen selection, empty playback, removal and reload preserve the other screen', null, async page => {
-      await page.locator('#displays').selectOption('secondary');
+      await monitorChoice(page, 'secondary').click();
       await page.waitForFunction(() => document.getElementById('current-title').textContent.includes('尚未设置'));
       assert.equal(await page.locator('#pause').isVisible(), false);
       await page.getByRole('button', { name: '将松风镇应用到副显示器', exact: true }).click();
       await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
       await page.getByRole('button', { name: '更多播放操作', exact: true }).click();
       await page.locator('#reload').click();
-      await page.waitForFunction(() => !document.getElementById('displays').disabled);
+      await page.waitForFunction(() => !document.querySelector('#displays .monitor-choice').disabled);
       await page.getByRole('button', { name: '更多播放操作', exact: true }).click();
       await page.locator('#remove').click();
       await page.waitForFunction(() => document.getElementById('current-title').textContent.includes('尚未设置'));
-      await page.locator('#displays').selectOption('primary');
+      await monitorChoice(page, 'primary').click();
       await page.waitForFunction(() => document.getElementById('current-title').textContent === '水族箱');
       assert.deepEqual((await page.evaluate(() => window.__uiTest.state())).wallpapers.map(item => item.display_id), ['primary']);
       assert.deepEqual((await actions(page)).filter(call => call.command === 'apply_wallpaper'), [
@@ -385,22 +395,90 @@ async function noHorizontalOverflow(page, label) {
       ]);
     });
 
-    await test('one import entry respects native picker cancellation and retains import failures', null, async page => {
-      await page.locator('#import-open').click();
+    await test('settings import actions respect picker cancellation and retain failures beside the controls', null, async page => {
+      await page.locator('#settings-open').click();
       await page.locator('#import-folder').click();
-      await page.waitForFunction(() => !document.getElementById('import-open').disabled);
-      assert.equal(await page.locator('#import-dialog').isVisible(), false);
+      await page.waitForFunction(() => !document.getElementById('import-folder').disabled);
+      assert.equal(await page.locator('#settings-dialog').isVisible(), true);
+      assert.equal(await page.locator('#import-dialog').count(), 0);
       assert.equal(await page.locator('#toast').getAttribute('class'), 'toast', 'Canceling must not claim a successful import');
-      await page.locator('#import-open').click();
       await page.locator('#import-zip').click();
-      await visible(page.locator('#error'));
+      await visible(page.locator('#import-error'));
       await page.waitForTimeout(1150);
-      assert.match(await page.locator('#error').textContent(), /ZIP 文件无效/);
+      assert.match(await page.locator('#import-error').textContent(), /ZIP 文件无效/);
       assert.equal(await page.locator('#modules .module').count(), 2);
       assert.deepEqual(await actions(page), [
         { command: 'import_wallpaper', args: { kind: 'folder' } },
         { command: 'import_wallpaper', args: { kind: 'zip' } },
       ]);
+    });
+
+    await test('successful settings import returns to the local gallery without applying wallpaper', fixture => {
+      fixture.importedModule = { ...fixture.state.modules[1], id: 'imported-scene', name: '导入的风景', source: 'local' };
+    }, async page => {
+      await page.locator('#tab-online').click();
+      await page.locator('#settings-open').click();
+      await page.locator('#import-folder').click();
+      await page.waitForFunction(() => !document.getElementById('settings-dialog').open);
+      assert.equal(await page.locator('#local-panel').isVisible(), true);
+      await visible(moduleCard(page, '#modules', '导入的风景'));
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
+      assert.equal((await actions(page)).filter(call => call.command === 'apply_wallpaper').length, 0);
+    });
+
+    await test('monitor thumbnails show each assignment, preserve portrait shape and select without applying', fixture => {
+      fixture.state.service = '';
+      for (const [index, module] of fixture.state.modules.entries()) {
+        module.cover = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect width="160" height="90" fill="${index ? '#cbdcbb' : '#478580'}"/></svg>`);
+      }
+      Object.assign(fixture.state.displays[1], { width: 1080, height: 1920 });
+      fixture.state.wallpapers.push({ display_id: 'secondary', module_id: 'pinewind-town', name: '松风镇', paused: false, auto_paused: false });
+    }, async page => {
+      const primary = monitorChoice(page, 'primary'), secondary = monitorChoice(page, 'secondary');
+      assert.equal(await primary.getAttribute('aria-pressed'), 'true');
+      assert.equal(await secondary.getAttribute('aria-pressed'), 'false');
+      assert.notEqual(await primary.locator('img').getAttribute('src'), await secondary.locator('img').getAttribute('src'));
+      const shape = await secondary.locator('.monitor-screen').boundingBox();
+      assert.ok(shape.height > shape.width, 'Portrait screens retain their orientation');
+      await secondary.focus();
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => document.querySelector('[data-monitor-id="secondary"]').getAttribute('aria-pressed') === 'true');
+      assert.equal(await page.locator('#current-title').textContent(), '松风镇');
+      assert.equal(await secondary.evaluate(node => node === document.activeElement), true);
+      await page.waitForTimeout(1150);
+      assert.equal(await secondary.evaluate(node => node === document.activeElement), true, 'Polling retains keyboard focus');
+      await secondary.click();
+      assert.deepEqual(await actions(page), [{ command: 'select_monitor', args: { monitorId: 'secondary' } }]);
+      await screenshot(page, 'monitor-thumbnails');
+      const cover = await primary.locator('img').getAttribute('src');
+      await moduleCard(page, '#modules', '水族箱').getByRole('button', { name: '应用壁纸', exact: true }).click();
+      await page.waitForFunction(cover => document.querySelector('[data-monitor-id="secondary"] img')?.getAttribute('src') === cover, cover);
+      assert.equal(await primary.locator('img').getAttribute('src'), cover, 'Updating the chosen screen preserves the other thumbnail');
+    });
+
+    await test('a large monitor group scrolls locally and handles disconnecting and reconnecting screens', fixture => {
+      for (let i = 3; i <= 9; i++) fixture.state.displays.push({
+        ...fixture.state.displays[1], id: `screen-${i}`, name: `显示器 ${i}`,
+      });
+    }, async page => {
+      assert.equal(await page.locator('#displays .monitor-choice').count(), 9);
+      const last = monitorChoice(page, 'screen-9');
+      await last.focus();
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => window.__uiTest.state().selected_monitor === 'screen-9');
+      const bounds = await page.locator('#displays').evaluate(node => ({ width: node.clientWidth, scroll: node.scrollWidth }));
+      assert.ok(bounds.scroll > bounds.width, 'Extra screens scroll inside the selector');
+      await noHorizontalOverflow(page, 'nine monitor thumbnails');
+      const primary = (await page.evaluate(() => window.__uiTest.state())).displays[0];
+      await page.evaluate(display => window.__uiTest.setDisplays([display]), primary);
+      await page.waitForFunction(() => document.querySelectorAll('#displays .monitor-choice').length === 1);
+      assert.equal(await monitorChoice(page, 'primary').getAttribute('aria-pressed'), 'true');
+      await page.evaluate(() => window.__uiTest.setDisplays([]));
+      await page.waitForFunction(() => document.querySelector('#displays').textContent.includes('未检测到'));
+      assert.equal(await page.locator('#modules .apply').first().isDisabled(), true);
+      await page.evaluate(display => window.__uiTest.setDisplays([display]), primary);
+      await page.waitForFunction(() => document.querySelector('[data-monitor-id="primary"]')?.getAttribute('aria-pressed') === 'true');
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
     });
 
     await test('settings invokes the existing pause, scan and folder commands without changing wallpaper', null, async page => {
@@ -431,12 +509,12 @@ async function noHorizontalOverflow(page, label) {
         const button = document.querySelector('[aria-label="将松风镇应用到主显示器"]');
         button.click(); button.click();
       });
-      assert.equal(await page.locator('#displays').isDisabled(), true);
+      assert.equal(await monitorChoice(page, 'primary').isDisabled(), true);
       assert.equal(await page.locator('#pause').isDisabled(), true);
       assert.equal((await actions(page)).filter(call => call.command === 'apply_wallpaper').length, 1);
       await page.evaluate(() => window.__uiTest.finishOperation());
       await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
-      assert.equal(await page.locator('#displays').isEnabled(), true);
+      assert.equal(await monitorChoice(page, 'primary').isEnabled(), true);
     });
 
     await test('pending downloads still show polled progress and allow local wallpaper changes', fixture => {
@@ -728,14 +806,14 @@ async function noHorizontalOverflow(page, label) {
       await visible(feed);
       assert.equal(await feed.isEnabled(), true);
       await feed.click();
-      await page.locator('#displays').selectOption('secondary');
+      await monitorChoice(page, 'secondary').click();
       await page.waitForFunction(() => document.getElementById('current-status').textContent === '遮挡，自动暂停');
       assert.equal(await feed.isEnabled(), true, 'Occlusion must allow queuing food before returning to the desktop');
       await feed.click();
       await moduleCard(page, '#modules', '松风镇').getByRole('button', { name: '应用壁纸', exact: true }).click();
       await page.waitForFunction(() => document.getElementById('feed-aquarium').hidden);
       assert.equal(await feed.isVisible(), false, 'Feeding must be hidden for other wallpaper modules');
-      await page.locator('#displays').selectOption('primary');
+      await monitorChoice(page, 'primary').click();
       await visible(feed);
       await page.locator('#pause').click();
       await page.waitForFunction(() => document.getElementById('feed-aquarium').disabled);

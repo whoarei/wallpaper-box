@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 const invoke=window.__TAURI__.core.invoke,$=id=>document.getElementById(id);
-let state=null,localBusy=false,remoteBusy=false,activeTab='local',lastDisplays='',lastModules='',toastTimer,localError='',remoteError='';
+let state=null,localBusy=false,remoteBusy=false,activeTab='local',lastSelectedDisplay='',lastModules='',toastTimer,localError='',remoteError='';
 let appUpdateBusy=false,appUpdateError='',lastAppPhase='',confirmAppVersion=null,previewBusy=false,renderEpoch=0,lastCurrentArt='',polling=false,refreshRequested=false,taskFilter=false;
 const pendingTasks=new Set();
 function el(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;}
@@ -34,6 +34,39 @@ function reconcile(container,items,key,signature,build){
   if(container.children[index]!==card)container.insertBefore(card,container.children[index]||null);
  });
  old.forEach(card=>card.remove());
+}
+function renderDisplays(data){
+ const list=$('displays');
+ const items=data.displays.map((display,index)=>{
+  const playing=data.wallpapers.find(w=>w.display_id===display.id),module=data.modules.find(m=>m.id===playing?.module_id);
+  return {display,index,playing,art:module?.cover?data.service+module.cover:''};
+ });
+ reconcile(list,items,item=>item.display.id,item=>JSON.stringify([item.display,item.index,item.art,item.playing?.module_id]),({display,index,playing,art})=>{
+  const button=el('button','monitor-choice');button.type='button';button.dataset.monitorId=display.id;
+  const stand=el('span','monitor-stand'),screen=el('span','monitor-screen');stand.setAttribute('aria-hidden','true');
+  const factor=Math.min(60/Math.max(1,display.width),33/Math.max(1,display.height));screen.style.width=Math.round(display.width*factor)+'px';screen.style.height=Math.round(display.height*factor)+'px';
+  const portrait=display.height>display.width,fallback=()=>el('span','monitor-placeholder',playing?.name?.slice(0,portrait?1:2)||(portrait?'—':'未设置'));
+  if(art){const img=el('img','monitor-art');img.src=art;img.alt='';img.onerror=()=>img.replaceWith(fallback());screen.append(img);}else screen.append(fallback());
+  screen.append(el('span','monitor-check','✓'));stand.append(screen);button.append(stand,el('span','monitor-caption',`${index+1} · ${display.primary?'主屏':'副屏'}`));
+  button.onclick=async()=>{
+   if(localBusy||state?.selected_monitor===display.id)return;
+   const restoreFocus=document.activeElement===button;
+   await run('select_monitor',{monitorId:display.id});
+   if(restoreFocus&&document.activeElement===document.body){const target=[...$('displays').children].find(node=>node.dataset.monitorId===display.id);if(target&&!target.disabled)target.focus({preventScroll:true});}
+  };return button;
+ });
+ if(!items.length){const empty=el('span','monitor-empty-note','未检测到显示器');list.append(empty);}
+ items.forEach(({display,index,playing})=>{
+  const button=[...list.children].find(node=>node.dataset.monitorId===display.id),selected=display.id===data.selected_monitor;
+  const status=playing?(playing.paused?'已暂停':playing.auto_paused?'遮挡，自动暂停':'正在播放'):'未设置壁纸';
+  button.setAttribute('aria-pressed',String(selected));button.setAttribute('aria-label',`选择显示器 ${index+1}：${display.name}，${playing?.name||'未设置壁纸'}`);
+  button.title=`${display.name}\n${display.width} × ${display.height} · 缩放 ${Math.round(display.scale*100)}%\n${playing?playing.name+' · ':''}${status}`;
+ });
+ if(lastSelectedDisplay!==data.selected_monitor){
+  const selected=[...list.children].find(node=>node.dataset.monitorId===data.selected_monitor);
+  if(selected){const left=selected.offsetLeft-list.offsetLeft,right=left+selected.offsetWidth;if(left<list.scrollLeft)list.scrollLeft=left;else if(right>list.scrollLeft+list.clientWidth)list.scrollLeft=right-list.clientWidth;}
+  lastSelectedDisplay=data.selected_monitor;
+ }
 }
 function taskSlot(card,id){const slot=el('div','download-task');slot.dataset.downloadId=id;slot.hidden=true;card.append(slot);}
 function renderDownloads(){
@@ -138,12 +171,12 @@ function renderBusy(){
  $('feed-aquarium').disabled=localBusy||!playing||playing.paused;
  for(const id of ['pause','remove','preview','reload'])$(id).disabled=localBusy||!playing;
  $('show-desktop').disabled=localBusy||!hasMonitor;
- $('displays').disabled=localBusy||!state?.displays.length;
+ $('displays').setAttribute('aria-busy',String(localBusy));document.querySelectorAll('.monitor-choice').forEach(button=>button.disabled=localBusy);
  $('auto-pause').disabled=localBusy||!state;
  $('refresh').disabled=localBusy;
  $('check-online').disabled=remoteBusy;
  $('check-online').textContent=remoteBusy?'正在刷新…':'刷新壁纸库';
- for(const id of ['import-open','import-folder','import-zip'])$(id).disabled=localBusy;
+ for(const id of ['import-folder','import-zip'])$(id).disabled=localBusy;
  document.querySelectorAll('.apply,.apply-cover').forEach(button=>button.disabled=localBusy||button.dataset.available==='false');
  document.querySelectorAll('.rollback').forEach(button=>{const task=downloadTask(button.dataset.moduleId);button.disabled=remoteBusy||pendingTasks.has(button.dataset.moduleId)||(!!task&&task.phase!=='failed')||button.dataset.available==='false';});
  document.querySelectorAll('.download').forEach(button=>button.disabled=(button.dataset.actionApply==='true'&&localBusy)||pendingTasks.has(button.dataset.moduleId)||button.dataset.available==='false');
@@ -165,13 +198,7 @@ function render(data){
  if(artSig!==lastCurrentArt){$('current-art').replaceChildren();if(artUrl){const img=el('img');img.src=artUrl;img.alt='';img.onerror=()=>img.replaceWith(el('span','','▱'));$('current-art').append(img);}else $('current-art').append(el('span','','▱'));lastCurrentArt=artSig;}
  $('feed-aquarium').hidden=playing?.module_id!=='aquarium';
  $('module-count').textContent=String(data.modules.length).padStart(2,'0');
- const displaySig=JSON.stringify([data.displays,data.selected_monitor]);
- if(displaySig!==lastDisplays){
-  const options=data.displays.map((display,index)=>{const option=el('option','',`${index+1} · ${display.name}`);option.value=display.id;option.title=`${display.width} × ${display.height} · 缩放 ${Math.round(display.scale*100)}%`;return option;});
-  if(!options.length){const option=el('option','','未检测到显示器');option.value='';options.push(option);}
-  $('displays').replaceChildren(...options);lastDisplays=displaySig;
- }
- $('displays').value=data.selected_monitor;
+ renderDisplays(data);
  const moduleSig=JSON.stringify([data.modules,data.selected_monitor,monitor?.name,playing?.module_id,data.service]);
  if(moduleSig!==lastModules){reconcile($('modules'),data.modules,m=>m.id,m=>JSON.stringify([m,data.service,data.selected_monitor,monitor?.name,playing?.module_id]),module=>{
   const used=playing?.module_id===module.id,card=el('article','module'+(used?' active':'')),art=el('div','module-art');
@@ -215,16 +242,19 @@ async function update(){
  catch(error){if(epoch===renderEpoch){localError=String(error);$('error').hidden=false;$('error').textContent=localError;}}
  finally{polling=false;if(refreshRequested){refreshRequested=false;queueMicrotask(update);}}
 }
-function tab(name){if(name==='local')taskFilter=false;activeTab=name;$('collection-title').textContent=name==='local'?'我的壁纸':'发现壁纸';$('collection-description').textContent=name==='local'?'喜欢的风景，随时在身边。':'给桌面，添一点新鲜感。';$('import-open').hidden=name!=='local';$('module-count').hidden=name!=='local';for(const value of ['local','online']){$(value+'-panel').hidden=value!==name;$('tab-'+value).classList.toggle('selected',value===name);$('tab-'+value).setAttribute('aria-pressed',String(value===name));}if(state)render(state);if(name==='online'&&!taskFilter&&!state?.online?.catalog&&!remoteBusy)run('check_online',{},'',true);}
+function tab(name){if(name==='local')taskFilter=false;activeTab=name;$('collection-title').textContent=name==='local'?'我的壁纸':'发现壁纸';$('collection-description').textContent=name==='local'?'喜欢的风景，随时在身边。':'给桌面，添一点新鲜感。';$('module-count').hidden=name!=='local';for(const value of ['local','online']){$(value+'-panel').hidden=value!==name;$('tab-'+value).classList.toggle('selected',value===name);$('tab-'+value).setAttribute('aria-pressed',String(value===name));}if(state)render(state);if(name==='online'&&!taskFilter&&!state?.online?.catalog&&!remoteBusy)run('check_online',{},'',true);}
 $('download-filter').onclick=()=>{taskFilter=!taskFilter;tab('online');};
 $('clear-download-filter').onclick=()=>{taskFilter=false;if(state)render(state);};
 $('tab-local').onclick=()=>tab('local');$('tab-online').onclick=()=>tab('online');
 $('check-online').onclick=()=>run('check_online',{},'在线清单已更新',true);
 $('refresh').onclick=()=>run('refresh_modules',{},'本地壁纸列表已更新');
 $('open-folder').onclick=()=>invoke('open_wallpaper_folder').catch(error=>toast(String(error)));
-$('import-open').onclick=()=>showDialog('import-dialog');
-for(const [id,kind] of [['import-folder','folder'],['import-zip','zip']])$(id).onclick=()=>{$('import-dialog').close();run('import_wallpaper',{kind},'壁纸已导入');};
-$('displays').onchange=()=>run('select_monitor',{monitorId:$('displays').value});
+for(const [id,kind] of [['import-folder','folder'],['import-zip','zip']])$(id).onclick=async()=>{
+ if(localBusy)return;$('import-error').hidden=true;
+ const result=await run('import_wallpaper',{kind},'壁纸已导入');
+ if(result){$('settings-dialog').close();tab('local');}
+ else if(localError){$('import-error').textContent=localError;$('import-error').hidden=false;}
+};
 $('pause').onclick=()=>{const selected=current();if(selected)run('pause_wallpaper',{monitorId:state.selected_monitor,paused:!selected.paused});};
 $('remove').onclick=()=>{closePlaybackMenu();run('remove_wallpaper',{monitorId:state.selected_monitor},'已恢复该屏幕的原桌面');};
 $('feed-aquarium').onclick=()=>run('feed_aquarium',{monitorId:state.selected_monitor},'已投喂，回到桌面看看鱼儿吧。');

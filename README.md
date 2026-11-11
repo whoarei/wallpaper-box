@@ -1,17 +1,17 @@
 # 壁纸盒子 · Wallpaper Box
 
-Windows 动态壁纸程序，支持显示器选择、壁纸切换、系统托盘和暂停恢复。0.5.0 内置水族箱与松风镇，直接从本地播放，无需 Docker。支持程序在线升级，也可从独立的 [whoarei/wallpapers](https://github.com/whoarei/wallpapers) 壁纸库逐项下载、更新和回退，或导入自己的网页壁纸。
+Windows 动态壁纸程序，支持显示器选择、壁纸切换、系统托盘和暂停恢复。0.5.1 内置水族箱与松风镇，直接从本地播放，无需 Docker。支持程序在线升级，也可从独立的 [whoarei/wallpapers](https://github.com/whoarei/wallpapers) 壁纸库逐项下载、更新和回退，或导入自己的网页壁纸。
 
 ## 使用
 
 从 [GitHub Releases](https://github.com/whoarei/wallpaper-box/releases) 下载 Windows x64 NSIS 安装程序。0.3.1 起仅发布安装版。
 
 1. 安装后运行 `wallpaper-box.exe`。运行依赖 WebView2；安装程序在缺少运行时时下载 Microsoft 运行时。
-2. 首次启动在主显示器播放水族箱。从右上角下拉框选择显示器，点击“我的壁纸”的封面即可应用；“预览”在独立窗口播放，不改变当前桌面。
+2. 首次启动在主显示器播放水族箱。右上角以各屏当前壁纸封面显示缩略图，点击选择显示器，再点击“我的壁纸”的封面即可应用；“预览”在独立窗口播放，不改变当前桌面。缩略图会高亮所选屏幕，并保留横竖屏比例；未设置壁纸的屏幕显示占位图。
 3. 左键托盘图标打开管理窗口，右键快速切换、暂停或退出。关闭管理窗口会收起到托盘。
 4. 在“发现”点击“刷新壁纸库”，再选择某张壁纸的“下载 / 更新”。检查只获取清单和封面，ZIP 按选择下载，不会自动下载全库。最多同时处理 5 项下载，超出的按加入顺序等待。
 
-管理界面以壁纸列表为主，暂停和投喂集中在底部播放栏。“更多播放操作”提供查看桌面、保存预览、重新加载和关闭当前屏幕壁纸；“导入壁纸”统一提供文件夹和 ZIP 两种选择。自动暂停、壁纸目录、重新扫描和程序更新位于右上角“设置”。新版就绪只显示提示，由用户打开设置并确认重启升级。
+管理界面以壁纸列表为主，暂停和投喂集中在底部播放栏。“更多播放操作”提供查看桌面、保存预览、重新加载和关闭当前屏幕壁纸。导入壁纸、自动暂停、壁纸目录、重新扫描和程序更新位于右上角“设置”；导入可直接选择文件夹或 ZIP。新版就绪只显示提示，由用户打开设置并确认重启升级。
 
 水族箱投喂：直接左键单击水族箱所在屏幕的桌面空白水面，鱼食会出现在点击位置。也可选择正在播放水族箱的显示器，点击管理窗口或托盘菜单的“投喂鱼儿”。手动暂停时先点“继续”；遮挡导致的自动暂停允许先投喂，回到桌面后鱼儿继续进食。管理窗口的投喂入口会提示加载中、页面自身暂停或饱食等情况。
 
@@ -25,7 +25,7 @@ Windows 动态壁纸程序，支持显示器选择、壁纸切换、系统托盘
 
 网络传输直接写入各自的临时文件，安装依次执行；最多 5 项任务占用处理位置，包含等待安装和安装中的任务。仅安装时读取一个完整 ZIP，避免并行下载同时占用多个完整包的内存。任务队列仅保留在本次运行中，关闭程序会停止下载。
 
-0.5.0 保留 0.2.1 的投喂修复：在宿主中复用水族箱已有投喂逻辑，无需更新壁纸库。两张内置壁纸版本仍为 `1.0.0`，其 `minAppVersion` 仍为 `0.2.0`。
+0.5.1 保留 0.2.1 的投喂修复：在宿主中复用水族箱已有投喂逻辑，无需更新壁纸库。两张内置壁纸版本仍为 `1.0.0`，其 `minAppVersion` 仍为 `0.2.0`。
 
 ## 程序在线升级
 
@@ -39,7 +39,7 @@ Windows 动态壁纸程序，支持显示器选择、壁纸切换、系统托盘
 
 ## 添加自己的壁纸
 
-点击“导入壁纸”后选择文件夹或 ZIP，也可在“设置”打开壁纸文件夹，在 `local/` 中放入完整模块，再点击“刷新”。最小结构：
+在“设置”的“本地壁纸”中选择文件夹或 ZIP 导入，也可打开壁纸文件夹，在 `local/` 中放入完整模块，再点击“刷新”。最小结构：
 
 ```text
 local/
@@ -66,7 +66,7 @@ HTML、脚本、样式与图片使用相对路径。文件夹名使用小写字�
 ## 项目目录
 
 - `wallpaper-host/`：Tauri 2 宿主、嵌入式管理界面、原生目录发现、本地协议、在线更新与打包校验。
-- `wallpapers/{aquarium,pinewind-town}/`：0.5.0 随包的两张壁纸快照。
+- `wallpapers/{aquarium,pinewind-town}/`：0.5.1 随包的两张壁纸快照。
 - `display-service/`：保留的 Legacy Docker 浏览器开发示例，桌面程序运行和安装包不依赖它。
 - `.github/workflows/windows.yml`：主程序 CI 与标签发布。
 - [HTML 技术方案](display-service/public/docs/architecture.html)：单文件离线文档，含架构、模块规范、权限、迁移及发布流程，支持 10 套配色和保存 PDF。
@@ -83,11 +83,11 @@ npm ci --ignore-scripts
 npm run check:version
 npm run bundle
 ./scripts/package-release.ps1 -RequireSigned
-./scripts/verify-release.ps1 -Directory ../release/v0.5.0 -RequireSigned
-node scripts/verify-installer.mjs ../release/v0.5.0
+./scripts/verify-release.ps1 -Directory ../release/v0.5.1 -RequireSigned
+node scripts/verify-installer.mjs ../release/v0.5.1
 ```
 
-产物位于 `release/v0.5.0/`，共五项：`wallpaper-box_0.5.0_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
+产物位于 `release/v0.5.1/`，共五项：`wallpaper-box_0.5.1_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
 
 Rust 行为检查：
 
@@ -111,8 +111,8 @@ CI 固定工具链、依赖锁文件和 Action 提交，检查版本、JavaScrip
 版本与验收完成后：
 
 ```powershell
-git tag v0.5.0
-git push origin v0.5.0
+git tag v0.5.1
+git push origin v0.5.1
 gh run list --repo whoarei/wallpaper-box --workflow windows.yml
 ```
 
@@ -120,7 +120,7 @@ gh run list --repo whoarei/wallpaper-box --workflow windows.yml
 
 签名私钥只保存在工作区之外：本地通过 `TAURI_SIGNING_PRIVATE_KEY_PATH` 指向密钥文件，GitHub Actions 通过 `TAURI_SIGNING_PRIVATE_KEY` Secret 注入；当前密钥密码为空，`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 使用空值。程序内置公钥，安装包和仓库不包含私钥。签名调用带上 `--app-version`，将版本写入经过签名的可信注释。更新签名采用 minisign / Ed25519，用来验证升级包来源和版本；Windows Authenticode 是另一套代码签名，当前安装包尚未配置，因此 Windows 可能仍显示未知发布者。
 
-当前仅支持 Windows x64，暂不包含开机启动。本次文档描述 0.5.0 的实现和验收范围，不表示新版本 CI 或真实跨版本安装已经成功；实际执行结果以发版记录为准。
+当前仅支持 Windows x64，暂不包含开机启动。本次文档描述 0.5.1 的实现和验收范围，不表示新版本 CI 或真实跨版本安装已经成功；实际执行结果以发版记录为准。
 
 ## 官方壁纸库发布
 
