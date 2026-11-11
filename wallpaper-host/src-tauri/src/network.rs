@@ -1,4 +1,4 @@
-//! Shared proxy policy for all native GitHub requests. Never change process-wide
+//! Shared proxy policy for native release requests. Never change process-wide
 //! environment variables: an in-flight request keeps its original configuration.
 use reqwest::{
     blocking::{Client, ClientBuilder},
@@ -67,23 +67,37 @@ fn configure(builder: ClientBuilder, settings: &ProxySettings) -> Result<ClientB
 }
 
 pub fn github_client(settings: &ProxySettings) -> Result<Client, String> {
+    release_client(settings, "github.com")
+}
+
+pub fn release_client(settings: &ProxySettings, host: &str) -> Result<Client, String> {
+    let gitee = match host {
+        "gitee.com" => true,
+        "github.com" => false,
+        _ => return Err("不支持的壁纸仓库平台。".into()),
+    };
     configure(Client::builder(), settings)?
         .https_only(true)
         .http1_only()
         .user_agent(format!("WallpaperBox/{}", crate::catalog::APP_VERSION))
         .connect_timeout(Duration::from_secs(12))
         .timeout(Duration::from_secs(180))
-        .redirect(Policy::custom(|attempt| {
+        .redirect(Policy::custom(move |attempt| {
             let url = attempt.url();
-            let allowed = matches!(
-                url.host_str(),
-                Some(
-                    "github.com"
-                        | "release-assets.githubusercontent.com"
-                        | "objects.githubusercontent.com"
-                        | "github-releases.githubusercontent.com"
+            let allowed = if gitee {
+                matches!(url.host_str(), Some("gitee.com" | "foruda.gitee.com"))
+            } else {
+                matches!(
+                    url.host_str(),
+                    Some(
+                        "github.com"
+                            | "api.github.com"
+                            | "release-assets.githubusercontent.com"
+                            | "objects.githubusercontent.com"
+                            | "github-releases.githubusercontent.com"
+                    )
                 )
-            );
+            };
             if attempt.previous().len() > 6
                 || !allowed
                 || url.scheme() != "https"
@@ -91,7 +105,7 @@ pub fn github_client(settings: &ProxySettings) -> Result<Client, String> {
                 || !url.username().is_empty()
                 || url.password().is_some()
             {
-                attempt.error("Unexpected GitHub download redirect")
+                attempt.error("Unexpected release download redirect")
             } else {
                 attempt.follow()
             }

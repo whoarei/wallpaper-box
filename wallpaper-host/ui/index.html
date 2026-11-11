@@ -15,7 +15,7 @@
  <div id="error" class="error" role="alert" hidden></div>
  <div id="transfer" class="transfer" role="status" hidden><span id="transfer-label"></span><progress id="transfer-progress" max="100" value="0"></progress><span id="transfer-size"></span></div>
  <section id="local-panel" aria-label="我的壁纸"><div id="modules" class="modules"></div><p id="empty" class="empty" hidden>还没有壁纸，可以导入本地文件，或到“发现”添加。</p><details id="warnings-box" class="warnings" hidden><summary>部分壁纸未能载入</summary><ul id="warnings"></ul></details></section>
- <section id="online-panel" aria-label="发现壁纸" hidden><div class="online-heading"><p>来自官方壁纸库，下载后可离线播放。</p><button id="check-online" class="text-button">刷新壁纸库</button></div><p id="online-status" class="online-status"></p><div id="online-error" class="error" role="alert" hidden></div><div id="online-modules" class="modules"></div><p id="online-empty" class="empty">暂时没有可浏览的壁纸，请刷新壁纸库。</p></section>
+ <section id="online-panel" aria-label="发现壁纸" hidden><div class="online-heading"><p>来自已启用的壁纸仓库，下载后可离线播放。</p><button id="check-online" class="text-button">刷新壁纸库</button></div><p id="online-status" class="online-status"></p><div id="online-error" class="error" role="alert" hidden></div><div id="online-modules" class="modules"></div><p id="online-empty" class="empty">暂时没有可浏览的壁纸，请刷新壁纸库。</p></section>
 </main>
 <footer class="player-wrap">
  <section class="current" aria-label="当前屏幕播放控制">
@@ -28,6 +28,14 @@
  <div class="dialog-body">
   <h3 class="section-label">播放</h3><label class="setting-row switch-label"><span><strong>被窗口遮挡时自动暂停</strong><small>回到桌面后继续播放，减少资源占用</small></span><input id="auto-pause" type="checkbox" role="switch" checked></label>
   <h3 class="section-label">本地壁纸</h3><div class="setting-row"><span><strong>壁纸文件夹</strong><small>管理已下载和导入的壁纸</small></span><button id="open-folder" class="text-button">打开文件夹 ↗</button></div><div class="setting-row"><strong>重新扫描本地壁纸</strong><button id="refresh" class="text-button">刷新</button></div>
+  <section class="repositories-panel" aria-labelledby="repositories-title">
+   <h3 class="section-label" id="repositories-title">壁纸仓库</h3>
+   <p class="proxy-help">从已启用仓库的最新 Release 获取壁纸。默认只启用 Gitee；支持 GitHub、Gitee 地址和 .git 后缀。</p>
+   <div id="repositories-list"></div>
+   <p class="proxy-help">保存后开关生效，刷新时只访问已启用的仓库。相同壁纸 ID 按列表顺序优先展示。关闭或移除仓库会保留已下载的壁纸。</p>
+   <p id="repositories-status" class="proxy-status" role="status" aria-live="polite" hidden></p><p id="repositories-error" class="error" role="alert" hidden></p>
+   <div class="proxy-actions"><button id="add-repository" class="quiet">添加仓库</button><button id="save-repositories" class="quiet">保存仓库设置</button></div>
+  </section>
   <section class="proxy-panel" aria-labelledby="proxy-title">
    <h3 class="section-label" id="proxy-title">网络代理</h3>
    <label class="setting-row" for="proxy-mode"><strong>连接方式</strong><select id="proxy-mode"><option value="system">跟随系统（默认）</option><option value="manual">手动代理</option><option value="direct">直连</option></select></label>

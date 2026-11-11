@@ -7,6 +7,7 @@
     "core:default", "allow-get-state", "allow-check-app-update", "allow-download-app-update", "allow-install-app-update", "allow-refresh-modules", "allow-select-monitor",
     "allow-apply-wallpaper", "allow-preview-wallpaper", "allow-pause-wallpaper", "allow-feed-aquarium", "allow-remove-wallpaper", "allow-auto-pause",
     "allow-set-proxy", "allow-test-proxy", "allow-load-online-cover",
+    "allow-set-wallpaper-repositories",
     "allow-hide-manager", "allow-quit-app", "allow-capture-desktop", "allow-show-desktop",
     "allow-check-online", "allow-install-online", "allow-rollback-wallpaper", "allow-import-wallpaper", "allow-open-wallpaper-folder"
   ]

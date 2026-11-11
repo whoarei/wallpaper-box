@@ -209,6 +209,37 @@ pub async fn set_proxy(
 }
 
 #[tauri::command]
+pub async fn set_wallpaper_repositories(
+    app: AppHandle,
+    window: WebviewWindow,
+    repositories: Vec<crate::repositories::Repository>,
+) -> Result<View, String> {
+    manager(&window)?;
+    let repositories = crate::repositories::normalize(repositories)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        let _update = host
+            .updates
+            .try_lock()
+            .map_err(|_| "正在处理壁纸，请稍后保存仓库设置。")?;
+        let online = crate::online::load_cache(&host.dir, &repositories);
+        {
+            let mut data = host.data.lock().unwrap();
+            let mut settings = data.settings.clone();
+            settings.wallpaper_repositories = repositories;
+            catalog::atomic_json(&host.dir.join("settings.json"), &settings)
+                .map_err(|_| "壁纸仓库设置保存失败，请检查设置目录是否可写。")?;
+            data.settings = settings;
+            data.online = online;
+        }
+        let _ = app.emit("host-updated", ());
+        Ok(snapshot(&app))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub async fn test_proxy(
     window: WebviewWindow,
     proxy: crate::network::ProxySettings,
@@ -314,16 +345,16 @@ pub async fn check_online(app: AppHandle, window: WebviewWindow) -> Result<View,
             .try_lock()
             .map_err(|_| "正在处理壁纸，请稍后再试。")?;
         let proxy = proxy_settings(&app);
-        match crate::online::check(&host.dir, &proxy) {
-            Ok(state) => {
-                host.data.lock().unwrap().online = state;
-                Ok(snapshot(&app))
-            }
-            Err(message) => {
-                host.data.lock().unwrap().online.last_error = Some(message.clone());
-                Err(message)
-            }
-        }
+        let repositories = host
+            .data
+            .lock()
+            .unwrap()
+            .settings
+            .wallpaper_repositories
+            .clone();
+        let state = crate::online::check(&host.dir, &repositories, &proxy);
+        host.data.lock().unwrap().online = state;
+        Ok(snapshot(&app))
     })
     .await
     .map_err(|e| e.to_string())?

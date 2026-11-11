@@ -38,6 +38,8 @@ struct Settings {
     auto_pause: bool,
     #[serde(default)]
     proxy: crate::network::ProxySettings,
+    #[serde(default = "crate::repositories::defaults")]
+    wallpaper_repositories: Vec<crate::repositories::Repository>,
 }
 fn yes() -> bool {
     true
@@ -49,6 +51,7 @@ impl Default for Settings {
             assignments: BTreeMap::new(),
             auto_pause: true,
             proxy: crate::network::ProxySettings::default(),
+            wallpaper_repositories: crate::repositories::defaults(),
         }
     }
 }
@@ -108,7 +111,7 @@ pub struct View {
     app_update: crate::app_updates::View,
     service: &'static str,
     online: crate::online::State,
-    online_repository: &'static str,
+    wallpaper_repositories: Vec<crate::repositories::Repository>,
     user_directory: String,
     warnings: Vec<String>,
     transfer: Option<Transfer>,
@@ -211,7 +214,7 @@ fn snapshot(app: &AppHandle) -> View {
         app_update: app.state::<crate::app_updates::Updates>().view(),
         service: catalog::ORIGIN,
         online: data.online.clone(),
-        online_repository: crate::online::REPOSITORY,
+        wallpaper_repositories: data.settings.wallpaper_repositories.clone(),
         user_directory: display_path(&host.library.user.join("local")),
         warnings: data.warnings.clone(),
         transfer: data.transfer.clone(),
@@ -1116,6 +1119,7 @@ pub fn run() {
             commands::remove_wallpaper,
             commands::auto_pause,
             commands::set_proxy,
+            commands::set_wallpaper_repositories,
             commands::test_proxy,
             commands::load_online_cover,
             commands::hide_manager,
@@ -1140,7 +1144,6 @@ pub fn run() {
             let user = app.path().local_data_dir()?.join("WallpaperBox/wallpapers");
             let library =
                 catalog::Library::prepare(builtin, user).map_err(std::io::Error::other)?;
-            let online = crate::online::load_cache(&dir);
             app.manage(crate::app_updates::Updates::new(dir.join("app-updates")));
             let settings_path = dir.join("settings.json");
             let first = !settings_path.exists();
@@ -1148,6 +1151,7 @@ pub fn run() {
                 .ok()
                 .and_then(|b| serde_json::from_slice(&b).ok())
                 .unwrap_or_default();
+            let online = crate::online::load_cache(&dir, &settings.wallpaper_repositories);
             let displays = desktop::displays();
             if !displays.iter().any(|d| d.id == settings.selected_monitor) {
                 settings.selected_monitor =
@@ -1259,6 +1263,10 @@ mod tests {
         let saved = r#"{"selected_monitor":"display-2","assignments":{"display-2":{"module_id":"aquarium","paused":true}},"auto_pause":false}"#;
         let settings: Settings = serde_json::from_str(saved).unwrap();
         assert_eq!(settings.proxy, crate::network::ProxySettings::default());
+        assert_eq!(
+            settings.wallpaper_repositories,
+            crate::repositories::defaults()
+        );
         assert_eq!(settings.selected_monitor, "display-2");
         assert_eq!(settings.assignments["display-2"].module_id, "aquarium");
         assert!(settings.assignments["display-2"].paused);

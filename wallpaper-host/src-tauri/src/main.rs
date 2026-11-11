@@ -10,6 +10,7 @@ mod online;
 mod packages;
 mod picker;
 mod protocol;
+mod repositories;
 
 fn main() {
     host::run();

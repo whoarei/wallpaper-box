@@ -64,6 +64,7 @@ function fixtures() {
     ] },
     state: { version: '0.2.0', service: 'http://wallpaper.localhost', auto_pause: true,
       proxy: { mode: 'system', url: '' },
+      wallpaper_repositories: [{url:'https://gitee.com/xishuaiya/wallpapers',enabled:true},{url:'https://github.com/whoarei/wallpapers',enabled:false}],
       selected_monitor: 'primary', displays: [
         { id: 'primary', name: '主显示器', width: 3840, height: 2160, scale: 1.5 },
         { id: 'secondary', name: '副显示器', width: 1920, height: 1080, scale: 1 },
@@ -78,17 +79,30 @@ function fixtures() {
 // This fixture owns native state. UI updates only through the production invoke
 // API and its ordinary one-second polling, matching a Tauri manager window.
 function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppCheck, failAppInstall,
-  failPreview, deferApply, deferInstall, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy }) {
+  failPreview, deferApply, deferInstall, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures }) {
   const copy = value => JSON.parse(JSON.stringify(value));
   if (persistProxy && sessionStorage.getItem('native-proxy')) {
     state.proxy = JSON.parse(sessionStorage.getItem('native-proxy'));
+  }
+  if (persistRepositories && sessionStorage.getItem('native-repositories')) {
+    state.wallpaper_repositories = JSON.parse(sessionStorage.getItem('native-repositories'));
+  }
+  const repositoryRequests = [];
+  function mergedSources(sources) {
+    const seen = new Set();
+    const wallpapers = sources.flatMap(source => (source.catalog?.wallpapers || []).filter(item => {
+      if (seen.has(item.id)) return false;seen.add(item.id);return true;
+    }));
+    const first = sources.find(source => source.catalog);
+    return {catalog:first?{...copy(first.catalog),wallpapers}:null,sources,checked_at:1794297600,
+      cached:sources.some(source=>source.cached),last_error:sources.filter(source=>source.last_error).map(source=>source.repository+'：'+source.last_error).join('；')||null};
   }
   const calls = [];
   const previous = new Map();
   let pendingFailure = !!failCheck;
   let finishOperation;
   window.__uiTest = {
-    calls,
+    calls, repositoryRequests,
     failNextCheck() { pendingFailure = true; },
     state() { return copy(state); },
     setAppUpdate(patch) { Object.assign(state.app_update, copy(patch)); },
@@ -104,6 +118,18 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
         if (!state.modules.some(module => module.id === args.moduleId)) throw '壁纸不存在';
         return null;
       case 'auto_pause': state.auto_pause = args.enabled; return copy(state);
+      case 'set_wallpaper_repositories': {
+        if (failRepositorySave) throw '壁纸仓库设置保存失败，请检查设置目录是否可写。';
+        const normalized=args.repositories.map(repository=>({url:repository.url.trim().replace(/\/$/,'').replace(/\.git$/,'').toLowerCase(),enabled:repository.enabled}));
+        if(new Set(normalized.map(repository=>repository.url)).size!==normalized.length)throw '壁纸仓库地址重复，请保留一项。';
+        state.wallpaper_repositories=normalized;
+        if(persistRepositories)sessionStorage.setItem('native-repositories',JSON.stringify(normalized));
+        state.online=mergedSources(normalized.filter(repository=>repository.enabled).map(repository=>{
+          const prior=state.online.sources?.find(source=>source.repository===repository.url);
+          return prior?{...copy(prior),cached:true,last_error:null}:{repository:repository.url,catalog:null,checked_at:0,cached:false,last_error:null};
+        }));
+        return copy(state);
+      }
       case 'set_proxy':
         if (failProxySave) throw '代理设置保存失败，请检查设置目录是否可写。';
         state.proxy = { mode: args.proxy.mode, url: args.proxy.mode === 'manual' ? new URL(args.proxy.url).href : '' };
@@ -170,8 +196,14 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
           state.online.last_error = 'GitHub 连接失败：离线测试';
           throw state.online.last_error;
         }
-        state.online = { catalog: copy(catalog), checked_at: 1794297600,
-          cached: false, last_error: null };
+        state.online = mergedSources((state.wallpaper_repositories||[{url:'https://gitee.com/xishuaiya/wallpapers',enabled:true}]).filter(repository=>repository.enabled).map(repository=>{
+          repositoryRequests.push(repository.url);
+          const prior=state.online.sources?.find(source=>source.repository===repository.url);
+          if(sourceFailures?.includes(repository.url))return {repository:repository.url,catalog:prior?.catalog||null,checked_at:prior?.checked_at||0,cached:!!prior?.catalog,last_error:'仓库暂时不可用'};
+          const current=copy(sourceCatalogs?.[repository.url]||catalog);
+          current.wallpapers.forEach(item=>item.repository=repository.url);
+          return {repository:repository.url,catalog:current,checked_at:1794297600,cached:false,last_error:null};
+        }));
         return copy(state);
       case 'install_online': {
         const item = state.online.catalog?.wallpapers.find(item => item.id === args.moduleId);
@@ -408,6 +440,117 @@ async function noHorizontalOverflow(page, label) {
         { command: 'refresh_modules', args: {} },
         { command: 'open_wallpaper_folder', args: {} },
       ]);
+    });
+
+    await test('default discovery requests only Gitee and keeps GitHub disabled', null, async page => {
+      await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#repository-url-0').inputValue(), 'https://gitee.com/xishuaiya/wallpapers');
+      assert.equal(await page.getByRole('switch', { name: '启用仓库 1', exact: true }).isChecked(), true);
+      assert.equal(await page.getByRole('switch', { name: '启用仓库 2', exact: true }).isChecked(), false);
+      assert.equal(await page.locator('#save-repositories').isDisabled(), true);
+      await page.keyboard.press('Escape');await page.locator('#tab-online').click();
+      await visible(moduleCard(page, '#online-modules', '通往别处的窗户'));
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.repositoryRequests), ['https://gitee.com/xishuaiya/wallpapers']);
+      assert.match(await moduleCard(page, '#online-modules', '通往别处的窗户').textContent(), /来源：gitee.com\/xishuaiya\/wallpapers/);
+    });
+
+    await test('custom repository drafts survive polling and normalized ordering persists after reload', fixture => {
+      fixture.persistRepositories = true;
+    }, async page => {
+      await page.locator('#settings-open').click();await page.locator('#add-repository').click();
+      await page.locator('#repository-url-2').fill('https://github.com/example/custom.git');
+      await page.waitForTimeout(1150);
+      assert.equal(await page.locator('#repository-url-2').inputValue(), 'https://github.com/example/custom.git');
+      await page.getByRole('button', { name: '上移仓库 3', exact: true }).click();
+      await page.getByRole('button', { name: '上移仓库 2', exact: true }).click();
+      assert.equal(await page.locator('#repository-url-0').inputValue(), 'https://github.com/example/custom.git');
+      await page.locator('#save-repositories').click();
+      await page.waitForFunction(() => document.getElementById('repositories-status').textContent.includes('已保存'));
+      assert.equal(await page.locator('#repository-url-0').inputValue(), 'https://github.com/example/custom');
+      assert.equal(await page.locator('#save-repositories').isDisabled(), true);
+      await page.setViewportSize({width:1080,height:900});
+      await page.locator('#repositories-title').scrollIntoViewIfNeeded();await screenshot(page,'wallpaper-repositories');
+      await page.reload();await ready(page);await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#repository-url-0').inputValue(), 'https://github.com/example/custom');
+      await page.getByRole('button', { name: '移除仓库 3', exact: true }).click();
+      await page.locator('#save-repositories').click();
+      await page.waitForFunction(() => document.getElementById('save-repositories').disabled);
+      assert.equal(await page.locator('.repository-row').count(), 2);
+      await page.keyboard.press('Escape');await page.locator('#tab-online').click();
+      await visible(moduleCard(page, '#online-modules', '通往别处的窗户'));
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.repositoryRequests), ['https://github.com/example/custom','https://gitee.com/xishuaiya/wallpapers']);
+    });
+
+    await test('disabling all repositories skips discovery requests and preserves downloaded wallpapers', fixture => {
+      fixture.state.modules[0].source = 'online';
+    }, async page => {
+      await page.locator('#settings-open').click();
+      await page.getByRole('switch', { name: '启用仓库 1', exact: true }).uncheck();
+      await page.locator('#save-repositories').click();
+      await page.waitForFunction(() => document.getElementById('save-repositories').disabled);
+      await page.keyboard.press('Escape');await page.locator('#tab-online').click();
+      assert.equal(await page.locator('#check-online').isDisabled(), true);
+      assert.match(await page.locator('#online-empty').textContent(), /添加或启用/);
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.repositoryRequests), []);
+      assert.equal(await page.evaluate(() => window.__uiTest.state().modules.length), 2);
+      await page.locator('#settings-open').click();
+      await page.getByRole('switch', { name: '启用仓库 2', exact: true }).check();
+      await page.locator('#save-repositories').click();
+      await page.waitForFunction(() => document.getElementById('save-repositories').disabled);
+      await page.keyboard.press('Escape');await page.locator('#tab-local').click();await page.locator('#tab-online').click();
+      await visible(moduleCard(page, '#online-modules', '通往别处的窗户'));
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.repositoryRequests), ['https://github.com/whoarei/wallpapers']);
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
+    });
+
+    await test('a failed repository still shows healthy repositories and its own error', fixture => {
+      fixture.state.wallpaper_repositories[1].enabled = true;
+      fixture.sourceFailures = ['https://gitee.com/xishuaiya/wallpapers'];
+    }, async page => {
+      await page.locator('#tab-online').click();
+      const card=moduleCard(page,'#online-modules','通往别处的窗户');await visible(card);
+      assert.match(await card.textContent(), /来源：github.com\/whoarei\/wallpapers/);
+      await visible(page.locator('#online-error'));assert.match(await page.locator('#online-error').textContent(), /gitee.com.*仓库暂时不可用/);
+      await page.locator('#settings-open').click();
+      assert.match(await page.locator('.repository-source-status').first().textContent(), /仓库暂时不可用/);
+      assert.match(await page.locator('.repository-source-status').nth(1).textContent(), /3 张壁纸/);
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
+    });
+
+    await test('duplicate wallpaper IDs follow repository order and switching off removes stale results', fixture => {
+      fixture.state.wallpaper_repositories[1].enabled = true;
+      fixture.sourceCatalogs = {'https://github.com/whoarei/wallpapers':JSON.parse(JSON.stringify(fixture.catalog))};
+      fixture.sourceCatalogs['https://github.com/whoarei/wallpapers'].wallpapers[0].version = '2.0.0';
+    }, async page => {
+      await page.locator('#tab-online').click();
+      const card=moduleCard(page,'#online-modules','水族箱');await visible(card);
+      assert.equal(await page.locator('#online-modules .module').count(),3);
+      assert.match(await card.textContent(), /来源：gitee.com/);assert.match(await card.textContent(), /v1.1.0/);
+      await page.locator('#settings-open').click();await page.getByRole('button',{name:'上移仓库 2',exact:true}).click();
+      await page.locator('#save-repositories').click();
+      await page.waitForFunction(() => document.getElementById('save-repositories').disabled);
+      await page.keyboard.press('Escape');
+      assert.match(await card.textContent(), /来源：github.com/);assert.match(await card.textContent(), /v2.0.0/);
+      await page.locator('#settings-open').click();
+      await page.getByRole('switch',{name:'启用仓库 1',exact:true}).uncheck();await page.locator('#save-repositories').click();
+      await page.waitForFunction(() => document.getElementById('save-repositories').disabled);await page.keyboard.press('Escape');
+      assert.match(await card.textContent(), /来源：gitee.com/);assert.match(await card.textContent(), /v1.1.0/);
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.repositoryRequests), ['https://gitee.com/xishuaiya/wallpapers','https://github.com/whoarei/wallpapers']);
+    });
+
+    await test('failed repository saves retain edited addresses and enable switches', fixture => {
+      fixture.failRepositorySave = true;
+    }, async page => {
+      await page.locator('#settings-open').click();
+      await page.locator('#repository-url-0').fill('https://gitee.com/example/custom.git');
+      await page.getByRole('switch',{name:'启用仓库 1',exact:true}).uncheck();
+      await page.locator('#save-repositories').click();await visible(page.locator('#repositories-error'));
+      await page.waitForTimeout(1150);
+      assert.match(await page.locator('#repositories-error').textContent(), /保存失败/);
+      assert.equal(await page.locator('#repository-url-0').inputValue(),'https://gitee.com/example/custom.git');
+      assert.equal(await page.getByRole('switch',{name:'启用仓库 1',exact:true}).isChecked(),false);
+      assert.equal(await page.locator('#save-repositories').isEnabled(),true);
+      assert.deepEqual((await page.evaluate(() => window.__uiTest.state())).wallpaper_repositories[0],{url:'https://gitee.com/xishuaiya/wallpapers',enabled:true});
     });
 
     await test('old settings default to system proxy and unsaved drafts survive polling', fixture => {

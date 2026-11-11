@@ -13,6 +13,7 @@ fn main() {
         "remove_wallpaper",
         "auto_pause",
         "set_proxy",
+        "set_wallpaper_repositories",
         "test_proxy",
         "load_online_cover",
         "hide_manager",
