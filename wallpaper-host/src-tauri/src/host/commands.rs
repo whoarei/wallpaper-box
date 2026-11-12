@@ -275,6 +275,9 @@ pub async fn set_proxy(
             // both the current configuration and the manager draft intact.
             catalog::atomic_json(&host.dir.join("settings.json"), &settings)
                 .map_err(|_| "代理设置保存失败，请检查设置目录是否可写。")?;
+            if data.settings.proxy != settings.proxy {
+                data.history.clear();
+            }
             data.settings = settings;
         }
         let _ = app.emit("host-updated", ());
@@ -309,6 +312,9 @@ pub async fn set_wallpaper_repositories(
             settings.wallpaper_repositories = repositories;
             catalog::atomic_json(&host.dir.join("settings.json"), &settings)
                 .map_err(|_| "壁纸仓库设置保存失败，请检查设置目录是否可写。")?;
+            if data.settings.wallpaper_repositories != settings.wallpaper_repositories {
+                data.history.clear();
+            }
             data.settings = settings;
             data.online = online;
         }
@@ -433,37 +439,123 @@ pub async fn check_online(app: AppHandle, window: WebviewWindow) -> Result<View,
             .wallpaper_repositories
             .clone();
         let state = crate::online::check(&host.dir, &repositories, &proxy);
-        host.data.lock().unwrap().online = state;
+        {
+            let mut data = host.data.lock().unwrap();
+            data.online = state;
+            data.history.clear();
+        }
         Ok(snapshot(&app))
     })
     .await
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
+pub async fn load_wallpaper_history(
+    app: AppHandle,
+    window: WebviewWindow,
+    module_id: String,
+    repository: String,
+    page: u32,
+) -> Result<crate::online::history::Page, String> {
+    manager(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        let _check = host
+            .history_check
+            .try_lock()
+            .map_err(|_| "正在加载历史版本，请稍后重试。")?;
+        let (item, proxy, revision) = {
+            let data = host.data.lock().unwrap();
+            let item = data
+                .online
+                .catalog
+                .as_ref()
+                .and_then(|catalog| {
+                    catalog
+                        .wallpapers
+                        .iter()
+                        .find(|item| item.id == module_id && item.repository == repository)
+                })
+                .cloned()
+                .ok_or("壁纸来源已变化，请重新打开版本列表。")?;
+            (item, data.settings.proxy.clone(), data.history.revision())
+        };
+        let page = crate::online::history::load(&item, page, &proxy)?;
+        let mut data = host.data.lock().unwrap();
+        if revision != data.history.revision() {
+            return Err("壁纸库或网络设置已变化，请重新打开版本列表。".into());
+        }
+        if !data
+            .settings
+            .wallpaper_repositories
+            .iter()
+            .any(|source| source.enabled && source.url == repository)
+        {
+            return Err("壁纸来源仓库已关闭或移除。".into());
+        }
+        data.history.remember(&repository, &module_id, &page);
+        Ok(page)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub async fn install_online(
     app: AppHandle,
     window: WebviewWindow,
     module_id: String,
+    version: Option<String>,
+    repository: Option<String>,
 ) -> Result<View, String> {
     manager(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         let host = app.state::<Host>();
-        let item = host
-            .data
-            .lock()
-            .unwrap()
-            .online
-            .catalog
-            .as_ref()
-            .and_then(|c| c.wallpapers.iter().find(|m| m.id == module_id))
-            .cloned()
-            .ok_or("请先检查在线壁纸清单。")?;
+        let item = {
+            let data = host.data.lock().unwrap();
+            let item = if let Some(version) = &version {
+                let repository = repository.as_ref().ok_or("请选择版本的来源仓库。")?;
+                data.history.select(repository, &module_id, version)
+            } else {
+                data.online
+                    .catalog
+                    .as_ref()
+                    .and_then(|catalog| catalog.wallpapers.iter().find(|item| item.id == module_id))
+                    .cloned()
+            }
+            .ok_or("请重新加载壁纸清单或版本列表后重试。")?;
+            if !data
+                .settings
+                .wallpaper_repositories
+                .iter()
+                .any(|source| source.enabled && source.url == item.repository)
+            {
+                return Err("壁纸来源仓库已关闭或移除。".into());
+            }
+            item
+        };
         crate::online::validate_wallpaper(&item)?;
         if !item.compatible() {
             return Err(format!("请先升级壁纸盒子到 {}。", item.min_app_version));
         }
-        host.downloads
-            .enqueue(item.id.clone(), item.clone(), item.size)?;
+        if host
+            .downloads
+            .snapshot()
+            .iter()
+            .any(|task| task.id == module_id)
+        {
+            return Err("这张壁纸已有下载任务，请先完成或移除任务。".into());
+        }
+        let id = item.id.clone();
+        let size = item.size;
+        host.downloads.enqueue(
+            id,
+            crate::online::InstallRequest {
+                item,
+                selected_version: version.is_some(),
+            },
+            size,
+        )?;
         Ok(snapshot(&app))
     })
     .await

@@ -98,12 +98,16 @@ impl Address {
     }
 
     pub fn latest_api(&self) -> String {
+        format!("{}/latest", self.releases_api())
+    }
+
+    pub fn releases_api(&self) -> String {
         let base = if self.host == "github.com" {
             "https://api.github.com/repos"
         } else {
             "https://gitee.com/api/v5/repos"
         };
-        format!("{base}/{}/{}/releases/latest", self.owner, self.name)
+        format!("{base}/{}/{}/releases", self.owner, self.name)
     }
 
     pub fn validate_asset(

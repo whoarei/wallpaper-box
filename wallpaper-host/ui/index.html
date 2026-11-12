@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>壁纸盒子 · 壁纸管理</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="settings.css"><script src="app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>壁纸盒子 · 壁纸管理</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="online.css"><script src="app.js" defer></script></head>
 <body>
 <header class="topbar">
  <div class="brand"><span class="mark" aria-hidden="true">≈</span><strong>壁纸盒子</strong></div>
@@ -93,6 +93,7 @@
  </div>
 </dialog>
 <dialog id="app-update-confirm" class="app-update-confirm" aria-labelledby="app-update-confirm-title" aria-describedby="app-update-confirm-copy"><div class="dialog-body"><h2 id="app-update-confirm-title">重启并升级？</h2><p id="app-update-confirm-copy"></p><div class="app-update-actions"><button id="cancel-app-update" class="quiet">暂不升级</button><button id="confirm-app-update" class="update-install">确认升级</button></div></div></dialog>
+<div id="wallpaper-versions" class="wallpaper-versions" popover="auto" role="listbox" aria-label="壁纸版本" tabindex="-1"></div>
 <div class="toast" id="toast" role="status" aria-live="polite" popover="manual"></div>
 </body>
 </html>

@@ -36,7 +36,7 @@ function serveUi() {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (pathname === '/favicon.ico') { response.writeHead(204).end(); return; }
     const filename = pathname === '/' ? 'index.html' : pathname.slice(1);
-    if (!['index.html', 'app.js', 'app.css', 'settings.css', 'icon.png'].includes(filename)) {
+    if (!['index.html', 'app.js', 'app.css', 'settings.css', 'online.css', 'icon.png'].includes(filename)) {
       response.writeHead(404).end(); return;
     }
     response.writeHead(200, { 'Content-Type': mime[path.extname(filename)], 'Cache-Control': 'no-store' });
@@ -85,10 +85,20 @@ function parallelDownloads(fixture) {
   }
 }
 
+function wallpaperHistory(fixture) {
+  fixture.deferInstall = true;
+  Object.assign(fixture.state.modules[0], { version: '1.1.0', source: 'online' });
+  const latest = fixture.catalog.wallpapers[0];
+  fixture.historyPages = [
+    { wallpapers: [latest, {...latest, version:'1.0.0'}], next_page:2, warning:null },
+    { wallpapers: [{...latest, version:'1.0.0'}, {...latest, version:'0.9.0'}], next_page:null, warning:null },
+  ];
+}
+
 // This fixture owns native state. UI updates only through the production invoke
 // API and its ordinary one-second polling, matching a Tauri manager window.
 function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppCheck, failAppInstall,
-  failPreview, deferApply, deferInstall, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures, deferCancellation, importedModule, failAutoStart, deferAutoStart, persistAutoStart }) {
+  failPreview, deferApply, deferInstall, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures, deferCancellation, importedModule, failAutoStart, deferAutoStart, persistAutoStart, historyPages, failHistory, deferHistory, coverData }) {
   const copy = value => JSON.parse(JSON.stringify(value));
   if (persistProxy && sessionStorage.getItem('native-proxy')) {
     state.proxy = JSON.parse(sessionStorage.getItem('native-proxy'));
@@ -113,6 +123,8 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
   const listeners = new Map();
   const previous = new Map();
   let pendingFailure = !!failCheck;
+  let pendingHistoryFailure = !!failHistory;
+  const historyChoices = new Map();
   let finishOperation;
   window.__uiTest = {
     calls, repositoryRequests,
@@ -188,7 +200,7 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
         return null;
       case 'load_online_cover':
         if (failCover) throw '封面下载失败。';
-        return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jDZkAAAAASUVORK5CYII=';
+        return coverData?.[args.moduleId] || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jDZkAAAAASUVORK5CYII=';
       case 'refresh_modules': return copy(state);
       case 'open_wallpaper_folder':
       case 'open_about_link':
@@ -254,9 +266,18 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
           return {repository:repository.url,catalog:current,checked_at:1794297600,cached:false,last_error:null};
         }));
         return copy(state);
+      case 'load_wallpaper_history': {
+        if (deferHistory) await new Promise(resolve => { finishOperation = resolve; });
+        if (pendingHistoryFailure) { pendingHistoryFailure = false; throw '历史版本连接失败，请重试。'; }
+        const latest=state.online.catalog?.wallpapers.find(item=>item.id===args.moduleId&&item.repository===args.repository);
+        if(!latest)throw '壁纸来源已变化';
+        const page=copy(historyPages?.[args.page-1]||{wallpapers:[latest,{...latest,version:'0.9.0'}],next_page:null,warning:null});
+        for(const item of page.wallpapers){item.repository=args.repository;historyChoices.set(JSON.stringify([item.repository,item.id,item.version]),copy(item));}
+        return page;
+      }
       case 'install_online': {
         if(state.downloads.some(t=>t.id===args.moduleId))return copy(state);
-        const item=state.online.catalog?.wallpapers.find(item=>item.id===args.moduleId);
+        const item=args.version?historyChoices.get(JSON.stringify([args.repository,args.moduleId,args.version])):state.online.catalog?.wallpapers.find(item=>item.id===args.moduleId);
         if(!item)throw new Error('Test IPC: unknown selected wallpaper');
         state.downloads.push({id:item.id,item:copy(item),phase:'queued',received:deferInstall?item.size/2:0,total:item.size,speed:1024,error:null,queue_position:null});pump();
         if(deferInstall)finishOperation=()=>completeDownload(item.id);else completeDownload(item.id);
@@ -751,7 +772,7 @@ async function noHorizontalOverflow(page, label) {
       await page.keyboard.press('Escape');await page.locator('#tab-online').click();
       await visible(moduleCard(page, '#online-modules', '通往别处的窗户'));
       assert.deepEqual(await page.evaluate(() => window.__uiTest.repositoryRequests), ['https://gitee.com/xishuaiya/wallpapers']);
-      assert.match(await moduleCard(page, '#online-modules', '通往别处的窗户').textContent(), /来源：gitee.com\/xishuaiya\/wallpapers/);
+      assert.match(await moduleCard(page, '#online-modules', '通往别处的窗户').getAttribute('title'), /来源：gitee.com\/xishuaiya\/wallpapers/);
     });
 
     await test('custom repository drafts survive polling and normalized ordering persists after reload', fixture => {
@@ -809,7 +830,7 @@ async function noHorizontalOverflow(page, label) {
     }, async page => {
       await page.locator('#tab-online').click();
       const card=moduleCard(page,'#online-modules','通往别处的窗户');await visible(card);
-      assert.match(await card.textContent(), /来源：github.com\/whoarei\/wallpapers/);
+      assert.match(await card.getAttribute('title'), /来源：github.com\/whoarei\/wallpapers/);
       await visible(page.locator('#online-error'));assert.match(await page.locator('#online-error').textContent(), /gitee.com.*仓库暂时不可用/);
       await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();
       assert.match(await page.locator('.repository-source-status').first().textContent(), /仓库暂时不可用/);
@@ -825,16 +846,16 @@ async function noHorizontalOverflow(page, label) {
       await page.locator('#tab-online').click();
       const card=moduleCard(page,'#online-modules','水族箱');await visible(card);
       assert.equal(await page.locator('#online-modules .module').count(),3);
-      assert.match(await card.textContent(), /来源：gitee.com/);assert.match(await card.textContent(), /v1.1.0/);
+      assert.match(await card.getAttribute('title'), /来源：gitee.com/);assert.match(await card.textContent(), /v1.1.0/);
       await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();await page.getByRole('button',{name:'上移仓库 2',exact:true}).click();
       await page.locator('#save-repositories').click();
       await page.waitForFunction(() => document.getElementById('save-repositories').disabled);
       await page.keyboard.press('Escape');
-      assert.match(await card.textContent(), /来源：github.com/);assert.match(await card.textContent(), /v2.0.0/);
+      assert.match(await card.getAttribute('title'), /来源：github.com/);assert.match(await card.textContent(), /v2.0.0/);
       await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();
       await page.getByRole('switch',{name:'启用仓库 1',exact:true}).uncheck();await page.locator('#save-repositories').click();
       await page.waitForFunction(() => document.getElementById('save-repositories').disabled);await page.keyboard.press('Escape');
-      assert.match(await card.textContent(), /来源：gitee.com/);assert.match(await card.textContent(), /v1.1.0/);
+      assert.match(await card.getAttribute('title'), /来源：gitee.com/);assert.match(await card.textContent(), /v1.1.0/);
       assert.deepEqual(await page.evaluate(() => window.__uiTest.repositoryRequests), ['https://gitee.com/xishuaiya/wallpapers','https://github.com/whoarei/wallpapers']);
     });
 
@@ -1112,7 +1133,7 @@ async function noHorizontalOverflow(page, label) {
       await remote.getByRole('button', { name: '下载壁纸', exact: true }).click();
       for (const [phase, label] of [['verifying', '校验中'], ['waiting_install', '等待安装'], ['installing', '安装中']]) {
         await page.evaluate(phase => window.__uiTest.setDownload('window-to-elsewhere', { phase, received: 12344 }), phase);
-        await page.waitForFunction(label => document.querySelector('#online-modules [data-download-id="window-to-elsewhere"] .task-label')?.textContent === label, label);
+        await page.waitForFunction(label => document.querySelector('#online-modules [data-download-id="window-to-elsewhere"] .task-label')?.textContent === label+' · v1.0.0', label);
         assert.equal(await remote.getByRole('button', { name: '应用壁纸', exact: true }).count(), 0);
         assert.equal(await remote.locator('.task-action').isVisible(), false);
         assert.equal(await page.locator('#current-title').textContent(), '水族箱');
@@ -1135,6 +1156,90 @@ async function noHorizontalOverflow(page, label) {
       assert.equal(await page.locator('#current-title').textContent(), '水族箱');
       assert.equal((await page.evaluate(() => window.__uiTest.state())).auto_pause, true);
       assert.deepEqual(await actions(page), [{ command: 'preview_wallpaper', args: { moduleId: 'pinewind-town' } }]);
+    });
+
+    await test('version dropdown downloads the selected historical version and retries that version', fixture => {
+      wallpaperHistory(fixture);
+      fixture.coverData = {};
+      for (const id of ['aquarium', 'pinewind-town']) {
+        fixture.coverData[id] = 'data:image/jpeg;base64,'+fs.readFileSync(path.resolve(__dirname, '../wallpapers', id, 'cover.jpg')).toString('base64');
+        fixture.catalog.wallpapers.find(item=>item.id===id).coverUrl = `https://gitee.com/xishuaiya/wallpapers/releases/download/library-v1.1.0/${id}-cover.jpg`;
+      }
+    }, async page => {
+      await page.locator('#tab-online').click();
+      const card=moduleCard(page,'#online-modules','水族箱'),menu=page.locator('#wallpaper-versions');
+      await card.locator('.version-trigger').focus();await page.keyboard.press('ArrowDown');
+      await visible(menu.getByRole('option').filter({hasText:'v1.0.0'}));
+      assert.equal(await menu.getByRole('option').filter({hasText:'v1.0.0'}).evaluate(node=>node===document.activeElement),true,'The first keyboard-opened list focuses an available version after loading');
+      assert.equal(await menu.getByRole('option').filter({hasText:'v1.1.0'}).isDisabled(),true);
+      assert.equal(await page.locator('dialog[open]').count(),0,'Version selection must not open a modal');
+      await page.waitForTimeout(1150);
+      assert.equal(await menu.evaluate(node=>node.matches(':popover-open')),true,'Polling keeps the version list open');
+      await menu.getByRole('button',{name:'更早版本 ↓',exact:true}).click();
+      const older=menu.getByRole('option').filter({hasText:'v0.9.0'});await visible(older);
+      assert.equal(await menu.getByRole('option').filter({hasText:'v1.0.0'}).count(),1,'Repeated library releases must not duplicate versions');
+      await screenshot(page,'history-list');
+      await older.click();
+      await visible(card.getByRole('progressbar'));
+      assert.equal((await page.evaluate(()=>window.__uiTest.state())).modules[0].version,'1.1.0');
+      assert.match(await page.locator('#toast').textContent(),/正在下载 v0.9.0.*替换当前版本/);
+      const install=(await actions(page)).filter(call=>call.command==='install_online');
+      assert.deepEqual(install,[{command:'install_online',args:{moduleId:'aquarium',version:'0.9.0',repository:'https://gitee.com/xishuaiya/wallpapers'}}]);
+      await page.evaluate(()=>{
+        const items=window.__uiTest.state().online.catalog.wallpapers;items[0].version='2.0.0';window.__uiTest.setCatalog(items);
+        window.__uiTest.failDownload('aquarium');
+      });
+      const retry=card.getByRole('button',{name:'重试水族箱',exact:true});await visible(retry);await retry.click();
+      await page.waitForFunction(()=>window.__uiTest.state().downloads[0].phase==='downloading');
+      assert.equal((await page.evaluate(()=>window.__uiTest.state())).downloads[0].item.version,'0.9.0');
+      await screenshot(page,'history-download');
+      await page.evaluate(()=>window.__uiTest.completeDownload('aquarium'));
+      await page.waitForFunction(()=>document.querySelector('#online-modules [data-card-key="aquarium"] .version-trigger').textContent.includes('v0.9.0')&&!document.querySelector('#online-modules [data-card-key="aquarium"] .download-task:not([hidden])'));
+      assert.match(await page.locator('#toast').textContent(),/水族箱已替换为 v0.9.0/);
+      assert.equal((await actions(page)).some(call=>call.command==='apply_wallpaper'),false,'Replacing an installed version keeps monitor assignments');
+    });
+
+    await test('version history retries failures, disables incompatible entries and supports the keyboard', fixture => {
+      wallpaperHistory(fixture);fixture.failHistory=true;
+      const latest=fixture.catalog.wallpapers[0];
+      fixture.historyPages=[{wallpapers:[latest,{...latest,version:'2.0.0',minAppVersion:'99.0.0'},{...latest,version:'0.9.0'}],next_page:null,warning:null}];
+    }, async page => {
+      await page.locator('#tab-online').click();
+      const card=moduleCard(page,'#online-modules','水族箱'),menu=page.locator('#wallpaper-versions');
+      await card.locator('.version-trigger').click();
+      await menu.getByRole('button',{name:'加载未完成，点击重试',exact:true}).click();
+      await visible(menu.getByRole('option').filter({hasText:'v0.9.0'}));
+      assert.equal(await menu.getByRole('option').filter({hasText:'v2.0.0'}).isDisabled(),true);
+      assert.match(await menu.getByRole('option').filter({hasText:'v2.0.0'}).getAttribute('title'),/99.0.0/);
+      await page.locator('#collection-title').click();
+      assert.equal(await menu.evaluate(node=>node.matches(':popover-open')),false);
+      await card.locator('.version-trigger').focus();await page.keyboard.press('ArrowDown');await page.keyboard.press('Escape');
+      assert.equal(await card.locator('.version-trigger').evaluate(node=>node===document.activeElement),true);
+      await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
+      await visible(card.getByRole('progressbar'));
+      assert.equal((await page.evaluate(()=>window.__uiTest.state())).downloads[0].item.version,'0.9.0');
+      assert.equal((await actions(page)).filter(call=>call.command==='load_wallpaper_history').length,2,'Reopening a loaded list reuses the catalog for the selected source');
+      await card.getByRole('button',{name:'取消下载：水族箱',exact:true}).click();
+      await page.waitForFunction(()=>!window.__uiTest.state().downloads.length);
+      assert.equal((await page.evaluate(()=>window.__uiTest.state())).modules[0].version,'1.1.0');
+      await page.waitForTimeout(3200);
+      assert.equal(await page.locator('#toast').evaluate(node=>node.classList.contains('show')),false,'Version notices disappear after three seconds');
+    });
+
+    await test('changing repository settings discards an in-flight history list', fixture => {
+      wallpaperHistory(fixture);fixture.deferHistory=true;
+    }, async page => {
+      await page.locator('#tab-online').click();
+      await moduleCard(page,'#online-modules','水族箱').locator('.version-trigger').click();
+      await visible(page.locator('#wallpaper-versions').getByRole('status'));
+      await page.locator('#settings-open').click();await page.locator('#settings-tab-repositories').click();
+      await page.getByRole('switch',{name:'启用仓库 1',exact:true}).uncheck();await page.locator('#save-repositories').click();
+      await page.waitForFunction(()=>document.getElementById('save-repositories').disabled);
+      await page.evaluate(()=>window.__uiTest.finishOperation());await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+      assert.equal(await page.locator('#wallpaper-versions').evaluate(node=>node.matches(':popover-open')),false);
+      assert.equal(await page.locator('#online-modules .module').count(),0);
+      assert.equal((await actions(page)).some(call=>call.command==='install_online'),false);
     });
 
     await test('startup and polling never check or install wallpapers', null, async page => {

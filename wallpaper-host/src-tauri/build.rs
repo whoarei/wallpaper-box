@@ -18,6 +18,7 @@ fn main() {
         "set_wallpaper_repositories",
         "test_proxy",
         "load_online_cover",
+        "load_wallpaper_history",
         "hide_manager",
         "quit_app",
         "capture_desktop",

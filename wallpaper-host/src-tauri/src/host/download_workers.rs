@@ -1,10 +1,10 @@
 use super::*;
 use crate::download_queue::{Lease, Phase, MAX_CONCURRENT};
 
-fn process(app: &AppHandle, lease: &Lease<crate::online::RemoteWallpaper>) -> Result<(), String> {
+fn process(app: &AppHandle, lease: &Lease<crate::online::InstallRequest>) -> Result<(), String> {
     let host = app.state::<Host>();
     let root = host.library.user.join(".downloads");
-    let item = lease.item.clone();
+    let item = lease.item.item.clone();
     let proxy = {
         let data = host.data.lock().unwrap();
         if !data
@@ -49,12 +49,12 @@ fn process(app: &AppHandle, lease: &Lease<crate::online::RemoteWallpaper>) -> Re
     // Only the installer holds a full archive in memory, irrespective of the
     // five network workers. Existing version/path checks remain authoritative.
     let bytes = archive.read()?;
-    crate::online::install_bytes(&host.library, &lease.item, &bytes)?;
+    crate::online::install_request(&host.library, &lease.item, &bytes)?;
     refresh(app)?;
     commands::reload(app, &lease.id);
     log(
         app,
-        &format!("Installed {} {}", lease.id, lease.item.version),
+        &format!("Installed {} {}", lease.id, lease.item.item.version),
     );
     Ok(())
 }

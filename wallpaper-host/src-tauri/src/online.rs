@@ -1,4 +1,5 @@
 //! Enabled release repositories and versioned, rollback-friendly wallpaper updates.
+pub mod history;
 use crate::network::{self, ProxySettings};
 use crate::repositories::{self, Address, Release, Repository};
 use crate::{
@@ -48,6 +49,13 @@ impl RemoteWallpaper {
         semver::Version::parse(&self.min_app_version)
             .is_ok_and(|required| required <= semver::Version::parse(catalog::APP_VERSION).unwrap())
     }
+}
+
+#[derive(Clone)]
+pub struct InstallRequest {
+    pub item: RemoteWallpaper,
+    // Only native history selection may opt out of automatic downgrade protection.
+    pub selected_version: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -332,7 +340,7 @@ fn bind_release(
     release: &Release,
 ) -> Result<RemoteCatalog, String> {
     if catalog.version != release.version()? {
-        return Err("清单版本与最新 Release 不一致。".into());
+        return Err("清单版本与 Release 不一致。".into());
     }
     for item in &mut catalog.wallpapers {
         item.repository = repository.url.clone();
@@ -440,6 +448,26 @@ pub fn install_bytes(
     item: &RemoteWallpaper,
     bytes: &[u8],
 ) -> Result<(), String> {
+    install_verified(library, item, bytes, false)
+}
+
+pub fn install_request(
+    library: &Library,
+    request: &InstallRequest,
+    bytes: &[u8],
+) -> Result<(), String> {
+    if !request.selected_version {
+        return install_bytes(library, &request.item, bytes);
+    }
+    install_verified(library, &request.item, bytes, true)
+}
+
+fn install_verified(
+    library: &Library,
+    item: &RemoteWallpaper,
+    bytes: &[u8],
+    selected_version: bool,
+) -> Result<(), String> {
     validate_wallpaper(item)?;
     if !item.compatible() {
         return Err(format!(
@@ -447,7 +475,9 @@ pub fn install_bytes(
             item.min_app_version
         ));
     }
-    reject_downgrade(library, item)?;
+    if !selected_version {
+        reject_downgrade(library, item)?;
+    }
     if bytes.len() as u64 != item.size
         || !packages::digest(bytes).eq_ignore_ascii_case(&item.sha256)
     {
@@ -896,6 +926,36 @@ mod tests {
         let (mut newer, bytes) = package("1.2.0", "New");
         newer.min_app_version = "99.0.0".into();
         assert!(install_bytes(&library, &newer, &bytes).is_err());
+        assert_eq!(library.active("scene").unwrap().current, "1.1.0");
+    }
+
+    #[test]
+    fn explicit_history_selection_verifies_then_replaces_and_preserves_rollback() {
+        let temp = tempfile::tempdir().unwrap();
+        let library = library(temp.path());
+        let (newer, bytes) = package("1.1.0", "Newer");
+        install_bytes(&library, &newer, &bytes).unwrap();
+        let (older, bytes) = package("1.0.0", "Older");
+        assert!(install_bytes(&library, &older, &bytes).is_err());
+        let request = InstallRequest {
+            item: older,
+            selected_version: true,
+        };
+        let mut corrupt = bytes.clone();
+        corrupt[0] ^= 1;
+        assert!(install_request(&library, &request, &corrupt).is_err());
+        assert_eq!(library.active("scene").unwrap().current, "1.1.0");
+        install_request(&library, &request, &bytes).unwrap();
+        assert_eq!(library.active("scene").unwrap().current, "1.0.0");
+        assert_eq!(
+            library.active("scene").unwrap().previous.as_deref(),
+            Some("1.1.0")
+        );
+        library.rollback("scene").unwrap();
+        assert_eq!(library.active("scene").unwrap().current, "1.1.0");
+        let mut incompatible = request.clone();
+        incompatible.item.min_app_version = "99.0.0".into();
+        assert!(install_request(&library, &incompatible, &bytes).is_err());
         assert_eq!(library.active("scene").unwrap().current, "1.1.0");
     }
 
