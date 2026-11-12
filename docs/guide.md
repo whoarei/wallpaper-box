@@ -27,7 +27,7 @@
 
 内置松风镇和水族箱由各自页面决定控制栏、帮助与暂停画面的显示。移动鼠标到桌面空白处可唤回控制栏；控制栏被桌面图标覆盖时，需先移开图标。桌面模式不提供网页全屏或页面快捷键，预览保留原有操作。页面控制栏的暂停与主程序暂停分别保存，主程序继续播放不会清除页面自己的暂停。
 
-底部播放栏和托盘会显示当前壁纸提供的互动操作；多个操作可从展开菜单选择。已经下载但未适配的新接口旧包仍可播放和直接点击，其扩展操作入口需要更新壁纸包后才会显示。开发者接口与兼容要求见 [壁纸适配规范（HTML）](wallpaper-adaptation.html)。此开发分支已实现 v1，正式 v0.9.0 尚不支持这些公开接口。
+底部播放栏和托盘会显示当前壁纸提供的互动操作；多个操作可从展开菜单选择。已经下载但未适配的新接口旧包仍可播放和直接点击，其扩展操作入口需要更新壁纸包后才会显示。开发者接口与兼容要求见 [壁纸适配规范（HTML）](wallpaper-adaptation.html)。主程序从 v0.10.0 起提供 v1；v0.9.0 及更早版本尚不支持这些公开接口。
 
 壁纸窗口按每块显示器的 Windows 可用工作区布局，避开任务栏等系统保留区域，让网页内容在可见区域内完整排版。任务栏位置、大小或显示器布局变化后，宿主会在约 2 秒内调整现有窗口；桌面点击坐标和自动暂停检测也按实际播放区域计算。
 
@@ -41,7 +41,7 @@
 
 网络传输直接写入各自的临时文件，安装依次执行；最多 5 项任务占用处理位置，包含等待安装和安装中的任务。仅安装时读取一个完整 ZIP，避免并行下载同时占用多个完整包的内存。任务队列仅保留在本次运行中，关闭程序会停止下载。
 
-正式 v0.9.0 保留了旧的水族箱专用投喂适配。此开发分支将其迁移为通用操作发现与调用，具体投喂规则由壁纸执行。主程序版本、内置内容版本和最低版本未在普通功能开发中改动；正式发布前需为已改内容确定新版本，避免覆盖同版本包。
+v0.9.0 及以前的水族箱专用投喂适配已在 v0.10.0 迁移为通用操作发现与调用，具体投喂规则由壁纸执行。两张随包内置快照更新为 1.0.1，保留面向旧宿主的网页降级，不提高其最低主程序版本。官方在线内容库独立发布；程序升级不会替换用户已经激活的在线内容包，未适配旧包的管理端扩展操作需更新内容包后恢复。
 
 ## 程序在线升级
 
@@ -109,7 +109,7 @@ HTML、脚本、样式与图片使用相对路径。文件夹名使用小写字�
 ## 项目目录
 
 - `wallpaper-host/`：Tauri 2 宿主、嵌入式管理界面、原生目录发现、本地协议、在线更新与打包校验。
-- `wallpapers/{aquarium,pinewind-town}/`：0.9.0 随包的两张壁纸快照。
+- `wallpapers/{aquarium,pinewind-town}/`：0.10.0 随包的两张壁纸快照（内容版本 1.0.1）。
 - `display-service/`：保留的 Legacy Docker 浏览器开发示例，桌面程序运行和安装包不依赖它。
 - `.github/workflows/windows.yml`：主程序 CI 与标签发布。
 - [HTML 技术方案](../display-service/public/docs/architecture.html)：单文件离线文档，含架构、模块规范、权限、迁移及发布流程，支持 10 套配色和保存 PDF。
@@ -126,11 +126,11 @@ npm ci --ignore-scripts
 npm run check:version
 npm run bundle
 ./scripts/package-release.ps1 -RequireSigned
-./scripts/verify-release.ps1 -Directory ../release/v0.9.0 -RequireSigned
-node scripts/verify-installer.mjs ../release/v0.9.0
+./scripts/verify-release.ps1 -Directory ../release/v0.10.0 -RequireSigned
+node scripts/verify-installer.mjs ../release/v0.10.0
 ```
 
-产物位于 `release/v0.9.0/`，共五项：`wallpaper-box_0.9.0_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
+产物位于 `release/v0.10.0/`，共五项：`wallpaper-box_0.10.0_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
 
 Rust 行为检查：
 
@@ -160,8 +160,8 @@ CI 固定工具链、依赖锁文件和 Action 提交，检查版本、JavaScrip
 版本与验收完成后：
 
 ```powershell
-git tag v0.9.0
-git push origin v0.9.0
+git tag v0.10.0
+git push origin v0.10.0
 gh run list --repo whoarei/wallpaper-box --workflow windows.yml
 ```
 
