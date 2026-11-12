@@ -4,9 +4,9 @@ use std::{
     cell::RefCell,
     ptr::{null, null_mut},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc::{self, SyncSender},
-        Arc,
+        Arc, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -22,6 +22,28 @@ use windows_sys::Win32::{
 const MAX_CLICK_MS: u32 = 1000;
 const MAX_QUEUE_DELAY: Duration = Duration::from_millis(500);
 const POINTER_INTERVAL: Duration = Duration::from_millis(100);
+
+#[derive(Default)]
+struct Diagnostics {
+    hook_events: AtomicU64,
+    queue_dropped: AtomicU64,
+    worker: Mutex<WorkerDiagnostics>,
+}
+#[derive(Clone, Default, serde::Serialize)]
+struct WorkerDiagnostics {
+    packets: u64,
+    clicks: u64,
+    moves: u64,
+    stage: &'static str,
+    last_rejection: Option<String>,
+    recent_click_rejections: std::collections::VecDeque<String>,
+}
+#[derive(serde::Serialize)]
+pub struct DiagnosticSnapshot {
+    hook_events: u64,
+    queue_dropped: u64,
+    worker: WorkerDiagnostics,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Point {
@@ -147,6 +169,7 @@ impl Gesture {
 struct HookState {
     gesture: Gesture,
     sender: SyncSender<Packet>,
+    diagnostics: Arc<Diagnostics>,
 }
 thread_local! { static HOOK_STATE: RefCell<Option<HookState>> = const { RefCell::new(None) }; }
 
@@ -159,6 +182,10 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
             let Some(state) = state.as_mut() else {
                 return;
             };
+            state
+                .diagnostics
+                .hook_events
+                .fetch_add(1, Ordering::Relaxed);
             let message = wparam as u32;
             let mouse = &*(lparam as *const MSLLHOOKSTRUCT);
             let point = Point {
@@ -178,11 +205,20 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
                 } else {
                     0
                 };
-                let _ = state.sender.try_send(Packet {
-                    event,
-                    hit,
-                    at: Instant::now(),
-                });
+                if state
+                    .sender
+                    .try_send(Packet {
+                        event,
+                        hit,
+                        at: Instant::now(),
+                    })
+                    .is_err()
+                {
+                    state
+                        .diagnostics
+                        .queue_dropped
+                        .fetch_add(1, Ordering::Relaxed);
+                }
             }
         });
     }
@@ -193,8 +229,16 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
 pub struct Listener {
     thread_id: u32,
     stop: Arc<AtomicBool>,
+    diagnostics: Arc<Diagnostics>,
 }
 impl Listener {
+    pub fn diagnostics(&self) -> DiagnosticSnapshot {
+        DiagnosticSnapshot {
+            hook_events: self.diagnostics.hook_events.load(Ordering::Relaxed),
+            queue_dropped: self.diagnostics.queue_dropped.load(Ordering::Relaxed),
+            worker: self.diagnostics.worker.lock().unwrap().clone(),
+        }
+    }
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Release);
         unsafe {
@@ -208,16 +252,70 @@ impl Drop for Listener {
     }
 }
 
-/// Only properties and parent relationships are read; no UIA actions are used.
+// UIA's global ElementFromPoint can return the desktop root for a secondary
+// monitor instead of Explorer's list. Query that exact list's MSAA provider so
+// an unavailable/global provider never makes an icon count as blank space.
+unsafe fn desktop_list_blank(hit: HWND, point: Point) -> Result<(), String> {
+    use windows::{
+        core::Interface,
+        Win32::{
+            System::Variant::{VARIANT, VT_I4},
+            UI::Accessibility::{
+                AccessibleObjectFromWindow, IAccessible, WindowFromAccessibleObject,
+                ROLE_SYSTEM_LIST,
+            },
+        },
+    };
+    let mut raw = null_mut();
+    AccessibleObjectFromWindow(
+        windows::Win32::Foundation::HWND(hit),
+        OBJID_CLIENT as u32,
+        &IAccessible::IID,
+        &mut raw,
+    )
+    .map_err(|e| format!("desktop list accessibility: {e}"))?;
+    if raw.is_null() {
+        return Err("desktop list accessibility unavailable".into());
+    }
+    let accessible = IAccessible::from_raw(raw);
+    let mut native = windows::Win32::Foundation::HWND::default();
+    WindowFromAccessibleObject(&accessible, Some(&mut native))
+        .map_err(|e| format!("desktop list accessibility window: {e}"))?;
+    let role = accessible
+        .get_accRole(&VARIANT::from(CHILDID_SELF as i32))
+        .map_err(|e| format!("desktop list accessibility role: {e}"))?;
+    if native.0 != hit
+        || role.vt() != VT_I4
+        || i32::try_from(&role).ok() != Some(ROLE_SYSTEM_LIST as i32)
+    {
+        return Err(format!(
+            "desktop list accessibility provider mismatch: native={}, expected={}, role={:?}",
+            native.0 as isize,
+            hit as isize,
+            i32::try_from(&role).ok()
+        ));
+    }
+    let child = accessible
+        .accHitTest(point.x, point.y)
+        .map_err(|e| format!("desktop list hit test: {e}"))?;
+    // VT_EMPTY is outside; VT_DISPATCH and every nonzero child ID are objects.
+    // Do not coerce other VARIANT types into CHILDID_SELF.
+    if child.vt() != VT_I4 || i32::try_from(&child).ok() != Some(CHILDID_SELF as i32) {
+        return Err("desktop list icon or non-client area".into());
+    }
+    Ok(())
+}
+
+/// Only properties and hit tests are read; no accessibility actions are used.
 unsafe fn desktop_blank(
     automation: &windows::Win32::UI::Accessibility::IUIAutomation,
     packet: Packet,
     surface: Surface,
-) -> Option<isize> {
-    use windows::Win32::UI::Accessibility::{UIA_ListControlTypeId, UIA_PaneControlTypeId};
+) -> Result<isize, String> {
+    use windows::Win32::UI::Accessibility::UIA_PaneControlTypeId;
     let point = match packet.event {
         Event::Down(_, p) | Event::Click(_, p) | Event::Move(p) => p,
-        Event::Cancel => return None,
+        Event::Cancel => return Err("cancelled".into()),
     };
     let hit = packet.hit as HWND;
     if hit.is_null()
@@ -226,12 +324,12 @@ unsafe fn desktop_blank(
             y: point.y,
         }) != hit
     {
-        return None;
+        return Err("native hit changed".into());
     }
     let root = GetAncestor(hit, GA_ROOT);
     let shell = GetShellWindow();
     if shell.is_null() || root.is_null() {
-        return None;
+        return Err("desktop shell unavailable".into());
     }
     let mut shell_pid = 0;
     let mut root_pid = 0;
@@ -244,7 +342,10 @@ unsafe fn desktop_blank(
             "Progman" | "WorkerW"
         )
     {
-        return None;
+        return Err(format!(
+            "non-desktop root: {}",
+            crate::desktop::window_class(root)
+        ));
     }
     let own = hit == surface.hwnd as HWND || IsChild(surface.hwnd as HWND, hit) != 0;
     let class = crate::desktop::window_class(hit);
@@ -254,44 +355,60 @@ unsafe fn desktop_blank(
             "SysListView32" | "SHELLDLL_DefView" | "Progman" | "WorkerW"
         )
     {
-        return None;
+        return Err(format!("non-desktop hit: {class}"));
     }
-    let element = automation
-        .ElementFromPoint(windows::Win32::Foundation::POINT {
-            x: point.x,
-            y: point.y,
-        })
-        .ok()?;
-    if own {
-        // With hidden desktop icons the wallpaper itself can be the native hit.
-        // Require an accessibility ancestor belonging to our wallpaper, rather
-        // than accepting a virtual Explorer icon that may be layered above it.
-        let walker = automation.RawViewWalker().ok()?;
-        let mut current = element;
-        let mut ours = false;
-        for _ in 0..12 {
-            let native = current.CurrentNativeWindowHandle().ok()?.0 as HWND;
-            if !native.is_null() {
-                ours = native == surface.hwnd as HWND || IsChild(surface.hwnd as HWND, native) != 0;
-                break;
-            }
-            current = walker.GetParentElement(&current).ok()?;
-        }
-        if !ours {
-            return None;
-        }
+    if !own && class == "SysListView32" {
+        desktop_list_blank(hit, point)?;
     } else {
-        // Virtual ListItem/Text/Image children are icons (including labels).
-        // Only the actual desktop container itself qualifies as blank space.
-        let kind = element.CurrentControlType().ok()?;
-        let native = element.CurrentNativeWindowHandle().ok()?.0 as HWND;
-        let expected = if class == "SysListView32" {
-            UIA_ListControlTypeId
+        let element = automation
+            .ElementFromPoint(windows::Win32::Foundation::POINT {
+                x: point.x,
+                y: point.y,
+            })
+            .map_err(|e| format!("UIA ElementFromPoint: {e}"))?;
+        if own {
+            // With hidden desktop icons the wallpaper itself can be the native hit.
+            // Require an accessibility ancestor belonging to our wallpaper, rather
+            // than accepting a virtual Explorer icon that may be layered above it.
+            let walker = automation
+                .RawViewWalker()
+                .map_err(|e| format!("UIA walker: {e}"))?;
+            let mut current = element;
+            let mut ours = false;
+            for _ in 0..12 {
+                let native = current
+                    .CurrentNativeWindowHandle()
+                    .map_err(|e| format!("UIA ancestor handle: {e}"))?
+                    .0 as HWND;
+                if !native.is_null() {
+                    ours = native == surface.hwnd as HWND
+                        || IsChild(surface.hwnd as HWND, native) != 0;
+                    break;
+                }
+                current = walker
+                    .GetParentElement(&current)
+                    .map_err(|e| format!("UIA ancestor: {e}"))?;
+            }
+            if !ours {
+                return Err("UIA hit does not belong to wallpaper".into());
+            }
         } else {
-            UIA_PaneControlTypeId
-        };
-        if kind != expected || native != hit {
-            return None;
+            // Virtual ListItem/Text/Image children are icons (including labels).
+            // Only the actual desktop container itself qualifies as blank space.
+            let kind = element
+                .CurrentControlType()
+                .map_err(|e| format!("UIA control type: {e}"))?;
+            let native = element
+                .CurrentNativeWindowHandle()
+                .map_err(|e| format!("UIA native handle: {e}"))?
+                .0 as HWND;
+            let expected = UIA_PaneControlTypeId;
+            if kind != expected || native != hit {
+                return Err(format!(
+                    "UIA non-blank hit: class={class}, type={}, native={}, expected={}",
+                    kind.0, native as isize, hit as isize
+                ));
+            }
         }
     }
     if WindowFromPhysicalPoint(POINT {
@@ -300,9 +417,9 @@ unsafe fn desktop_blank(
     }) != hit
         || packet.at.elapsed() > MAX_QUEUE_DELAY
     {
-        return None;
+        return Err("hit changed or desktop check exceeded 500ms".into());
     }
-    Some(root as isize)
+    Ok(root as isize)
 }
 
 pub fn start(
@@ -310,9 +427,11 @@ pub fn start(
     deliver: impl Fn(Input) + Send + 'static,
 ) -> Result<Listener, String> {
     let stop = Arc::new(AtomicBool::new(false));
+    let diagnostics = Arc::new(Diagnostics::default());
     let (sender, receiver) = mpsc::sync_channel::<Packet>(32);
     let (ready_send, ready) = mpsc::sync_channel(1);
     let worker_stop = stop.clone();
+    let worker_diagnostics = diagnostics.clone();
     std::thread::spawn(move || unsafe {
         use windows::{
             core::Interface,
@@ -344,6 +463,7 @@ pub fn start(
                     let mut pressed: Option<(u64, Surface, isize, isize)> = None;
                     let mut last_pointer = None;
                     while !worker_stop.load(Ordering::Acquire) {
+                        worker_diagnostics.worker.lock().unwrap().stage = "waiting";
                         let packet = match receiver.recv_timeout(POINTER_INTERVAL) {
                             Ok(p) => p,
                             Err(mpsc::RecvTimeoutError::Timeout) => {
@@ -373,14 +493,34 @@ pub fn start(
                             pressed = None;
                             continue;
                         }
+                        {
+                            let mut status = worker_diagnostics.worker.lock().unwrap();
+                            status.packets += 1;
+                            status.stage = "checking desktop";
+                        }
+                        let check = |packet, surface| {
+                            let result = desktop_blank(&automation, packet, surface);
+                            if let Err(reason) = &result {
+                                let mut status = worker_diagnostics.worker.lock().unwrap();
+                                status.last_rejection = Some(reason.clone());
+                                if matches!(packet.event, Event::Down(..) | Event::Click(..)) {
+                                    status
+                                        .recent_click_rejections
+                                        .push_back(format!("hwnd={}: {reason}", surface.hwnd));
+                                    if status.recent_click_rejections.len() > 8 {
+                                        status.recent_click_rejections.pop_front();
+                                    }
+                                }
+                            }
+                            result
+                        };
                         match packet.event {
                             Event::Down(sequence, point) => {
                                 pressed = None;
                                 if let Some(surface) =
                                     surfaces().into_iter().find(|s| s.position(point).is_some())
                                 {
-                                    if let Some(root) = desktop_blank(&automation, packet, surface)
-                                    {
+                                    if let Ok(root) = check(packet, surface) {
                                         pressed = Some((sequence, surface, root, packet.hit));
                                     }
                                 }
@@ -395,10 +535,14 @@ pub fn start(
                                 {
                                     continue;
                                 }
-                                if desktop_blank(&automation, packet, surface) != Some(root) {
+                                if check(packet, surface) != Ok(root) {
                                     continue;
                                 }
                                 if let Some((x, y)) = surface.position(point) {
+                                    let mut status = worker_diagnostics.worker.lock().unwrap();
+                                    status.stage = "delivering click";
+                                    status.clicks += 1;
+                                    drop(status);
                                     deliver(Input {
                                         kind: InputKind::Click,
                                         surface,
@@ -414,8 +558,13 @@ pub fn start(
                                 if let Some(surface) =
                                     surfaces().into_iter().find(|s| s.position(point).is_some())
                                 {
-                                    if desktop_blank(&automation, packet, surface).is_some() {
+                                    if check(packet, surface).is_ok() {
                                         if let Some((x, y)) = surface.position(point) {
+                                            let mut status =
+                                                worker_diagnostics.worker.lock().unwrap();
+                                            status.stage = "delivering move";
+                                            status.moves += 1;
+                                            drop(status);
                                             deliver(Input {
                                                 kind: InputKind::Move,
                                                 surface,
@@ -443,6 +592,7 @@ pub fn start(
     }
     let (hook_send, hook_ready) = mpsc::sync_channel(1);
     let hook_stop = stop.clone();
+    let hook_diagnostics = diagnostics.clone();
     std::thread::spawn(move || unsafe {
         let mut message: MSG = std::mem::zeroed();
         PeekMessageW(&mut message, null_mut(), 0, 0, PM_NOREMOVE);
@@ -453,6 +603,7 @@ pub fn start(
                     (GetSystemMetrics(SM_CYDRAG) + 1) / 2,
                 ),
                 sender,
+                diagnostics: hook_diagnostics,
             })
         });
         let hook = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook), GetModuleHandleW(null()), 0);
@@ -471,7 +622,11 @@ pub fn start(
         HOOK_STATE.with(|cell| *cell.borrow_mut() = None);
     });
     match hook_ready.recv_timeout(Duration::from_secs(3)) {
-        Ok(Ok(thread_id)) => Ok(Listener { thread_id, stop }),
+        Ok(Ok(thread_id)) => Ok(Listener {
+            thread_id,
+            stop,
+            diagnostics,
+        }),
         result => {
             stop.store(true, Ordering::Release);
             Err(format!("桌面点击观察未能启动：{result:?}"))

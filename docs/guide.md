@@ -25,6 +25,8 @@
 
 壁纸模式保持鼠标穿透，桌面图标照常操作。宿主通过只观察、不拦截输入的鼠标钩子，将确认落在同一块桌面空白区域的短点击转发给网页；图标、任务栏、其他窗口、菜单、拖拽和带 Ctrl / Shift / Alt 的点击不会触发壁纸。松风镇也可通过空白处点击种花。程序不安装键盘钩子，也不注册投喂全局快捷键；浏览器与预览窗口仍可使用页面快捷键。
 
+v0.10.1 修复部分多屏环境中桌面空白处点击和鼠标移动无效的问题：当全局 UIA 命中返回整个桌面而非实际桌面列表时，改为向命中的桌面列表查询自身的可访问性命中结果，仅转发确认位于空白处的输入。桌面图标和标签仍被排除。若交互异常，可查看 `%APPDATA%/local.screen-garden.wallpaper/diagnostics.json` 的 `desktop_input`：包含监听事件数、队列丢弃数、工作线程阶段、转发计数及最近的拒绝原因；页面实际接收的点击仍记录在 `host.log` 和各屏的 `desktop_clicks` 中。
+
 内置松风镇和水族箱由各自页面决定控制栏、帮助与暂停画面的显示。移动鼠标到桌面空白处可唤回控制栏；控制栏被桌面图标覆盖时，需先移开图标。桌面模式不提供网页全屏或页面快捷键，预览保留原有操作。页面控制栏的暂停与主程序暂停分别保存，主程序继续播放不会清除页面自己的暂停。
 
 底部播放栏和托盘会显示当前壁纸提供的互动操作；多个操作可从展开菜单选择。已经下载但未适配的新接口旧包仍可播放和直接点击，其扩展操作入口需要更新壁纸包后才会显示。开发者接口与兼容要求见 [壁纸适配规范（HTML）](wallpaper-adaptation.html)。主程序从 v0.10.0 起提供 v1；v0.9.0 及更早版本尚不支持这些公开接口。
@@ -109,7 +111,7 @@ HTML、脚本、样式与图片使用相对路径。文件夹名使用小写字�
 ## 项目目录
 
 - `wallpaper-host/`：Tauri 2 宿主、嵌入式管理界面、原生目录发现、本地协议、在线更新与打包校验。
-- `wallpapers/{aquarium,pinewind-town}/`：0.10.0 随包的两张壁纸快照（内容版本 1.0.1）。
+- `wallpapers/{aquarium,pinewind-town}/`：0.10.1 随包的两张壁纸快照（内容版本 1.0.1）。
 - `display-service/`：保留的 Legacy Docker 浏览器开发示例，桌面程序运行和安装包不依赖它。
 - `.github/workflows/windows.yml`：主程序 CI 与标签发布。
 - [HTML 技术方案](../display-service/public/docs/architecture.html)：单文件离线文档，含架构、模块规范、权限、迁移及发布流程，支持 10 套配色和保存 PDF。
@@ -126,11 +128,11 @@ npm ci --ignore-scripts
 npm run check:version
 npm run bundle
 ./scripts/package-release.ps1 -RequireSigned
-./scripts/verify-release.ps1 -Directory ../release/v0.10.0 -RequireSigned
-node scripts/verify-installer.mjs ../release/v0.10.0
+./scripts/verify-release.ps1 -Directory ../release/v0.10.1 -RequireSigned
+node scripts/verify-installer.mjs ../release/v0.10.1
 ```
 
-产物位于 `release/v0.10.0/`，共五项：`wallpaper-box_0.10.0_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
+产物位于 `release/v0.10.1/`，共五项：`wallpaper-box_0.10.1_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
 
 Rust 行为检查：
 
@@ -160,8 +162,8 @@ CI 固定工具链、依赖锁文件和 Action 提交，检查版本、JavaScrip
 版本与验收完成后：
 
 ```powershell
-git tag v0.10.0
-git push origin v0.10.0
+git tag v0.10.1
+git push origin v0.10.1
 gh run list --repo whoarei/wallpaper-box --workflow windows.yml
 ```
 

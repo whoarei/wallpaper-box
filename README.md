@@ -32,6 +32,8 @@
 
 支持 **Windows x64**，需要 WebView2，安装程序会在缺少时自动下载。
 
+**v0.10.1** 修复部分多屏桌面空白处的鼠标交互失效，恢复点击互动和移动鼠标唤回控制栏，桌面图标仍可正常操作。
+
 [详细使用与开发说明](docs/guide.md) · [默认 Gitee 壁纸库](https://gitee.com/xishuaiya/wallpapers) · [GitHub 壁纸库](https://github.com/whoarei/wallpapers)
 
 网页壁纸开发者请参考 [壁纸适配规范（HTML）](docs/wallpaper-adaptation.html)，包含运行模式、输入、暂停和可选操作接口，以及完整示例。主程序从 **v0.10.0** 起提供 v1 接口；旧内容包的基本播放与页面操作继续可用。

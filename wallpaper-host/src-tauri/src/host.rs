@@ -126,6 +126,7 @@ pub struct WallpaperView {
 #[derive(Serialize)]
 pub struct View {
     version: &'static str,
+    desktop_input: Option<crate::desktop_input::DiagnosticSnapshot>,
     app_update: crate::app_updates::View,
     service: &'static str,
     online: crate::online::State,
@@ -328,6 +329,9 @@ fn snapshot(app: &AppHandle) -> View {
         .collect();
     View {
         version: env!("CARGO_PKG_VERSION"),
+        desktop_input: app
+            .try_state::<crate::desktop_input::Listener>()
+            .map(|listener| listener.diagnostics()),
         app_update: app.state::<crate::app_updates::Updates>().view(),
         service: catalog::ORIGIN,
         online: data.online.clone(),
