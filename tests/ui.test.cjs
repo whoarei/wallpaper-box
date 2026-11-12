@@ -70,7 +70,8 @@ function fixtures() {
         { id: 'secondary', name: '副显示器', primary: false, width: 1920, height: 1080, scale: 1 },
       ], modules, warnings: [], downloads: [], last_error: null,
       wallpapers: [{ display_id: 'primary', module_id: 'aquarium', name: '水族箱',
-        paused: false, auto_paused: false }],
+        paused: false, auto_paused: false,
+        resources: { status: 'ready', cpu_percent: 1.2, memory_bytes: 134217728 } }],
       online: { catalog: null, checked_at: 0, cached: false, last_error: null },
     },
   };
@@ -132,6 +133,7 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
     failNextCheck() { pendingFailure = true; },
     state() { return copy(state); },
     setAppUpdate(patch) { Object.assign(state.app_update, copy(patch)); },
+    setResources(displayId, resources) { state.wallpapers.find(w => w.display_id === displayId).resources = copy(resources); },
     finishOperation() { assertPendingOperation(); finishOperation(); finishOperation = null; },
     setDownload(id, patch) { Object.assign(state.downloads.find(t => t.id === id), copy(patch)); },
     setCatalog(items) { state.online.catalog.wallpapers = copy(items); },
@@ -602,6 +604,71 @@ async function noHorizontalOverflow(page, label) {
       assert.equal(await about.isVisible(), false);
       await page.getByRole('button', { name: '将松风镇应用到主显示器', exact: true }).click();
       await page.waitForFunction(() => document.getElementById('current-title').textContent === '松风镇');
+    });
+
+    await test('resource usage explains its five-second scope and remains measured while paused', null, async page => {
+      assert.equal(await page.locator('#resource-cpu').textContent(), '1.2%');
+      assert.equal(await page.locator('#resource-memory').textContent(), '128 MB');
+      await page.locator('#current-resources summary').click();
+      await visible(page.locator('.resource-explanation'));
+      assert.match(await page.locator('.resource-explanation').textContent(), /每 5 秒更新/);
+      assert.match(await page.locator('.resource-explanation').textContent(), /专用工作集/);
+      await screenshot(page, 'resource-usage-explanation');
+      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('.resource-explanation').isVisible(), false);
+      await page.locator('#pause').click();
+      await page.waitForFunction(() => document.getElementById('current-status').textContent === '已暂停');
+      assert.equal(await page.locator('#resource-cpu').textContent(), '1.2%');
+      assert.equal(await page.locator('#resource-memory').textContent(), '128 MB');
+    });
+
+    await test('resource usage follows the selected screen and disappears when its wallpaper closes', fixture => {
+      fixture.state.wallpapers.push({ display_id: 'secondary', module_id: 'pinewind-town', name: '松风镇',
+        paused: false, auto_paused: false,
+        resources: { status: 'ready', cpu_percent: 0, memory_bytes: 536870912 } });
+    }, async page => {
+      await monitorChoice(page, 'secondary').click();
+      await page.waitForFunction(() => document.getElementById('resource-memory').textContent === '512 MB');
+      assert.equal(await page.locator('#resource-cpu').textContent(), '0.0%');
+      await page.getByRole('button', { name: '更多播放操作', exact: true }).click();
+      await page.locator('#remove').click();
+      await page.locator('#current-resources').waitFor({ state: 'hidden' });
+      await monitorChoice(page, 'primary').click();
+      await page.waitForFunction(() => document.getElementById('resource-memory').textContent === '128 MB');
+      assert.equal(await page.locator('#resource-cpu').textContent(), '1.2%');
+    });
+
+    await test('resource sampling, unavailable readings and recovery never masquerade as zero', fixture => {
+      fixture.state.wallpapers[0].resources = { status: 'sampling', cpu_percent: null, memory_bytes: 67108864 };
+    }, async page => {
+      assert.equal(await page.locator('#resource-cpu').textContent(), '采样中');
+      assert.equal(await page.locator('#resource-memory').textContent(), '64 MB');
+      await page.evaluate(() => window.__uiTest.setResources('primary', {
+        status: 'unavailable', cpu_percent: null, memory_bytes: null,
+      }));
+      await page.waitForFunction(() => document.getElementById('resource-cpu').textContent === '暂不可用');
+      assert.equal(await page.locator('#resource-memory').textContent(), '暂不可用');
+      await page.evaluate(() => window.__uiTest.setResources('primary', {
+        status: 'ready', cpu_percent: 0, memory_bytes: 0,
+      }));
+      await page.waitForFunction(() => document.getElementById('resource-cpu').textContent === '0.0%');
+      assert.equal(await page.locator('#resource-memory').textContent(), '0 MB');
+    });
+
+    await test('hidden manager stops polling and refreshes on reopening', null, async page => {
+      const before = await page.evaluate(() => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+        return window.__uiTest.calls.filter(call => call.command === 'get_state').length;
+      });
+      await page.waitForTimeout(1600);
+      const hidden = await page.evaluate(() => window.__uiTest.calls.filter(call => call.command === 'get_state').length);
+      assert.equal(hidden, before);
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await page.waitForFunction(before => window.__uiTest.calls.filter(call => call.command === 'get_state').length > before, before);
     });
 
     await test('playback controls remain reachable while browsing a larger collection', fixture => {

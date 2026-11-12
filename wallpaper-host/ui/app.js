@@ -35,6 +35,13 @@ function compare(a,b){
  }return 0;
 }
 function bytes(n){n=Math.max(0,Number(n)||0);if(!n)return '0 KB';return n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.ceil(n/1024))+' KB';}
+function renderResources(playing){
+ const panel=$('current-resources'),usage=playing?.resources;
+ panel.hidden=!playing;if(!playing)panel.open=false;
+ const fallback=usage?.status==='unavailable'?'暂不可用':'采样中';
+ $('resource-cpu').textContent=typeof usage?.cpu_percent==='number'&&Number.isFinite(usage.cpu_percent)?usage.cpu_percent.toFixed(1)+'%':fallback;
+ $('resource-memory').textContent=typeof usage?.memory_bytes==='number'&&Number.isFinite(usage.memory_bytes)?(usage.memory_bytes/1048576).toFixed(0)+' MB':fallback;
+}
 function image(card,url,name){if(!url){card.append(el('div','cover-fallback',name));return;}const img=el('img','cover');img.src=url;img.alt=name+'封面';img.referrerPolicy='no-referrer';img.onerror=()=>img.replaceWith(el('div','cover-fallback',name));card.append(img);}
 const downloadTasks=()=>state?.downloads||[];
 const downloadTask=id=>downloadTasks().find(task=>task.id===id);
@@ -381,6 +388,7 @@ function render(data){
  $('auto-pause').checked=data.auto_pause;
  $('current-title').textContent=playing?playing.name:'该屏幕尚未设置动态壁纸';
  $('current-status').textContent=playing?(playing.paused?'已暂停':playing.auto_paused?'遮挡，自动暂停':'正在播放'):'';
+ renderResources(playing);
  $('status-dot').classList.toggle('playing',!!playing&&!playing.paused&&!playing.auto_paused);
  $('pause').hidden=!playing;$('pause').textContent=playing?.paused?'继续':'暂停';$('pause').dataset.paused=String(!!playing?.paused);
  $('current-monitor').textContent=monitor?.name||'没有可用的显示器';
@@ -488,8 +496,8 @@ document.querySelectorAll('dialog').forEach(dialog=>dialog.addEventListener('cli
  if(event.target!==dialog)return;
  const box=dialog.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)dialog.close();
 }));
-document.addEventListener('click',event=>{if(!event.target.closest('#playback-menu'))closePlaybackMenu();});
-document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('playback-menu').open){closePlaybackMenu();$('playback-menu').querySelector('summary').focus();}});
+document.addEventListener('click',event=>{if(!event.target.closest('#playback-menu'))closePlaybackMenu();if(!event.target.closest('#current-resources'))$('current-resources').open=false;});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('playback-menu').open){closePlaybackMenu();$('playback-menu').querySelector('summary').focus();}if(event.key==='Escape'&&$('current-resources').open){$('current-resources').open=false;$('current-resources').querySelector('summary').focus();}});
 $('check-app-update').onclick=()=>runAppUpdate('check_app_update');
 $('download-app-update').onclick=()=>runAppUpdate('download_app_update');
 $('install-app-update').onclick=()=>{if(appUpdateBusy||appUpdate().phase!=='ready')return;confirmAppVersion=appUpdate().version;$('app-update-confirm-copy').textContent=`将退出当前程序并启动 v${confirmAppVersion} 的安装程序。确认现在升级吗？`;$('app-update-confirm').showModal();};

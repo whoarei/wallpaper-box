@@ -13,6 +13,7 @@ mod packages;
 mod picker;
 mod protocol;
 mod repositories;
+mod resource_usage;
 
 fn main() {
     host::run();

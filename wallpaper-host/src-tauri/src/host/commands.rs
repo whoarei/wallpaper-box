@@ -74,9 +74,12 @@ pub fn open_about_link(window: WebviewWindow, link: String) -> Result<(), String
 #[tauri::command]
 pub async fn get_state(app: AppHandle, window: WebviewWindow) -> Result<View, String> {
     manager(&window)?;
-    tauri::async_runtime::spawn_blocking(move || snapshot(&app))
-        .await
-        .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        sample_resources(&app);
+        snapshot(&app)
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 #[tauri::command]
 pub async fn check_app_update(app: AppHandle, window: WebviewWindow) -> Result<View, String> {
@@ -367,6 +370,7 @@ pub fn hide_manager(app: AppHandle, window: WebviewWindow) -> Result<(), String>
     if let Some(w) = app.get_webview_window("manager") {
         w.hide().map_err(|e| e.to_string())?;
     }
+    reset_resources(&app);
     Ok(())
 }
 #[tauri::command]

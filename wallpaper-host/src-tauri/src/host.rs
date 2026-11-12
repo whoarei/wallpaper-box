@@ -13,7 +13,7 @@ use std::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
@@ -84,6 +84,7 @@ struct Data {
 }
 pub struct Host {
     data: Mutex<Data>,
+    resources: Mutex<crate::resource_usage::Monitor>,
     operations: Mutex<()>,
     updates: Mutex<()>,
     catalog_check: Mutex<()>,
@@ -113,6 +114,7 @@ pub struct WallpaperView {
     name: String,
     paused: bool,
     auto_paused: bool,
+    resources: crate::resource_usage::Usage,
     desktop_clicks: u64,
     z_order_repairs: u64,
     proof: Attachment,
@@ -189,10 +191,82 @@ fn error(app: &AppHandle, message: String) {
 }
 fn show_manager(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("manager") {
+        if !window.is_visible().unwrap_or(false) || window.is_minimized().unwrap_or(true) {
+            reset_resources(app);
+        }
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
+}
+
+fn reset_resources(app: &AppHandle) {
+    if let Some(host) = app.try_state::<Host>() {
+        host.resources.lock().unwrap().reset();
+    }
+}
+
+fn sample_resources(app: &AppHandle) {
+    use crate::resource_usage::{exclusive_group, measure, process_group};
+    let host = app.state::<Host>();
+    let visible = app.get_webview_window("manager").is_some_and(|window| {
+        window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(true)
+    });
+    if !visible {
+        host.resources.lock().unwrap().reset();
+        return;
+    }
+    let Some(ticket) = host.resources.lock().unwrap().begin(Instant::now()) else {
+        return;
+    };
+    let targets: Vec<_> = host
+        .data
+        .lock()
+        .unwrap()
+        .running
+        .values()
+        .map(|running| (running.label.clone(), running.generation))
+        .collect();
+    if targets.is_empty() {
+        host.resources
+            .lock()
+            .unwrap()
+            .finish(ticket, BTreeMap::new());
+        return;
+    }
+
+    // Query all views so shared processes cannot be charged to one screen.
+    // Never hold a host lock while dispatching work onto the WebView thread.
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let mut groups = BTreeMap::new();
+    for (label, window) in app.webview_windows() {
+        groups.insert(label.clone(), Err(()));
+        let reply = sender.clone();
+        let reply_label = label.clone();
+        if window
+            .with_webview(move |webview| {
+                let _ = reply.send((reply_label, process_group(webview.environment())));
+            })
+            .is_err()
+        {
+            groups.insert(label, Err(()));
+        }
+    }
+    drop(sender);
+    let deadline = Instant::now() + Duration::from_millis(750);
+    while let Ok((label, group)) =
+        receiver.recv_timeout(deadline.saturating_duration_since(Instant::now()))
+    {
+        groups.insert(label, group);
+    }
+    let readings = targets
+        .into_iter()
+        .map(|(label, generation)| {
+            let reading = exclusive_group(&label, &groups).ok_or(()).and_then(measure);
+            (generation, reading)
+        })
+        .collect();
+    host.resources.lock().unwrap().finish(ticket, readings);
 }
 
 fn snapshot(app: &AppHandle) -> View {
@@ -237,6 +311,7 @@ fn snapshot(app: &AppHandle) -> View {
                 name,
                 paused: selection.paused,
                 auto_paused: running.auto_paused,
+                resources: host.resources.lock().unwrap().usage(running.generation),
                 desktop_clicks: running.desktop_clicks,
                 z_order_repairs: running.z_order_repairs,
                 proof,
@@ -1245,6 +1320,7 @@ pub fn run() {
                     last_error: None,
                     running: BTreeMap::new(),
                 }),
+                resources: Mutex::new(crate::resource_usage::Monitor::default()),
                 operations: Mutex::new(()),
                 updates: Mutex::new(()),
                 catalog_check: Mutex::new(()),
@@ -1327,9 +1403,15 @@ pub fn run() {
                 }
             }
             if window.label() == "manager" {
+                if matches!(event, WindowEvent::Resized(_))
+                    && window.is_minimized().unwrap_or(false)
+                {
+                    reset_resources(window.app_handle());
+                }
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window.hide();
+                    reset_resources(window.app_handle());
                 }
             }
         })
