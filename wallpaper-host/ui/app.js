@@ -25,6 +25,7 @@ function toast(message,duration=3500){
  node.classList.add('show');clearTimeout(toastTimer);
  toastTimer=setTimeout(()=>{node.classList.remove('show');if(node.hidePopover&&node.matches(':popover-open'))node.hidePopover();},duration);
 }
+window.addEventListener('window-control-error',event=>toast(event.detail));
 function compare(a,b){
  const parse=value=>{const v=String(value||'0.0.0').split('+')[0],dash=v.indexOf('-');return {core:(dash<0?v:v.slice(0,dash)).split('.').map(BigInt),pre:dash<0?[]:v.slice(dash+1).split('.')};};
  const x=parse(a),y=parse(b);for(let i=0;i<3;i++){if(x.core[i]!==y.core[i])return x.core[i]>y.core[i]?1:-1;}

@@ -19,6 +19,7 @@
         "height": 760,
         "minWidth": 780,
         "minHeight": 600,
+        "decorations": false,
         "center": true
       }
     ],

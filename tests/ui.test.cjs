@@ -36,7 +36,7 @@ function serveUi() {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (pathname === '/favicon.ico') { response.writeHead(204).end(); return; }
     const filename = pathname === '/' ? 'index.html' : pathname.slice(1);
-    if (!['index.html', 'app.js', 'app.css', 'settings.css', 'online.css', 'icon.png'].includes(filename)) {
+    if (!['index.html', 'app.js', 'app.css', 'settings.css', 'online.css', 'icon.png', 'window-controls.js'].includes(filename)) {
       response.writeHead(404).end(); return;
     }
     response.writeHead(200, { 'Content-Type': mime[path.extname(filename)], 'Cache-Control': 'no-store' });
@@ -99,7 +99,7 @@ function wallpaperHistory(fixture) {
 // This fixture owns native state. UI updates only through the production invoke
 // API and its ordinary one-second polling, matching a Tauri manager window.
 function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppCheck, failAppInstall,
-  failPreview, deferApply, deferInstall, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures, deferCancellation, importedModule, failAutoStart, deferAutoStart, persistAutoStart, historyPages, failHistory, deferHistory, coverData }) {
+  failPreview, deferApply, deferInstall, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures, deferCancellation, importedModule, failAutoStart, deferAutoStart, persistAutoStart, historyPages, failHistory, deferHistory, coverData, initialWindowState }) {
   const copy = value => JSON.parse(JSON.stringify(value));
   if (persistProxy && sessionStorage.getItem('native-proxy')) {
     state.proxy = JSON.parse(sessionStorage.getItem('native-proxy'));
@@ -127,9 +127,49 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
   let pendingHistoryFailure = !!failHistory;
   const historyChoices = new Map();
   let finishOperation;
+  const windowState = { maximized: false, focused: true, minimized: false, ...initialWindowState };
+  const windowCalls = [];
+  const windowListeners = new Map(['resize', 'focus', 'scale'].map(name => [name, new Set()]));
+  let failWindowToggle = false, failWindowHide = false, holdWindowRead = false, releaseWindowRead;
+  function emitWindowEvent(name, patch = {}) {
+    Object.assign(windowState, patch);
+    windowListeners.get(name).forEach(callback => callback({ payload: name === 'focus' ? windowState.focused : {} }));
+  }
+  const nativeWindow = {
+    isMaximized: async () => {
+      const value = windowState.maximized;
+      if (!holdWindowRead) return value;
+      holdWindowRead = false;
+      return new Promise(resolve => { releaseWindowRead = () => resolve(value); });
+    },
+    isFocused: async () => windowState.focused,
+    toggleMaximize: async () => {
+      windowCalls.push('toggleMaximize');
+      if (failWindowToggle) { failWindowToggle = false; throw '系统暂时无法调整窗口'; }
+      emitWindowEvent('resize', { maximized: !windowState.maximized });
+    },
+    minimize: async () => { windowCalls.push('minimize'); windowState.minimized = true; },
+    startDragging: async () => { windowCalls.push('startDragging'); },
+    onResized: callback => listenWindow('resize', callback),
+    onFocusChanged: callback => listenWindow('focus', callback),
+    onScaleChanged: callback => listenWindow('scale', callback),
+  };
+  function listenWindow(name, callback) {
+    const listeners = windowListeners.get(name);
+    listeners.add(callback);
+    return Promise.resolve(() => listeners.delete(callback));
+  }
   window.__uiTest = {
     calls, repositoryRequests,
     emit(name) { listeners.get(name)?.({ event: name, payload: null }); },
+    windowCalls,
+    windowState: () => copy(windowState),
+    emitWindowEvent,
+    windowListenerCount: () => [...windowListeners.values()].reduce((sum, listeners) => sum + listeners.size, 0),
+    failNextWindowToggle() { failWindowToggle = true; },
+    failNextWindowHide() { failWindowHide = true; },
+    holdNextWindowRead() { holdWindowRead = true; },
+    releaseWindowRead() { releaseWindowRead(); releaseWindowRead = null; },
     failNextCheck() { pendingFailure = true; },
     state() { return copy(state); },
     setAppUpdate(patch) { Object.assign(state.app_update, copy(patch)); },
@@ -161,7 +201,7 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
     const task=state.downloads.find(t=>t.id===id);if(!task)throw new Error('Missing download');
     installItem(task.item);state.downloads=state.downloads.filter(t=>t.id!==id);pump();
   }
-  window.__TAURI__ = { event: { listen: async (name, handler) => {
+  window.__TAURI__ = { window: { getCurrentWindow: () => nativeWindow }, event: { listen: async (name, handler) => {
     listeners.set(name, handler);
     return () => listeners.delete(name);
   } }, core: { invoke: async (command, args = {}) => {
@@ -206,8 +246,10 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
       case 'refresh_modules': return copy(state);
       case 'open_wallpaper_folder':
       case 'open_about_link':
-      case 'hide_manager':
       case 'quit_app': return null;
+      case 'hide_manager':
+        if (failWindowHide) { failWindowHide = false; throw '托盘暂时不可用'; }
+        return null;
       case 'capture_desktop':
       case 'show_desktop': return 'preview.png';
       case 'remove_wallpaper':
@@ -415,6 +457,130 @@ async function noHorizontalOverflow(page, label) {
         passed += 1;
       } finally { await context.close(); }
     }
+
+    await test('caption controls invoke native window actions and close only to the tray', null, async page => {
+      const config = JSON.parse(fs.readFileSync(path.join(uiRoot, '../src-tauri/tauri.conf.json'), 'utf8'));
+      const capability = JSON.parse(fs.readFileSync(path.join(uiRoot, '../src-tauri/capabilities/default.json'), 'utf8'));
+      assert.equal(config.app.windows.find(window => window.label === 'manager').decorations, false);
+      assert.deepEqual(capability.windows, ['manager']);
+      for (const permission of ['allow-minimize', 'allow-toggle-maximize', 'allow-start-dragging']) {
+        assert.ok(capability.permissions.includes(`core:window:${permission}`));
+      }
+      const maximize = page.locator('#window-maximize');
+      await maximize.click();
+      await page.waitForFunction(() => document.querySelector('#window-maximize').getAttribute('aria-label') === '还原');
+      assert.equal(await maximize.getAttribute('aria-pressed'), 'true');
+      assert.equal(await maximize.locator('.maximize-icon').isVisible(), false);
+      assert.equal(await maximize.locator('.restore-icon').isVisible(), true);
+      await maximize.press('Enter');
+      await page.waitForFunction(() => document.querySelector('#window-maximize').getAttribute('aria-label') === '最大化');
+      await maximize.press('Space');
+      await page.waitForFunction(() => document.querySelector('#window-maximize').getAttribute('aria-label') === '还原');
+      await page.locator('#window-minimize').click();
+      assert.equal((await page.evaluate(() => window.__uiTest.windowState())).minimized, true);
+      const before = await page.evaluate(() => window.__uiTest.state().wallpapers);
+      await page.locator('#window-close').click();
+      assert.deepEqual(await actions(page), [{ command: 'hide_manager', args: {} }]);
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.state().wallpapers), before);
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.windowCalls), [
+        'toggleMaximize', 'toggleMaximize', 'toggleMaximize', 'minimize',
+      ]);
+    });
+
+    await test('caption follows native maximize, focus and DPI events without stale reads', fixture => {
+      fixture.initialWindowState = { maximized: true, focused: false };
+    }, async page => {
+      const maximize = page.locator('#window-maximize');
+      await page.waitForFunction(() => document.body.classList.contains('window-inactive'));
+      assert.equal(await maximize.getAttribute('title'), '还原');
+      await page.evaluate(() => window.__uiTest.emitWindowEvent('resize', { maximized: false }));
+      await page.waitForFunction(() => document.querySelector('#window-maximize').getAttribute('aria-pressed') === 'false');
+      await page.evaluate(() => {
+        window.__uiTest.holdNextWindowRead();
+        window.__uiTest.emitWindowEvent('resize');
+      });
+      await page.evaluate(() => window.__uiTest.emitWindowEvent('resize', { maximized: true }));
+      await page.waitForFunction(() => document.querySelector('#window-maximize').getAttribute('aria-pressed') === 'true');
+      await page.evaluate(() => window.__uiTest.releaseWindowRead());
+      assert.equal(await maximize.getAttribute('aria-label'), '还原');
+      await page.evaluate(() => window.__uiTest.emitWindowEvent('focus', { focused: true }));
+      await page.waitForFunction(() => !document.body.classList.contains('window-inactive'));
+      await page.evaluate(() => window.__uiTest.emitWindowEvent('scale', { maximized: false }));
+      await page.waitForFunction(() => document.querySelector('#window-maximize').getAttribute('aria-label') === '最大化');
+      assert.equal(await maximize.locator('.maximize-icon').isVisible(), true);
+      assert.equal(await maximize.locator('.restore-icon').isVisible(), false);
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.windowCalls), []);
+    });
+
+    await test('title bar drags only from noninteractive regions and double click toggles once', null, async page => {
+      await page.locator('.brand strong').dispatchEvent('mousedown', { button: 0, detail: 1 });
+      await page.locator('.brand strong').dispatchEvent('mousedown', { button: 0, detail: 2 });
+      await page.locator('.brand strong').dispatchEvent('dblclick', { button: 0, detail: 2 });
+      await page.waitForFunction(() => document.querySelector('#window-maximize').getAttribute('aria-label') === '还原');
+      await page.locator('.topbar').dispatchEvent('mousedown', { button: 2, detail: 1 });
+      for (const selector of ['#tab-local', '#settings-open', '#window-minimize', '#window-maximize', '#window-close']) {
+        await page.locator(selector).dispatchEvent('mousedown', { button: 0, detail: 1 });
+      }
+      await page.locator('.topbar').dispatchEvent('pointerdown', { pointerType: 'touch', isPrimary: true, button: 0 });
+      assert.deepEqual(await page.evaluate(() => window.__uiTest.windowCalls), [
+        'startDragging', 'toggleMaximize', 'startDragging',
+      ]);
+      assert.deepEqual(await actions(page), []);
+      assert.equal(await page.locator('#settings-dialog').isVisible(), false);
+    });
+
+    await test('window action failures keep the real state and wallpaper controls usable', null, async page => {
+      await page.evaluate(() => window.__uiTest.failNextWindowToggle());
+      await page.locator('#window-maximize').click();
+      await page.waitForFunction(() => document.getElementById('toast').textContent.includes('切换窗口大小失败'));
+      assert.equal(await page.locator('#window-maximize').getAttribute('aria-pressed'), 'false');
+      await page.locator('#window-maximize').click();
+      await page.waitForFunction(() => document.querySelector('#window-maximize').getAttribute('aria-pressed') === 'true');
+      await page.evaluate(() => window.__uiTest.failNextWindowHide());
+      await page.locator('#window-close').click();
+      await page.waitForFunction(() => document.getElementById('toast').textContent.includes('收起窗口失败'));
+      await page.locator('#pause').click();
+      await page.waitForFunction(() => document.getElementById('current-status').textContent === '已暂停');
+      assert.deepEqual(await actions(page), [
+        { command: 'hide_manager', args: {} },
+        { command: 'pause_wallpaper', args: { monitorId: 'primary', paused: true } },
+      ]);
+    });
+
+    await test('caption targets stay reachable beside download and update badges at all screen sizes', fixture => {
+      appUpdateFixture(fixture, 'ready', { received: 1048576, total: 1048576 });
+      const item = fixture.catalog.wallpapers[2];
+      fixture.state.downloads.push({ id: item.id, item, phase: 'downloading', received: 1000,
+        total: item.size, speed: 1024, error: null, queue_position: null });
+    }, async page => {
+      await visible(page.locator('#app-update-toggle'));
+      await visible(page.locator('#download-filter'));
+      for (const [width, height] of [[1080, 760], [780, 600], [390, 844]]) {
+        await page.setViewportSize({ width, height });
+        const boxes = await page.locator('.caption-button').evaluateAll(buttons => buttons.map(button => {
+          const rect = button.getBoundingClientRect();
+          return { x: rect.x, y: rect.y, right: rect.right, width: rect.width, height: rect.height };
+        }));
+        assert.ok(boxes.every(box => box.width === 46 && box.height === 40 && box.y === 0 && box.x >= 0));
+        assert.equal(boxes[2].right, width);
+        assert.ok(boxes[0].right <= boxes[1].x && boxes[1].right <= boxes[2].x);
+        const blocked = await page.locator('.topbar button').evaluateAll(buttons => buttons.filter(button => {
+          const box = button.getBoundingClientRect();
+          return box.width && box.height && !button.contains(document.elementFromPoint(
+            box.x + box.width / 2, box.y + box.height / 2,
+          ));
+        }).map(button => button.id));
+        assert.deepEqual(blocked, [], `header targets overlap at ${width}`);
+        await noHorizontalOverflow(page, `caption at ${width}`);
+      }
+      await page.setViewportSize({ width: 1080, height: 760 });
+      await page.locator('#window-maximize').focus();
+      assert.equal(await page.locator('#window-maximize').evaluate(button => getComputedStyle(button).outlineStyle), 'solid');
+      await screenshot(page, 'custom-titlebar');
+      assert.equal(await page.evaluate(() => window.__uiTest.windowListenerCount()), 3);
+      await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+      assert.equal(await page.evaluate(() => window.__uiTest.windowListenerCount()), 0);
+    });
 
     await test('compact home fits both window sizes and keeps low-frequency actions out of the gallery', null, async page => {
       for (const [width, height] of [[1080, 760], [780, 600]]) {

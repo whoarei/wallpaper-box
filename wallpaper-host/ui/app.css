@@ -29,3 +29,18 @@ dialog{border:1px solid #e1e6db;border-radius:20px;color:var(--ink);padding:0;wi
 
 .repository-meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .current-resources{position:relative;margin-top:3px;font-size:10px;color:#74836b;font-variant-numeric:tabular-nums}.current-resources>summary{display:flex;align-items:center;flex-wrap:wrap;gap:5px;list-style:none;width:fit-content;border-radius:3px}.current-resources>summary::-webkit-details-marker{display:none}.current-resources>summary>span{white-space:nowrap}.resource-info{color:#95a08d}.resource-explanation{position:absolute;left:0;bottom:100%;width:280px;margin:0 0 9px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#fff;box-shadow:0 5px 24px #33462c18;font-size:11px;line-height:1.8;color:#6d7b65;z-index:5}@media(max-width:880px){.current:has(.current-resources:not([hidden])){padding-top:11px;padding-bottom:11px}}@media(max-width:620px){.resource-explanation{position:fixed;left:20px;right:20px;bottom:110px;width:auto}.current-resources{font-size:9px}}
+
+/* The management header also serves as the native window's title bar. */
+.topbar{height:64px;padding:0 0 0 28px;gap:32px;user-select:none;position:sticky;top:0;z-index:5}
+.brand{font-size:15px;flex:none}.mark{width:29px;height:29px;border-radius:8px;font-size:29px}
+.header-actions{gap:10px;padding-right:14px;border-right:1px solid var(--line);flex:0 1 auto}.header-actions .download-filter{min-width:0}.header-actions .icon-button,.header-actions .update-indicator{flex:none}
+.window-controls{display:flex;align-self:flex-start;flex:none;margin-left:-22px}
+.caption-button{display:grid;place-items:center;width:46px;height:40px;border:0;border-radius:0;background:transparent;color:#586450;padding:0;cursor:default;transition:background 120ms,color 120ms}
+.caption-button svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:square;stroke-linejoin:miter;pointer-events:none}
+.caption-button:hover{background:#e7eee2;color:var(--green)}.caption-button:active{background:#d5e1ce;color:#30513c}
+.caption-button:focus-visible{outline:1.5px solid #52774a;outline-offset:-5px}
+.caption-close:hover{background:#c53e36;color:#fff}.caption-close:active{background:#a8332c;color:#fff}
+.window-inactive .brand,.window-inactive .tabs{opacity:.65}.window-inactive .caption-button{color:#a3aa9e}
+.window-inactive .caption-button:hover{color:var(--green)}.window-inactive .caption-close:hover{color:#fff}
+@media(max-width:880px){.topbar{padding-left:24px;gap:22px}.brand{font-size:14px}.tabs{gap:0}.tab{padding:7px 11px}.header-actions{gap:7px;padding-right:11px}.window-controls{margin-left:-14px}}
+@media(max-width:620px){.topbar{height:88px;padding-left:16px;gap:10px;align-items:flex-start;flex-wrap:nowrap}.brand{margin-top:12px;font-size:13px}.mark{width:25px;height:25px;font-size:26px}.tabs{position:absolute;left:16px;bottom:8px}.tab{padding:5px 11px;font-size:11px}.header-actions{position:absolute;right:12px;bottom:5px;padding-right:0;border:0;gap:8px;align-items:center;max-width:calc(100% - 154px)}.header-actions .download-filter{max-width:86px}.header-actions .icon-button{width:28px;height:28px}.update-indicator{max-width:64px;white-space:normal}.window-controls{margin-left:auto}.caption-button{width:46px}.tab span{display:inline}}

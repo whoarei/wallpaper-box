@@ -1,11 +1,16 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>壁纸盒子 · 壁纸管理</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="online.css"><script src="app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>壁纸盒子 · 壁纸管理</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="online.css"><script src="app.js" defer></script><script src="window-controls.js" defer></script></head>
 <body>
-<header class="topbar">
+<header class="topbar" data-window-drag>
  <div class="brand"><span class="mark" aria-hidden="true">≈</span><strong>壁纸盒子</strong></div>
  <nav class="tabs" aria-label="壁纸来源"><button id="tab-local" class="tab selected" aria-pressed="true">我的壁纸</button><button id="tab-online" class="tab" aria-pressed="false">发现 <span id="update-count"></span></button></nav>
  <div class="header-actions"><button id="download-filter" class="download-filter" aria-pressed="false" hidden></button><button id="app-update-toggle" class="update-indicator" aria-controls="settings-dialog" hidden>新版已就绪</button><button id="settings-open" class="icon-button" aria-label="设置" aria-haspopup="dialog" title="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-.6 2.1-2 .9-2.1-.4-1.5 2.6 1.5 1.7-.2 2.2-1.5 1.6 1.5 2.6 2.2-.4 1.8 1.1.8 2h3l.8-2 1.9-1.1 2.1.4 1.5-2.6-1.5-1.6v-2.2l1.5-1.7-1.5-2.6-2.1.4-2-.9L14 3Z" transform="translate(1 1)"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+ <div class="window-controls" role="group" aria-label="窗口控制">
+  <button id="window-minimize" class="caption-button" type="button" aria-label="最小化" title="最小化"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5h10"/></svg></button>
+  <button id="window-maximize" class="caption-button" type="button" aria-label="最大化" title="最大化" aria-pressed="false"><svg class="maximize-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx=".5"/></svg><svg class="restore-icon" viewBox="0 0 16 16" aria-hidden="true" hidden><path d="M5.5 5.5v-2h7v7h-2"/><rect x="3.5" y="5.5" width="7" height="7" rx=".5"/></svg></button>
+  <button id="window-close" class="caption-button caption-close" type="button" aria-label="收起到托盘" title="收起到托盘"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8"/></svg></button>
+ </div>
 </header>
 <main>
  <div class="collection-heading">

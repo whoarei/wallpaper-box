@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>壁纸盒子 · 自绘最大化按钮原型</title>
+  <link rel="stylesheet" href="prototype.css">
+  <script src="prototype.js" defer></script>
+</head>
+<body>
+  <svg class="svg-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-maximize" viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx=".5"/></symbol>
+    <symbol id="i-restore" viewBox="0 0 16 16"><path d="M5.5 5.5v-2h7v7h-2"/><rect x="3.5" y="5.5" width="7" height="7" rx=".5"/></symbol>
+    <symbol id="i-minimize" viewBox="0 0 16 16"><path d="M3 8.5h10"/></symbol>
+    <symbol id="i-close" viewBox="0 0 16 16"><path d="m4 4 8 8m0-8-8 8"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="m9 3-.6 2.1-2 .9-2.1-.4-1.5 2.6 1.5 1.7-.2 2.2-1.5 1.6 1.5 2.6 2.2-.4 1.8 1.1.8 2h3l.8-2 1.9-1.1 2.1.4 1.5-2.6-1.5-1.6v-2.2l1.5-1.7-1.5-2.6-2.1.4-2-.9L14 3Z" transform="translate(1 1)"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+  </svg>
+
+  <main class="design-board">
+    <header class="board-heading">
+      <div>
+        <p class="eyebrow"><span class="mini-mark">≈</span> WALLPAPER BOX <span class="eyebrow-divider">/</span> 窗口体验 · 01</p>
+        <h1>自绘窗口控件<span class="draft-tag">交互原型</span></h1>
+        <p class="intro">延续森林绿与轻盈留白，让最大化按钮自然融入标题栏。</p>
+      </div>
+      <div class="version-note"><span class="green-dot"></span> 标题栏整合方案 <span class="version-number">V1.0</span></div>
+    </header>
+
+    <div class="workspace-layout">
+      <section class="preview-panel" aria-label="窗口交互预览">
+        <div class="preview-toolbar">
+          <div><span class="green-dot"></span><strong>交互预览</strong><span class="toolbar-divider"></span><span id="window-mode">窗口模式</span></div>
+          <button id="reset-demo" class="reset-button" type="button">重置预览 <span aria-hidden="true">↺</span></button>
+        </div>
+        <div class="desktop-stage" id="stage">
+          <div class="desktop-caption" aria-hidden="true">WALLPAPER BOX <span>你的桌面，一点生机。</span></div>
+          <article class="app-window" id="app-window" aria-label="壁纸盒子模拟窗口">
+            <header class="app-titlebar" id="titlebar">
+              <div class="app-brand"><span class="app-mark" aria-hidden="true">≈</span><strong>壁纸盒子</strong></div>
+              <nav class="app-tabs" aria-label="壁纸来源">
+                <button class="app-tab selected" type="button" data-tab="local" aria-pressed="true">我的壁纸</button>
+                <button class="app-tab" type="button" data-tab="discover" aria-pressed="false">发现</button>
+              </nav>
+              <div class="titlebar-space" aria-hidden="true"></div>
+              <button class="settings-button" id="settings-button" type="button" aria-label="设置" title="设置"><svg><use href="#i-settings"/></svg></button>
+              <span class="controls-divider" aria-hidden="true"></span>
+              <div class="window-controls" aria-label="窗口控制">
+                <button class="caption-button" id="minimize-button" type="button" aria-label="最小化" data-tooltip="最小化"><svg><use href="#i-minimize"/></svg></button>
+                <button class="caption-button maximize-button" id="maximize-button" type="button" aria-label="最大化" data-tooltip="最大化" aria-pressed="false"><svg><use href="#i-maximize"/></svg></button>
+                <button class="caption-button close-button" id="close-button" type="button" aria-label="收起到托盘" data-tooltip="收起到托盘"><svg><use href="#i-close"/></svg></button>
+              </div>
+            </header>
+            <div class="app-content">
+              <div class="collection-heading">
+                <div><h2 id="collection-title">我的壁纸 <span>02</span></h2><p id="collection-description">喜欢的风景，随时在身边。</p></div>
+                <div class="collection-tools"><button class="monitor-button" id="monitor-button" type="button"><svg><use href="#i-monitor"/></svg><span id="monitor-label">主显示器</span><span aria-hidden="true">⌄</span></button><button class="import-button" id="import-button" type="button">＋ 导入壁纸</button></div>
+              </div>
+              <div class="wallpaper-grid">
+                <article class="wallpaper-card active" data-scene="aquarium">
+                  <button class="wallpaper-art" type="button" data-apply="aquarium" aria-label="应用水族箱壁纸"><img src="../../wallpapers/aquarium/cover.jpg" alt="水族箱：水草与鱼群组成的蓝绿色水下风景"><span class="in-use">正在使用</span></button>
+                  <div class="wallpaper-copy"><div><h3>水族箱</h3><p>一方水草，几尾悠游。</p></div><button class="apply-button" type="button" data-apply="aquarium">已应用</button></div>
+                  <div class="wallpaper-meta">内置壁纸 <span>·</span> v1.0.0 <span class="meta-details">详情 ⌄</span></div>
+                </article>
+                <article class="wallpaper-card" data-scene="pinewind-town">
+                  <button class="wallpaper-art" type="button" data-apply="pinewind-town" aria-label="应用松风镇壁纸"><img src="../../wallpapers/pinewind-town/cover.jpg" alt="松风镇：松树、房屋和农田组成的像素小镇"><span class="in-use" hidden>正在使用</span></button>
+                  <div class="wallpaper-copy"><div><h3>松风镇</h3><p>把日子，交给山间的风。</p></div><button class="apply-button" type="button" data-apply="pinewind-town">应用壁纸</button></div>
+                  <div class="wallpaper-meta">内置壁纸 <span>·</span> v1.0.0 <span class="meta-details">详情 ⌄</span></div>
+                </article>
+              </div>
+            </div>
+            <footer class="app-player">
+              <img id="player-cover" src="../../wallpapers/aquarium/cover.jpg" alt="">
+              <div class="player-copy"><strong id="player-title">水族箱</strong><p><span class="green-dot"></span><span id="player-monitor">主显示器</span><span>·</span><span id="play-state">正在播放</span></p></div>
+              <div class="player-actions"><button id="feed-button" type="button">投喂鱼儿</button><button id="pause-button" type="button">Ⅱ 暂停</button><button id="more-button" type="button" aria-label="更多播放操作">···</button></div>
+            </footer>
+            <div class="demo-notice" id="demo-notice" role="status" hidden></div>
+          </article>
+          <button class="desktop-reopen" id="desktop-reopen" type="button" hidden><span class="app-mark" aria-hidden="true">≈</span><strong id="reopen-label">打开壁纸盒子</strong><span>点击恢复预览</span></button>
+          <span class="desktop-bottom" aria-hidden="true"><span class="desktop-taskbar-icon">≈</span><span>壁纸盒子</span></span>
+        </div>
+        <div class="preview-hint"><span class="hint-icon">↗</span><span>点击右上角 <strong>□</strong> 体验最大化，再次点击还原；双击标题栏空白处也可切换。</span><span class="simulation-tag">模拟窗口</span></div>
+      </section>
+
+      <aside class="design-notes">
+        <section class="focus-card">
+          <p class="section-kicker">01 / 核心控件</p>
+          <h2>熟悉的形状，<br>更贴近界面的质感。</h2>
+          <div class="button-enlargement" aria-hidden="true"><div class="dimension-width">46 px</div><div class="enlarged-button"><svg><use href="#i-maximize"/></svg></div><span class="dimension-height">40 px</span><span class="icon-dimension">16 × 16 图标画布</span></div>
+          <p class="focus-description">轻量线框，居中对齐。悬停时浮现浅绿底色，按下时加深，松开完成状态切换。</p>
+          <dl class="spec-list"><div><dt>点击区域</dt><dd>46 × 40 px</dd></div><div><dt>线条粗细</dt><dd>1 px</dd></div><div><dt>状态过渡</dt><dd>120 ms</dd></div></dl>
+        </section>
+        <section class="behavior-notes">
+          <p class="section-kicker">02 / 交互约定</p>
+          <div class="behavior-row"><span class="number">1</span><p><strong>最大化 ⇄ 还原</strong><span>单方框与叠层方框随窗口状态切换。</span></p></div>
+          <div class="behavior-row"><span class="number">2</span><p><strong>保留窗口习惯</strong><span>右上角顺序不变；关闭后收起到托盘。</span></p></div>
+          <div class="behavior-row"><span class="number">3</span><p><strong>键盘也能操作</strong><span>Tab 聚焦，Enter / 空格触发。</span></p></div>
+        </section>
+      </aside>
+    </div>
+
+    <section class="states-section" aria-labelledby="states-title">
+      <div class="states-heading"><div><span class="section-kicker">03 / 视觉状态</span><h2 id="states-title">每一步，都有清楚的回应。</h2></div><p>鼠标移入下方样本，可查看原尺寸触感。</p></div>
+      <div class="state-grid">
+        <div class="state-card"><div class="state-button-area"><button class="caption-button sample-button" type="button" aria-label="默认态示例"><svg><use href="#i-maximize"/></svg></button></div><strong>默认</strong><span>透明底 · 深灰图标</span></div>
+        <div class="state-card"><div class="state-button-area"><button class="caption-button sample-button sample-hover" type="button" aria-label="悬停态示例"><svg><use href="#i-maximize"/></svg></button></div><strong>悬停</strong><span>浅绿底 · 森林绿图标</span></div>
+        <div class="state-card"><div class="state-button-area"><button class="caption-button sample-button sample-pressed" type="button" aria-label="按下态示例"><svg><use href="#i-maximize"/></svg></button></div><strong>按下</strong><span>底色加深 · 保持尺寸</span></div>
+        <div class="state-card"><div class="state-button-area"><button class="caption-button sample-button" type="button" aria-label="还原态示例"><svg><use href="#i-restore"/></svg></button></div><strong>已最大化</strong><span>叠层图标 · 点击还原</span></div>
+        <div class="state-card"><div class="state-button-area"><button class="caption-button sample-button sample-focus" type="button" aria-label="键盘焦点态示例"><svg><use href="#i-maximize"/></svg></button></div><strong>键盘焦点</strong><span>内描边 · 清晰可见</span></div>
+        <div class="state-card"><div class="state-button-area"><button class="caption-button sample-button sample-inactive" type="button" aria-label="窗口失焦态示例"><svg><use href="#i-maximize"/></svg></button></div><strong>窗口失焦</strong><span>图标减淡 · 仍可点击</span></div>
+      </div>
+    </section>
+    <footer class="board-footer"><span>壁纸盒子 <span class="footer-dot">·</span> 窗口控件设计探索</span><p>此稿模拟界面交互。Windows 拖拽、贴靠布局及多屏缩放需在原生实现阶段接入并验证。</p></footer>
+  </main>
+</body>
+</html>

@@ -52,6 +52,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --check wallpaper-host/ui/app.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --check wallpaper-host/ui/window-controls.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test display-service/tests/registry.test.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo fmt --check --manifest-path wallpaper-host/src-tauri/Cargo.toml
