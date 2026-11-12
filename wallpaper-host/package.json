@@ -8,7 +8,8 @@
     "bundle": "tauri build --ci --bundles nsis -- --locked",
     "check:version": "node scripts/check-version.mjs",
     "test:ui": "node ../tests/ui.test.cjs",
-    "test:aquarium": "node ../tests/aquarium.test.cjs"
+    "test:aquarium": "node ../tests/aquarium.test.cjs",
+    "test:pinewind": "node ../tests/pinewind.test.cjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.4",

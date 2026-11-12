@@ -496,14 +496,14 @@ fn input_surfaces(app: &AppHandle) -> Vec<crate::desktop_input::Surface> {
         })
         .collect()
 }
-fn relay_desktop_click(app: &AppHandle, click: crate::desktop_input::Click) {
+fn relay_desktop_input(app: &AppHandle, input: crate::desktop_input::Input) {
     let Some(host) = app.try_state::<Host>() else {
         return;
     };
     let Ok(_operation) = host.operations.try_lock() else {
         return;
     };
-    if !input_surfaces(app).contains(&click.surface) {
+    if !input_surfaces(app).contains(&input.surface) {
         return;
     }
     let (display_id, module_id, window_label) = {
@@ -511,7 +511,7 @@ fn relay_desktop_click(app: &AppHandle, click: crate::desktop_input::Click) {
         let Some((id, running)) = data
             .running
             .iter()
-            .find(|(_, running)| running.generation == click.surface.generation)
+            .find(|(_, running)| running.generation == input.surface.generation)
         else {
             return;
         };
@@ -527,9 +527,16 @@ fn relay_desktop_click(app: &AppHandle, click: crate::desktop_input::Click) {
     let Some(window) = app.get_webview_window(&window_label) else {
         return;
     };
+    if matches!(input.kind, crate::desktop_input::InputKind::Move) {
+        let _ = window.eval(format!(
+            "window.__SCREEN_GARDEN_DESKTOP_MOVE?.({}, {})",
+            input.x, input.y
+        ));
+        return;
+    }
     let script = format!(
         "window.__SCREEN_GARDEN_DESKTOP_CLICK?.({}, {})",
-        click.x, click.y
+        input.x, input.y
     );
     let handle = app.clone();
     let result = window.eval_with_callback(script, move |reply| {
@@ -547,7 +554,7 @@ fn relay_desktop_click(app: &AppHandle, click: crate::desktop_input::Click) {
             if let Some(running) = data
                 .running
                 .get_mut(&display_id)
-                .filter(|r| r.generation == click.surface.generation)
+                .filter(|r| r.generation == input.surface.generation)
             {
                 running.desktop_clicks += 1;
                 true
@@ -1284,14 +1291,17 @@ pub fn run() {
             );
             std::thread::spawn(move || maintenance(handle, first));
             let input_app = app.handle().clone();
-            let click_app = app.handle().clone();
+            let relay_app = app.handle().clone();
             match crate::desktop_input::start(
                 move || input_surfaces(&input_app),
-                move |click| relay_desktop_click(&click_app, click),
+                move |input| relay_desktop_input(&relay_app, input),
             ) {
                 Ok(listener) => {
                     app.manage(listener);
-                    log(app.handle(), "Desktop blank-click relay started");
+                    log(
+                        app.handle(),
+                        "Desktop blank-click and pointer relay started",
+                    );
                 }
                 Err(message) => log(app.handle(), &message),
             }

@@ -59,12 +59,14 @@ jobs:
       - name: Build Windows NSIS installer
         working-directory: wallpaper-host
         run: npm run bundle
-      - name: Verify manager flows and actual aquarium feeding
+      - name: Verify manager flows and actual wallpaper interactions
         working-directory: wallpaper-host
         run: |
           npm run test:ui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:aquarium
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:pinewind
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test Rust with release features
         run: cargo test --locked --release --features custom-protocol --manifest-path wallpaper-host/src-tauri/Cargo.toml

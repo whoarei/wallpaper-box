@@ -1,5 +1,5 @@
-//! Observe clicks without consuming Windows input. The hook only tracks a
-//! gesture and enqueues bounded packets; Explorer/UIA work runs on a worker.
+//! Observe desktop input without consuming Windows input. The hook only tracks
+//! click gestures; pointer sampling and Explorer/UIA work run on a worker.
 use std::{
     cell::RefCell,
     ptr::{null, null_mut},
@@ -21,6 +21,7 @@ use windows_sys::Win32::{
 
 const MAX_CLICK_MS: u32 = 1000;
 const MAX_QUEUE_DELAY: Duration = Duration::from_millis(500);
+const POINTER_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Point {
@@ -50,7 +51,13 @@ impl Surface {
     }
 }
 #[derive(Clone, Copy, Debug)]
-pub struct Click {
+pub enum InputKind {
+    Click,
+    Move,
+}
+#[derive(Clone, Copy, Debug)]
+pub struct Input {
+    pub kind: InputKind,
     pub surface: Surface,
     pub x: f64,
     pub y: f64,
@@ -59,6 +66,7 @@ pub struct Click {
 enum Event {
     Down(u64, Point),
     Click(u64, Point),
+    Move(Point),
     Cancel,
 }
 #[derive(Clone, Copy)]
@@ -208,7 +216,7 @@ unsafe fn desktop_blank(
 ) -> Option<isize> {
     use windows::Win32::UI::Accessibility::{UIA_ListControlTypeId, UIA_PaneControlTypeId};
     let point = match packet.event {
-        Event::Down(_, p) | Event::Click(_, p) => p,
+        Event::Down(_, p) | Event::Click(_, p) | Event::Move(p) => p,
         Event::Cancel => return None,
     };
     let hit = packet.hit as HWND;
@@ -299,7 +307,7 @@ unsafe fn desktop_blank(
 
 pub fn start(
     surfaces: impl Fn() -> Vec<Surface> + Send + 'static,
-    deliver: impl Fn(Click) + Send + 'static,
+    deliver: impl Fn(Input) + Send + 'static,
 ) -> Result<Listener, String> {
     let stop = Arc::new(AtomicBool::new(false));
     let (sender, receiver) = mpsc::sync_channel::<Packet>(32);
@@ -334,10 +342,31 @@ pub fn start(
                     }
                     let _ = ready_send.send(Ok(()));
                     let mut pressed: Option<(u64, Surface, isize, isize)> = None;
+                    let mut last_pointer = None;
                     while !worker_stop.load(Ordering::Acquire) {
-                        let packet = match receiver.recv_timeout(Duration::from_millis(100)) {
+                        let packet = match receiver.recv_timeout(POINTER_INTERVAL) {
                             Ok(p) => p,
-                            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                            Err(mpsc::RecvTimeoutError::Timeout) => {
+                                // Sample at most 10 Hz, off the hook and outside
+                                // the click queue. Movement cannot flood out a
+                                // button-up/cancel packet or synthesize a click.
+                                let mut cursor = POINT { x: 0, y: 0 };
+                                if GetPhysicalCursorPos(&mut cursor) == 0 {
+                                    continue;
+                                }
+                                let point = Point {
+                                    x: cursor.x,
+                                    y: cursor.y,
+                                };
+                                if last_pointer.replace(point) == Some(point) {
+                                    continue;
+                                }
+                                Packet {
+                                    event: Event::Move(point),
+                                    hit: WindowFromPhysicalPoint(cursor) as isize,
+                                    at: Instant::now(),
+                                }
+                            }
                             Err(_) => break,
                         };
                         if packet.at.elapsed() > MAX_QUEUE_DELAY {
@@ -370,7 +399,31 @@ pub fn start(
                                     continue;
                                 }
                                 if let Some((x, y)) = surface.position(point) {
-                                    deliver(Click { surface, x, y });
+                                    deliver(Input {
+                                        kind: InputKind::Click,
+                                        surface,
+                                        x,
+                                        y,
+                                    });
+                                }
+                            }
+                            Event::Move(point) => {
+                                if pressed.is_some() {
+                                    continue;
+                                }
+                                if let Some(surface) =
+                                    surfaces().into_iter().find(|s| s.position(point).is_some())
+                                {
+                                    if desktop_blank(&automation, packet, surface).is_some() {
+                                        if let Some((x, y)) = surface.position(point) {
+                                            deliver(Input {
+                                                kind: InputKind::Move,
+                                                surface,
+                                                x,
+                                                y,
+                                            });
+                                        }
+                                    }
                                 }
                             }
                             Event::Cancel => pressed = None,
