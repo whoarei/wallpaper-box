@@ -28,8 +28,10 @@
 
 1. 下载安装版，运行 `wallpaper-box.exe`。
 2. 点击右上角的显示器缩略图，再点击壁纸封面应用。
-3. 底部播放栏可暂停、继续或投喂；导入壁纸、程序更新和关于信息位于“设置”。
+3. 底部播放栏可暂停、继续，并执行壁纸提供的互动操作；导入壁纸、程序更新和关于信息位于“设置”。
 
 支持 **Windows x64**，需要 WebView2，安装程序会在缺少时自动下载。
 
 [详细使用与开发说明](docs/guide.md) · [默认 Gitee 壁纸库](https://gitee.com/xishuaiya/wallpapers) · [GitHub 壁纸库](https://github.com/whoarei/wallpapers)
+
+网页壁纸开发者请参考 [壁纸适配规范（HTML）](docs/wallpaper-adaptation.html)，包含运行模式、输入、暂停和可选操作接口，以及完整示例。v1 已在功能开发分支实现，正式支持版本将在发布时确定。

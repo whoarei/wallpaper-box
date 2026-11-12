@@ -32,7 +32,7 @@ details{margin:18px 0;border:1px solid var(--line);border-radius:12px;background
 <div class="progress" aria-hidden="true"></div>
 <header class="topbar"><div class="top-inner">
 <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true">W</span>壁纸盒子 / 开发者文档</a>
-<div class="top-actions"><span class="status-chip">适配规范 · 评审稿 r1</span><button class="quiet-button" id="theme" type="button">深色模式</button><button class="quiet-button" id="print" type="button">打印 / PDF</button></div>
+<div class="top-actions"><span class="status-chip">适配规范 · v1 实现版</span><button class="quiet-button" id="theme" type="button">深色模式</button><button class="quiet-button" id="print" type="button">打印 / PDF</button></div>
 </div></header>
 <div class="layout">
 <aside class="sidebar" aria-label="文档导航"><div class="side-label">DEVELOPER GUIDE / CONTENTS</div><nav><a href="#start"><span>01</span>先记住这三条</a><a href="#package"><span>02</span>准备一个能离线运行的目录</a><a href="#environment"><span>03</span>识别自己运行在哪里</a><a href="#controls"><span>04</span>让控制栏在桌面上也好用</a><a href="#input"><span>05</span>接收点击与移动</a><a href="#pause"><span>06</span>处理暂停，避免后台继续忙</a><a href="#actions"><span>07</span>可选：把操作放进主程序</a><a href="#example"><span>08</span>完整示例：复制后就能打开</a><a href="#compatibility"><span>09</span>旧壁纸怎么兼容，内容怎么更新</a><a href="#verify"><span>10</span>交付前，按这张清单检查</a><a href="#troubleshooting"><span>11</span>常见问题，先从这里查</a><a href="#references"><span>12</span>版本状态与参考来源</a></nav>
@@ -43,7 +43,7 @@ details{margin:18px 0;border:1px solid var(--line);border-radius:12px;background
 <div class="eyebrow">WALLPAPER INTEGRATION GUIDE <span class="status-chip">WEB / HTML + CSS + JS</span></div>
 <h1>壁纸适配规范</h1>
 <p class="lead">把一个好用的网页，变成一张好用的桌面壁纸。<br>页面保持独立，按运行能力适配，业务逻辑留在壁纸里。</p>
-<div class="hero-meta"><span>面向 <b>网页壁纸开发者</b></span><span>拟议协议 <b>v1 · 待实现</b></span><span>核对基线 <b>v0.9.0</b></span><span>更新 <b>2026.11.12</b></span></div>
+<div class="hero-meta"><span>面向 <b>网页壁纸开发者</b></span><span>运行时协议 <b>v1 · 开发分支已实现</b></span><span>正式版基线 <b>v0.9.0</b></span><span>更新 <b>2026.11.12</b></span></div>
 <div class="hero-route"><a href="#example">下载完整示例 ↗</a><a href="#package">从一个目录开始</a><a href="#verify">查看交付检查</a></div>
 </div>
 <section class="section" id="start"><div class="section-header"><span class="section-number">01</span><h2>先记住这三条</h2></div><p class="section-intro">适用对象：使用 HTML、CSS、JavaScript 开发网页壁纸的作者。宿主指“壁纸盒子”主程序。</p>
@@ -52,7 +52,7 @@ details{margin:18px 0;border:1px solid var(--line);border-radius:12px;background
   <div class="card"><span class="index">02 / 界面由壁纸负责</span><h3>控件怎么显示，你决定</h3><p>宿主不按壁纸名称、DOM ID 或 CSS 类名隐藏、修改你的界面。</p></div>
   <div class="card"><span class="index">03 / 按能力提供功能</span><h3>桌面不等于浏览器</h3><p>桌面模式保留鼠标穿透，不能依赖键盘焦点、原生悬停和浏览器用户激活。</p></div>
 </div>
-<aside class="note warn"><strong>这是一份待实现的 v1 规范</strong><div>本文给出后续统一适配的开发约定。新增的 <code>window.wallpaperHost</code>、<code>window.wallpaperApp</code> 和状态事件，在核对基线 <strong>v0.9.0 / 66fbf98</strong> 中尚未实现，不能当作当前版本已经支持的 API。现有模式标识与输入行为会单独注明。</div></aside>
+<aside class="note info"><strong>v1 已在开发分支实现，正式版尚未发布</strong><div>本规范对应 <code>feat/wallpaper-protocol-v1</code> 中的通用宿主接口、状态事件与操作调用实现。正式发行的 <strong>v0.9.0</strong> 尚不提供这些公开接口；完整支持的正式版本号将在发布时确定。下面的示例仍可在普通浏览器中独立运行。</div></aside>
 <p>只想做好页面播放和桌面点击，阅读第 02—06 节即可；希望在主程序或托盘里显示“投喂”“召唤”等按钮，再阅读第 07 节。第 08 节提供可直接下载的完整示例。</p>
 <div class="table-wrap"><table><thead><tr><th>谁来做</th><th>负责什么</th><th>不应做什么</th></tr></thead><tbody><tr><td>壁纸盒子（宿主）</td><td>创建窗口、告知运行环境、转发有效输入、暂停与恢复、调用壁纸声明的操作。</td><td>识别某张壁纸的内部变量，查找它的按钮，替它修改样式和说明。</td></tr><tr><td>你的壁纸</td><td>绘制场景、控制栏、帮助文案、昼夜天气等业务逻辑，以及对运行环境的适配。</td><td>假定自己总能获得键盘焦点，或需要宿主为自己的 DOM 写一段专用代码。</td></tr><tr><td>可选操作接口</td><td>让主程序展示壁纸主动声明的功能，调用统一入口并读取结果。</td><td>根据壁纸 ID 写 <code>if / else</code>，或把操作 ID 当作系统权限。</td></tr></tbody></table></div></section><section class="section" id="package"><div class="section-header"><span class="section-number">02</span><h2>准备一个能离线运行的目录</h2></div><p class="section-intro">HTML、脚本、样式和素材放在一起，使用相对路径。先保证断网后也能打开。</p><div class="code"><div class="code-head"><span>目录结构</span><button class="copy" type="button">复制代码</button></div><pre><code>meadow/
 ├─ index.html        页面入口
@@ -73,8 +73,8 @@ details{margin:18px 0;border:1px solid var(--line);border-radius:12px;background
   &quot;version&quot;: &quot;1.0.0&quot;,
   &quot;minAppVersion&quot;: &quot;0.2.0&quot;,
   &quot;tags&quot;: [&quot;自然&quot;, &quot;点击互动&quot;]
-}</code></pre></div><div class="table-wrap"><table><thead><tr><th>字段 / 项目</th><th>怎么填写</th></tr></thead><tbody><tr><td>id</td><td>使用小写字母、数字、连字符，长度不超过 64，首字符为字母或数字；避开 Windows 保留名。此处示例为 <code>meadow</code>。本地导入后的运行 ID 可能带 <code>local:</code> 前缀，不要在网页内按运行 ID 分支。</td></tr><tr><td>entry / cover</td><td>相对于壁纸目录的文件路径，例如 <code>index.html</code>、<code>assets/cover.jpg</code>。不使用绝对路径、反斜杠或 <code>../</code>。</td></tr><tr><td>version</td><td>这张壁纸的内容版本。改动 HTML、脚本或素材后更新版本，不覆盖已发布的同版本包。</td></tr><tr><td>minAppVersion</td><td>能满足该包实际需求的最低主程序版本。上例只表示普通网页，不承诺 v1 接口；强依赖新接口的包必须填写正式提供该接口的主程序版本。</td></tr><tr><td>依赖与资源</td><td>核心素材、脚本和字体随包提供，不依赖 CDN 才能显示；不包含机器本地路径、密钥和可执行后端。网络增强功能失败时仍保留基本场景。</td></tr></tbody></table></div><aside class="note info"><strong>两个版本号不要混淆</strong><div><code>module.json.schemaVersion</code> 是文件清单格式，<code>protocolVersion</code> 是运行时接口格式。本文的 v1 草案不会自动改变清单格式，也不表示某个尚未确定的主程序发行版本已经支持它。</div></aside></section><section class="section" id="environment"><div class="section-header"><span class="section-number">03</span><h2>识别自己运行在哪里</h2></div><p class="section-intro">先识别环境，再决定显示哪些入口；不通过壁纸名称或页面地址猜测。</p><div class="table-wrap"><table><thead><tr><th>运行环境</th><th>页面应如何工作</th><th>能力来源</th></tr></thead><tbody><tr><td>桌面壁纸 desktop</td><td>鼠标穿透、不抢焦点。提供可点击的页面按钮；隐藏不可用的网页全屏及键盘提示。</td><td>v1 使用宿主提供的能力；旧宿主仅有模式标识时采取保守降级。</td></tr><tr><td>应用内预览 preview</td><td>普通窗口内展示壁纸；键盘仅在窗口聚焦时可用。预览不修改当前桌面分配。</td><td>v1 预览提供环境信息，但不接入桌面管理操作或宿主暂停。</td></tr><tr><td>独立浏览器 browser</td><td>没有壁纸盒子接口也能运行。普通鼠标、聚焦后的键盘和浏览器允许的全屏可用。</td><td>壁纸自行使用浏览器能力检测，不能访问宿主专用接口。</td></tr></tbody></table></div>
-<h3>推荐的环境检测写法 <span class="tag draft">含拟议 v1 接口</span></h3>
+}</code></pre></div><div class="table-wrap"><table><thead><tr><th>字段 / 项目</th><th>怎么填写</th></tr></thead><tbody><tr><td>id</td><td>使用小写字母、数字、连字符，长度不超过 64，首字符为字母或数字；避开 Windows 保留名。此处示例为 <code>meadow</code>。本地导入后的运行 ID 可能带 <code>local:</code> 前缀，不要在网页内按运行 ID 分支。</td></tr><tr><td>entry / cover</td><td>相对于壁纸目录的文件路径，例如 <code>index.html</code>、<code>assets/cover.jpg</code>。不使用绝对路径、反斜杠或 <code>../</code>。</td></tr><tr><td>version</td><td>这张壁纸的内容版本。改动 HTML、脚本或素材后更新版本，不覆盖已发布的同版本包。</td></tr><tr><td>minAppVersion</td><td>能满足该包实际需求的最低主程序版本。上例只表示普通网页，不承诺 v1 接口；强依赖新接口的包必须填写正式提供该接口的主程序版本。</td></tr><tr><td>依赖与资源</td><td>核心素材、脚本和字体随包提供，不依赖 CDN 才能显示；不包含机器本地路径、密钥和可执行后端。网络增强功能失败时仍保留基本场景。</td></tr></tbody></table></div><aside class="note info"><strong>两个版本号不要混淆</strong><div><code>module.json.schemaVersion</code> 是文件清单格式，<code>protocolVersion</code> 是运行时接口格式。本文的 v1 接口不会自动改变清单格式，也不表示某个尚未确定的主程序发行版本已经支持它。</div></aside></section><section class="section" id="environment"><div class="section-header"><span class="section-number">03</span><h2>识别自己运行在哪里</h2></div><p class="section-intro">先识别环境，再决定显示哪些入口；不通过壁纸名称或页面地址猜测。</p><div class="table-wrap"><table><thead><tr><th>运行环境</th><th>页面应如何工作</th><th>能力来源</th></tr></thead><tbody><tr><td>桌面壁纸 desktop</td><td>鼠标穿透、不抢焦点。提供可点击的页面按钮；隐藏不可用的网页全屏及键盘提示。</td><td>v1 使用宿主提供的能力；旧宿主仅有模式标识时采取保守降级。</td></tr><tr><td>应用内预览 preview</td><td>普通窗口内展示壁纸；键盘仅在窗口聚焦时可用。预览不修改当前桌面分配。</td><td>v1 预览提供环境信息，但不接入桌面管理操作或宿主暂停。</td></tr><tr><td>独立浏览器 browser</td><td>没有壁纸盒子接口也能运行。普通鼠标、聚焦后的键盘和浏览器允许的全屏可用。</td><td>壁纸自行使用浏览器能力检测，不能访问宿主专用接口。</td></tr></tbody></table></div>
+<h3>推荐的环境检测写法 <span class="tag draft">v1 运行时接口</span></h3>
 <p>把初始化放在 DOM 就绪后执行；兼容旧宿主时，也能避免过早读取尚未设置的模式标识。完整示例已经包含这个等待。</p>
 <div class="code"><div class="code-head"><span>javascript</span><button class="copy" type="button">复制代码</button></div><pre><code>const host = window.wallpaperHost?.protocolVersion === 1
   ? window.wallpaperHost
@@ -98,7 +98,7 @@ document.documentElement.dataset.sceneMode = mode; // 壁纸自己的样式标�
 document.querySelector(&quot;.fullscreen-button&quot;).hidden = !capabilities.fullscreen;</code></pre></div><aside class="note warn"><strong>兼容旧版本时，宁可少承诺一点</strong><div>没有 v1 对象时不调用新接口。只有旧桌面标识时，不承诺键盘、全屏或完整暂停状态；不能确认鼠标移动可用时，建议让控制栏保持可见。v1 之前的宿主仍可能强制覆盖页面样式，单靠此检测不能消除旧宿主的干预。</div></aside>
 <details><summary>参考：v1 宿主对象的完整约定（供接入时查阅）</summary><div class="details-body">
 <p>对象由宿主在壁纸脚本执行前提供，字段只读。每次页面导航获得新的 <code>instanceId</code>；普通窗口 resize 不更换实例。预览只注入环境信息，不注入桌面输入，也不冻结预览的 RAF。</p>
-<div class="code"><div class="code-head"><span>javascript</span><button class="copy" type="button">复制代码</button></div><pre><code>// 拟议 v1 · 仅展示宿主注入的对象结构，壁纸不要自行覆盖它。
+<div class="code"><div class="code-head"><span>javascript</span><button class="copy" type="button">复制代码</button></div><pre><code>// v1 · 仅展示宿主注入的对象结构，壁纸不要自行覆盖它。
 window.wallpaperHost = {
   protocolVersion: 1,
   mode: &quot;desktop&quot;,                  // 宿主仅提供 desktop 或 preview
@@ -197,20 +197,20 @@ function frame(now) {
 requestAnimationFrame(frame);
 // updateScene / drawScene 是你的场景函数。</code></pre></div>
 <ul>
-<li>v1 的状态是 <code>{ paused, pauseReason }</code>，原因为 <code>none</code>、<code>manual</code>、<code>occluded</code> 或 <code>system</code>。宿主应在页面开始运行前提供正确初始状态；开发者先读快照，再监听变化。</li>
+<li>v1 的状态是 <code>{ paused, pauseReason }</code>，原因为 <code>none</code>、<code>manual</code>、<code>occluded</code> 或 <code>system</code>。桌面文档在载入阶段以 <code>paused: true / system</code> 开始，挂载与状态确认后再通知实际状态；预览始终没有宿主暂停。开发者先读快照，再监听变化。</li>
 <li>宿主的 RAF 暂停包装不能自动暂停 <code>setInterval</code>、Worker、CSS 动画、视频或音频。壁纸应在状态变化时停止自己的持续工作，恢复时按原状态继续；不要恢复用户本来就暂停的声音或视频。</li>
 <li>视频或音频恢复可能受浏览器策略限制；捕获 <code>play()</code> 的拒绝并展示可理解的状态，不假装已恢复播放。</li>
 <li>非必须的计时任务采用合理频率；不要为轮询宿主能力增加高频定时器。窗口关闭、重新加载时清理资源。</li>
 </ul>
-<details><summary>参考：暂停状态事件的约定 <span class="tag draft">v1 待实现</span></summary><div class="details-body">
+<details><summary>参考：暂停状态事件的约定 <span class="tag draft">v1 开发分支已实现</span></summary><div class="details-body">
 <p>事件在 <code>window</code> 上触发，名称为 <code>wallpaperhost:statechange</code>，<code>event.detail</code> 为与 <code>getState()</code> 同结构的状态快照。宿主先更新内部状态，再发送事件；即使 RAF 已冻结，状态事件仍要送达。</p>
 <p>多个原因同时存在时，v1 快照按 <code>manual → system → occluded → none</code> 的优先级报告。宿主恢复不能清除页面自己的暂停。页面也不能用派发同名 DOM 事件改变真实宿主状态。</p>
 <p>不要调用或覆写 <code>window.__SCREEN_GARDEN_SET_PAUSED</code>，也不要把合成的 <code>visibilitychange</code> 当作完整的宿主暂停状态协议。旧宿主没有 v1 状态接口时，至少限制帧间时间差，防止恢复后场景突然快进。</p>
 </div></details>
-</section><section class="section" id="actions"><div class="section-header"><span class="section-number">07</span><h2>可选：把操作放进主程序</h2></div><p class="section-intro">只有希望在管理窗口或托盘中提供“投喂”“召唤”等操作时，才需要实现这一节。页面里的按钮和桌面点击不依赖它。</p><aside class="note warn"><strong>这一整节属于拟议 v1 接口</strong><div>当前核对版本还没有这个发现与调用机制。宿主需要先实现协议，壁纸再按能力接入；不能仅添加下面的对象，就期待当前主程序自动出现按钮。</div></aside>
+</section><section class="section" id="actions"><div class="section-header"><span class="section-number">07</span><h2>可选：把操作放进主程序</h2></div><p class="section-intro">只有希望在管理窗口或托盘中提供“投喂”“召唤”等操作时，才需要实现这一节。页面里的按钮和桌面点击不依赖它。</p><aside class="note info"><strong>可选的 v1 操作接口</strong><div>开发分支已经按本节发现并调用壁纸提供的操作。普通网页可以省略这一接口；正式 v0.9.0 不会因为页面添加了此对象就自动生成按钮，测试时需要使用支持 v1 的开发版本。</div></aside>
 <p>你在页面里提供 <code>window.wallpaperApp</code>。主程序读取操作列表，按列表显示文字和可用状态；用户点击后，主程序调用统一入口。<strong>“投喂能否成功”“是否饱食”由壁纸判断，宿主不再读取鱼食数量或点击你的某个 DOM 按钮。</strong></p>
 <div class="flow"><div><b>getActions()</b><small>告诉主程序：有哪些操作、显示什么文字、现在能不能点。</small></div><div class="arrow">→</div><div><b>invoke(request)</b><small>执行指定操作，与页面按钮共用你的业务函数。</small></div><div class="arrow">→</div><div><b>返回实际结果</b><small>成功才返回 ok；不能执行时说明原因。</small></div></div>
-<div class="code"><div class="code-head"><span>javascript</span><button class="copy" type="button">复制代码</button></div><pre><code>// 拟议 v1 · 结构示意；完整可运行写法见第 08 节。
+<div class="code"><div class="code-head"><span>javascript</span><button class="copy" type="button">复制代码</button></div><pre><code>// v1 · 结构示意；完整可运行写法见第 08 节。
 window.wallpaperApp = {
   protocolVersion: 1,
   getActions() {
@@ -228,7 +228,7 @@ window.wallpaperApp = {
 };</code></pre></div>
 <p>v1 只支持<strong>立即完成并同步返回 JSON 结果</strong>的页面操作。不返回 Promise；不把网络请求、文件选择或系统设置混进这个接口。普通网页不实现它也能播放，主程序仅不展示这些额外按钮。</p>
 <details><summary>参考 A：操作描述、调用参数与返回值</summary><div class="details-body">
-<div class="table-wrap"><table><thead><tr><th>入口 / 字段</th><th>v1 约定</th></tr></thead><tbody><tr><td>protocolVersion</td><td>固定为整数 <code>1</code>。不支持的协议版本视为没有可用操作。</td></tr><tr><td>getActions()</td><td>同步返回数组，最多 16 项。不得在查询时触发场景操作；在 DOMContentLoaded 时可用。尚未就绪时返回空数组。</td></tr><tr><td>操作 id</td><td>每张壁纸内唯一且稳定，匹配 <code>^[a-z][a-z0-9-]{0,47}$</code>。它是普通业务名称，不是主程序权限名称。</td></tr><tr><td>label / enabled</td><td><code>label</code> 为 1—32 个 UTF-16 代码单元；<code>enabled</code> 为布尔值。禁止 HTML 标签或依赖外部图片显示操作名称。</td></tr><tr><td>disabledReason</td><td>禁用时建议提供，最多 120 个 UTF-16 代码单元。比如“请先继续画面”或“先等鱼儿吃完”。</td></tr><tr><td>allowWhenOccluded</td><td>可选布尔值，默认 false。只有 true 且壁纸仍声明 enabled 时，才允许在仅因遮挡而暂停期间执行；手动或系统暂停时始终不允许。</td></tr><tr><td>invoke(request)</td><td>同步接收下面的调用对象，返回下面的结果对象。v1 不提供任意用户输入参数，也不接受代码字符串。</td></tr></tbody></table></div><div class="code"><div class="code-head"><span>JSON · 请求与结果</span><button class="copy" type="button">复制代码</button></div><pre><code>// 宿主传给 invoke 的调用对象
+<div class="table-wrap"><table><thead><tr><th>入口 / 字段</th><th>v1 约定</th></tr></thead><tbody><tr><td>protocolVersion</td><td>固定为整数 <code>1</code>。不支持的协议版本视为没有可用操作。</td></tr><tr><td>getActions()</td><td>同步返回数组，最多 16 项。不得在查询时触发场景操作；在 DOMContentLoaded 时可用。尚未就绪时返回空数组。</td></tr><tr><td>操作 id</td><td>每张壁纸内唯一且稳定，匹配 <code>^[a-z][a-z0-9-]{0,47}$</code>。它是普通业务名称，不是主程序权限名称。</td></tr><tr><td>label / enabled</td><td><code>label</code> 为 1—32 个 UTF-16 代码单元；<code>enabled</code> 为布尔值。操作名称按纯文本显示，不解析 HTML，也不依赖外部图片。</td></tr><tr><td>disabledReason</td><td>禁用时建议提供，最多 120 个 UTF-16 代码单元。比如“请先继续画面”或“先等鱼儿吃完”。</td></tr><tr><td>allowWhenOccluded</td><td>可选布尔值，默认 false。只有 true 且壁纸仍声明 enabled 时，才允许在仅因遮挡而暂停期间执行；手动或系统暂停时始终不允许。</td></tr><tr><td>invoke(request)</td><td>同步接收下面的调用对象，返回下面的结果对象。v1 不提供任意用户输入参数，也不接受代码字符串。</td></tr></tbody></table></div><div class="code"><div class="code-head"><span>JSON · 请求与结果</span><button class="copy" type="button">复制代码</button></div><pre><code>// 宿主传给 invoke 的调用对象
 {
   &quot;protocolVersion&quot;: 1,
   &quot;instanceId&quot;: &quot;opaque-instance-id&quot;,
@@ -250,7 +250,7 @@ window.wallpaperApp = {
   &quot;code&quot;: &quot;PAUSED&quot;,
   &quot;message&quot;: &quot;画面已暂停，请先继续。&quot;
 }</code></pre></div>
-<p><code>requestId</code>、<code>instanceId</code> 为非空字符串，长度不超过 128 个 UTF-16 代码单元。成功和失败结果都回传原 <code>requestId</code>。<code>data</code> 可省略，须能序列化为 JSON；单次操作列表和单次结果分别不超过 8 KiB UTF-8。字段长度统一按 JavaScript <code>string.length</code> 计算。</p>
+<p><code>requestId</code>、<code>instanceId</code> 为非空字符串，长度不超过 128 个 UTF-16 代码单元。成功和失败结果都回传原 <code>requestId</code>。失败消息最多 512 个 UTF-16 代码单元；标签、原因和消息应为有效 Unicode，且不含 ASCII 控制字符。<code>data</code> 可省略，须能序列化为 JSON；单次操作列表和单次结果分别不超过 8 KiB UTF-8。字段长度统一按 JavaScript <code>string.length</code> 计算。</p>
 <p>宿主将标签、原因和消息作为纯文本显示，不执行壁纸提供的 HTML 或代码。<code>data</code> 中的业务字段仅用于通用显示或诊断，不成为宿主按壁纸类型分支的依据。</p>
 </div></details>
 <details><summary>参考 B：暂停、重复点击与结果不确定时怎么处理</summary><div class="details-body">
@@ -271,7 +271,7 @@ window.wallpaperApp = {
 </section><section class="section" id="example"><div class="section-header"><span class="section-number">08</span><h2>完整示例：复制后就能打开</h2></div><p class="section-intro">示例是一个纯本地网页：点击画面或按钮增加星光，支持暂停、响应式画布和可选的 v1 操作。</p>
 <p>点击下载后将文件保存为 <code>index.html</code>，直接用浏览器打开即可。配合第 02 节的 <code>module.json</code> 可组成一个壁纸目录；正式分发前自行制作封面。</p>
 <button class="download" id="download-example" type="button">下载最小示例 index.html</button>
-<p class="caption">不联网、不加载第三方库。网页部分可直接运行；宿主对象和操作协议需等 v1 实现后才会接入主程序。</p>
+<p class="caption">不联网、不加载第三方库。网页部分可直接运行；宿主对象和操作协议在支持 v1 的开发版本中可接入主程序。</p>
 <details><summary>展开完整 HTML 源码（含可选 v1 操作）</summary><div class="details-body">
 <div class="code"><div class="code-head"><span>HTML · 完整示例</span><button class="copy" type="button">复制代码</button></div><pre id="complete-example"><code>&lt;!doctype html&gt;
 &lt;html lang=&quot;zh-CN&quot;&gt;
@@ -426,7 +426,7 @@ button[hidden]{display:none}
 &lt;/script&gt;
 &lt;/html&gt;</code></pre></div>
 </div></details>
-<aside class="note info"><strong>示例不是宿主实现</strong><div>在浏览器里直接运行时会自动回退，页面按钮可用，但不会在当前主程序中注册任何原生菜单。自动化测试中的模拟宿主也只用于检查分支，不代表已经完成 Windows 桌面适配。</div></aside></section><section class="section" id="compatibility"><div class="section-header"><span class="section-number">09</span><h2>旧壁纸怎么兼容，内容怎么更新</h2></div><p class="section-intro">不要为了照顾旧包，又把针对某张壁纸的补丁放回宿主。</p><div class="table-wrap"><table><thead><tr><th>组合</th><th>应有结果</th><th>作者需要注意</th></tr></thead><tbody><tr><td>普通浏览器 + 任意壁纸</td><td>基本场景和页面交互可用，没有宿主也不报错。</td><td>新接口全部按存在性和版本检测；不能在顶层直接无条件调用宿主。</td></tr><tr><td>符合 v1 的新宿主 + 未适配旧包</td><td>宿主不强制隐藏旧包的界面，转发通用点击与移动。</td><td>旧包的全屏入口、快捷键文案和自身暂停机制不会自动改好；需要内容更新。未声明的主程序扩展操作不显示。</td></tr><tr><td>符合 v1 的新宿主 + v1 壁纸</td><td>按能力展示界面，接收状态变化，声明并执行可选操作。</td><td>对不支持的能力保持可用降级；主程序不因壁纸名称增加新代码。</td></tr><tr><td>旧宿主 + 新壁纸包</td><td>普通网页功能可按作者设计回退，但不承诺完整桌面适配。</td><td>旧宿主的强制 CSS 规则仍可能干扰界面。必须依赖 v1 才能正常工作的包应提高 minAppVersion，不能继续标旧最低版本。</td></tr></tbody></table></div><aside class="note warn"><strong>主程序中的专用操作也要一起迁移</strong><div>当前水族箱的管理窗口与托盘投喂属于专用适配。按 v1 迁移后，入口由壁纸声明的操作生成；未实现操作接口的旧水族箱包仍可保留页面投喂交互，但主程序中的扩展入口需要更新包后才能提供。这项变化必须写入兼容说明。</div></aside>
+<aside class="note info"><strong>示例不是宿主实现</strong><div>在浏览器里直接运行时会自动回退，页面按钮可用，但不会在当前主程序中注册任何原生菜单。自动化测试中的模拟宿主也只用于检查分支，不代表已经完成 Windows 桌面适配。</div></aside></section><section class="section" id="compatibility"><div class="section-header"><span class="section-number">09</span><h2>旧壁纸怎么兼容，内容怎么更新</h2></div><p class="section-intro">不要为了照顾旧包，又把针对某张壁纸的补丁放回宿主。</p><div class="table-wrap"><table><thead><tr><th>组合</th><th>应有结果</th><th>作者需要注意</th></tr></thead><tbody><tr><td>普通浏览器 + 任意壁纸</td><td>基本场景和页面交互可用，没有宿主也不报错。</td><td>新接口全部按存在性和版本检测；不能在顶层直接无条件调用宿主。</td></tr><tr><td>符合 v1 的新宿主 + 未适配旧包</td><td>宿主不强制隐藏旧包的界面，转发通用点击与移动。</td><td>旧包的全屏入口、快捷键文案和自身暂停机制不会自动改好；需要内容更新。未声明的主程序扩展操作不显示。</td></tr><tr><td>符合 v1 的新宿主 + v1 壁纸</td><td>按能力展示界面，接收状态变化，声明并执行可选操作。</td><td>对不支持的能力保持可用降级；主程序不因壁纸名称增加新代码。</td></tr><tr><td>旧宿主 + 新壁纸包</td><td>普通网页功能可按作者设计回退，但不承诺完整桌面适配。</td><td>旧宿主的强制 CSS 规则仍可能干扰界面。必须依赖 v1 才能正常工作的包应提高 minAppVersion，不能继续标旧最低版本。</td></tr></tbody></table></div><aside class="note warn"><strong>主程序中的专用操作也要一起迁移</strong><div>正式 v0.9.0 的水族箱投喂入口采用专用适配。此开发分支已将入口改为由壁纸声明的操作生成；未实现操作接口的旧水族箱包仍可保留页面投喂交互，但主程序中的扩展入口需要更新包后才能提供。这项变化必须写入兼容说明。</div></aside>
 <h3>壁纸作者的更新顺序</h3>
 <ol>
 <li>先保证网页独立运行，再加环境检测与能力降级。</li>
@@ -436,7 +436,7 @@ button[hidden]{display:none}
 <li>按内容库流程生成 ZIP、清单、大小和校验信息。内置快照与官方内容源的对应版本应保持一致。</li>
 </ol>
 <p>用户可能同时使用内置壁纸、已下载版本和本地导入版本。只修改主程序仓库内的快照，不能保证用户正在播放的旧下载包自动获得新代码；也不应未经选择静默替换用户的本地包。</p>
-<details><summary>给主程序维护者：让这份规范成立，需要先改哪些地方？</summary><div class="details-body">
+<details><summary>给主程序维护者：本次主程序的实现内容与后续发布顺序</summary><div class="details-body">
 <ol>
 <li>提供一致的 v1 运行环境与状态接口，桌面和预览按各自能力初始化。</li>
 <li>删除通用样式强制隐藏，以及识别 <code>window.pinewind</code> 后改 DOM、标题、帮助文案的专用分支。</li>
@@ -458,17 +458,18 @@ button[hidden]{display:none}
 <li>可选操作的禁用、成功、失败、重复请求和切换实例都有正确结果，没有“收到请求就成功”。</li>
 <li>版本与最低主程序版本符合实际；内置快照和下载包都检查过，不能只测其中一个。</li>
 </ul>
-<div class="table-wrap"><table><thead><tr><th>检查场景</th><th>建议方式</th><th>通过标准</th></tr></thead><tbody><tr><td>独立浏览器、模式回退、操作接口</td><td>浏览器自动化；v1 未实现前可用明确标注的模拟对象检查页面分支。</td><td>没有 JS 错误；按钮正确；请求去重与暂停规则有效。模拟结果只证明页面逻辑。</td></tr><tr><td>类名不应被宿主干预</td><td>准备普通测试页，故意使用 .hud、.overlay、.toast 等类名。</td><td>符合 v1 的宿主不隐藏这些元素，不改标题、文字或事件处理。</td></tr><tr><td>暂停与资源</td><td>自动化观察场景状态；结合进程资源与媒体状态检查。</td><td>暂停期间状态不推进，恢复不突跳，不持续进行无必要的重计算或播放。</td></tr><tr><td>真实桌面输入</td><td>Windows / Explorer 实机，桌面图标、框选、任务栏、菜单、普通窗口都参与测试。</td><td>桌面空白处交互正常；图标和原始桌面操作不受影响，壁纸不抢焦点。</td></tr><tr><td>多屏与缩放</td><td>至少覆盖负坐标副屏、竖屏、混合 DPI、任务栏工作区变化。</td><td>显示范围和点击映射一致；切屏或换壁纸后的旧请求不作用于新实例。</td></tr><tr><td>版本组合</td><td>当前支持宿主、旧宿主、旧内容包、新内容包分别验证。</td><td>最低版本声明真实；不支持时明确降级，不能把模拟的新接口写成当前宿主已经支持。</td></tr></tbody></table></div></section><section class="section" id="troubleshooting"><div class="section-header"><span class="section-number">11</span><h2>常见问题，先从这里查</h2></div><p class="section-intro">大多数问题来自运行环境、坐标或事件的假设，而不是需要宿主为某张壁纸加特例。</p><div class="table-wrap"><table><thead><tr><th>现象</th><th>先检查</th><th>推荐处理</th></tr></thead><tbody><tr><td>预览有控制栏，桌面没有</td><td>是否被旧宿主强制 CSS 隐藏？页面是否自行进入 idle 或隐藏界面状态？</td><td>先区分宿主版本与页面行为；新版由壁纸自行控制显示，不增加主程序专用白名单。</td></tr><tr><td>移动鼠标没有按钮高亮</td><td>是否只依赖 :hover、pointerenter 或原生 title？</td><td>必要标签直接可见；通过标准 pointermove 在壁纸内实现轻量反馈，不能要求宿主模拟完整浏览器悬停。</td></tr><tr><td>点按钮时背景也响应</td><td>是否在 document 上无差别处理 click，或同时处理了 down 与 click？</td><td>场景监听限定在场景区域；控制栏阻止冒泡；同一业务只处理一次。</td></tr><tr><td>点击位置偏了</td><td>是否混用了物理像素、CSS 像素、固定分辨率或忽略了 cover 裁切？</td><td>以当前画布矩形做转换；存在裁切、变换时逆变换到实际场景坐标。</td></tr><tr><td>暂停后还有声音或后台仍忙</td><td>是否还有定时器、视频、音频、Worker、CSS 动画？</td><td>按暂停状态管理这些资源；不要以为冻结 RAF 就等于停止一切。</td></tr><tr><td>恢复后时间跳了一大截</td><td>是否直接使用恢复后的大帧间隔？</td><td>重置帧时间基准，给 dt 设置合理上限；不要把暂停时长当成模拟时长补跑。</td></tr><tr><td>主程序按钮没有出现</td><td>是否只是实现了草案接口，而当前主程序尚未支持？操作列表是否为空、无效或未就绪？</td><td>确认正式接口版本与能力，再检查协议字段。页面按钮仍应独立可用。</td></tr><tr><td>点一次主程序操作却执行两次</td><td>是否在超时后自动重试，或给重复请求生成了新的 ID？</td><td>串行调用、使用同一个请求的回执缓存；结果未知时不自动重试非幂等动作。</td></tr></tbody></table></div></section><section class="section" id="references"><div class="section-header"><span class="section-number">12</span><h2>版本状态与参考来源</h2></div><p class="section-intro">让开发者知道：哪些行为已经存在，哪些接口还需要主程序实现。</p><div class="table-wrap"><table><thead><tr><th>项目</th><th>核对基线中的状态</th><th>本文如何使用</th></tr></thead><tbody><tr><td>module.json schema 1、相对路径、本地目录</td><td><span class="tag existing">已有</span></td><td>沿用现有包格式，不增加未经实现的清单字段。</td></tr><tr><td>data-screen-garden-wallpaper 模式标识</td><td><span class="tag existing">已有</span></td><td>仅作为旧桌面模式检测，不当作 v1 能力声明。</td></tr><tr><td>桌面空白短点击、移动转发、RAF 暂停包装</td><td><span class="tag existing">已有</span></td><td>保留通用能力，并写清合成事件与暂停范围的限制。</td></tr><tr><td>宿主隐藏 HUD / overlay、松风镇专用 DOM 适配、水族箱专用调用</td><td><span class="tag draft">待移除 / 待迁移</span></td><td>它们仍存在于核对基线，不符合本文提出的通用职责边界。</td></tr><tr><td>wallpaperHost、wallpaperApp、状态事件、通用操作发现</td><td><span class="tag draft">v1 待实现</span></td><td>本文定义的目标接口；尚不能视为当前发行版本的功能。</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>检查场景</th><th>建议方式</th><th>通过标准</th></tr></thead><tbody><tr><td>独立浏览器、模式回退、操作接口</td><td>浏览器自动化；接口开发时可用明确标注的模拟对象检查页面分支，交付前仍应测试真实实现。</td><td>没有 JS 错误；按钮正确；请求去重与暂停规则有效。模拟结果只证明页面逻辑。</td></tr><tr><td>类名不应被宿主干预</td><td>准备普通测试页，故意使用 .hud、.overlay、.toast 等类名。</td><td>符合 v1 的宿主不隐藏这些元素，不改标题、文字或事件处理。</td></tr><tr><td>暂停与资源</td><td>自动化观察场景状态；结合进程资源与媒体状态检查。</td><td>暂停期间状态不推进，恢复不突跳，不持续进行无必要的重计算或播放。</td></tr><tr><td>真实桌面输入</td><td>Windows / Explorer 实机，桌面图标、框选、任务栏、菜单、普通窗口都参与测试。</td><td>桌面空白处交互正常；图标和原始桌面操作不受影响，壁纸不抢焦点。</td></tr><tr><td>多屏与缩放</td><td>至少覆盖负坐标副屏、竖屏、混合 DPI、任务栏工作区变化。</td><td>显示范围和点击映射一致；切屏或换壁纸后的旧请求不作用于新实例。</td></tr><tr><td>版本组合</td><td>当前支持宿主、旧宿主、旧内容包、新内容包分别验证。</td><td>最低版本声明真实；不支持时明确降级，不能把模拟的新接口写成当前宿主已经支持。</td></tr></tbody></table></div></section><section class="section" id="troubleshooting"><div class="section-header"><span class="section-number">11</span><h2>常见问题，先从这里查</h2></div><p class="section-intro">大多数问题来自运行环境、坐标或事件的假设，而不是需要宿主为某张壁纸加特例。</p><div class="table-wrap"><table><thead><tr><th>现象</th><th>先检查</th><th>推荐处理</th></tr></thead><tbody><tr><td>预览有控制栏，桌面没有</td><td>是否被旧宿主强制 CSS 隐藏？页面是否自行进入 idle 或隐藏界面状态？</td><td>先区分宿主版本与页面行为；新版由壁纸自行控制显示，不增加主程序专用白名单。</td></tr><tr><td>移动鼠标没有按钮高亮</td><td>是否只依赖 :hover、pointerenter 或原生 title？</td><td>必要标签直接可见；通过标准 pointermove 在壁纸内实现轻量反馈，不能要求宿主模拟完整浏览器悬停。</td></tr><tr><td>点按钮时背景也响应</td><td>是否在 document 上无差别处理 click，或同时处理了 down 与 click？</td><td>场景监听限定在场景区域；控制栏阻止冒泡；同一业务只处理一次。</td></tr><tr><td>点击位置偏了</td><td>是否混用了物理像素、CSS 像素、固定分辨率或忽略了 cover 裁切？</td><td>以当前画布矩形做转换；存在裁切、变换时逆变换到实际场景坐标。</td></tr><tr><td>暂停后还有声音或后台仍忙</td><td>是否还有定时器、视频、音频、Worker、CSS 动画？</td><td>按暂停状态管理这些资源；不要以为冻结 RAF 就等于停止一切。</td></tr><tr><td>恢复后时间跳了一大截</td><td>是否直接使用恢复后的大帧间隔？</td><td>重置帧时间基准，给 dt 设置合理上限；不要把暂停时长当成模拟时长补跑。</td></tr><tr><td>主程序按钮没有出现</td><td>是否只是添加了接口对象，而正在使用的正式版本尚未支持 v1？操作列表是否为空、无效或未就绪？</td><td>确认正式接口版本与能力，再检查协议字段。页面按钮仍应独立可用。</td></tr><tr><td>点一次主程序操作却执行两次</td><td>是否在超时后自动重试，或给重复请求生成了新的 ID？</td><td>串行调用、使用同一个请求的回执缓存；结果未知时不自动重试非幂等动作。</td></tr></tbody></table></div></section><section class="section" id="references"><div class="section-header"><span class="section-number">12</span><h2>版本状态与参考来源</h2></div><p class="section-intro">对照正式 v0.9.0 与当前开发分支，区分已有行为、已完成实现和未发布状态。</p><div class="table-wrap"><table><thead><tr><th>项目</th><th>正式 v0.9.0</th><th>此开发分支</th></tr></thead><tbody><tr><td>module.json schema 1、相对路径、本地目录</td><td>已有</td><td>沿用现有格式，不增加未经实现的清单字段。</td></tr><tr><td>旧模式标识、通用点击/移动与 RAF 暂停</td><td>已有</td><td>保留兼容；完善暂停原因和加载期间的初始状态。</td></tr><tr><td>宿主隐藏 HUD / overlay、松风镇 DOM 适配、水族箱专用调用</td><td>包含这些专用逻辑</td><td>已移除。两张内置壁纸及内容库源码自行处理显示与业务操作。</td></tr><tr><td>wallpaperHost、wallpaperApp、状态事件与通用操作发现</td><td>尚不支持这些公开接口</td><td>已实现。包含实例绑定、超时、去重、校验、管理窗口与托盘操作。</td></tr><tr><td>正式支持版本与内容发布</td><td>v0.9.0 已发行</td><td>本次为功能开发，尚未分配新发行版本，不覆盖已发布的同版本内容包。</td></tr></tbody></table></div>
 <ul class="reference-list">
-<li><a href="https://github.com/whoarei/wallpaper-box/blob/66fbf98/wallpaper-host/src-tauri/wallpaper-mode.js">wallpaper-mode.js</a>：核对现有模式标识、输入序列、暂停包装与页面适配。</li>
-<li><a href="https://github.com/whoarei/wallpaper-box/blob/66fbf98/wallpaper-host/src-tauri/src/desktop_input.rs">desktop_input.rs</a>：核对原生输入筛选、坐标与移动采样。</li>
-<li><a href="https://github.com/whoarei/wallpaper-box/blob/66fbf98/wallpaper-host/src-tauri/src/catalog.rs">catalog.rs</a>：核对 module.json 格式、ID、相对路径和元数据读取。</li>
-<li><a href="https://github.com/whoarei/wallpaper-box/blob/66fbf98/wallpaper-host/src-tauri/src/host.rs">host.rs</a>：核对预览、桌面窗口和当前管理操作的边界。</li>
-<li><a href="https://github.com/whoarei/wallpaper-box/blob/66fbf98/docs/guide.md">项目使用与开发指南</a>：核对内置、在线与本地内容的管理方式。</li>
+<li><a href="https://github.com/whoarei/wallpaper-box/tree/feat/wallpaper-protocol-v1">v1 开发分支源码</a>：通用运行时、原生操作调用、管理界面与内置适配。</li>
+<li><code>wallpaper-host/src-tauri/wallpaper-mode.js</code>：环境、输入、暂停事件、操作传输。</li>
+<li><code>wallpaper-host/src-tauri/src/wallpaper_protocol.rs</code>：原生协议类型与字段校验。</li>
+<li><code>wallpaper-host/src-tauri/src/host/wallpaper_actions.rs</code>：通用发现、实例绑定与操作回执。</li>
+<li><code>tests/wallpaper-protocol.test.cjs</code>、<code>tests/wallpaper-modules.test.cjs</code>：实际运行时与真实壁纸页面验证。</li>
+<li><a href="https://github.com/whoarei/wallpaper-box/blob/66fbf98/docs/guide.md">正式版基线 v0.9.0</a>：用于对照旧行为，不代表该版本已支持 v1。</li>
 </ul>
-<p class="caption">核对基线：Wallpaper Box v0.9.0，提交 66fbf98。文档日期：2026 年 11 月 12 日。本文是开发者适配规范评审稿，不代表 v1 协议已经实现或发布；正式落地时应更新实现版本与验收记录。</p>
+<p class="caption">实现分支：feat/wallpaper-protocol-v1。文档日期：2026 年 11 月 12 日。接口代码已实现；正式发行版本和 Windows Explorer 实机验收仍需在发布时记录。</p>
 </section>
-<footer class="doc-footer"><span>Wallpaper Box · Developer Integration Guide · 评审稿 r1</span><span>单文件 / 离线可读 / 支持打印　<a href="#top">回到顶部 ↑</a></span></footer>
+<footer class="doc-footer"><span>Wallpaper Box · Developer Integration Guide · v1 开发分支</span><span>单文件 / 离线可读 / 支持打印　<a href="#top">回到顶部 ↑</a></span></footer>
 </main></div>
 <script>
 (() => {

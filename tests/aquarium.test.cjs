@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
-const feedScript = fs.readFileSync(path.resolve(__dirname, '../wallpaper-host/src-tauri/aquarium-feed.js'), 'utf8');
+const {bootstrap}=require('./wallpaper-test-support.cjs');
 
 function playwright() {
   for (const candidate of [process.env.PLAYWRIGHT_PATH,
@@ -25,6 +25,7 @@ async function serveAquarium(wrapper) {
   const root = path.resolve(__dirname, '../wallpapers/aquarium');
   const files = { '/': ['index.html', 'text/html; charset=utf-8'],
     '/aquarium.js': ['aquarium.js', 'text/javascript; charset=utf-8'],
+    '/wallpaper-adapter.js': ['wallpaper-adapter.js','text/javascript; charset=utf-8'],
     '/aquarium.css': ['aquarium.css', 'text/css; charset=utf-8'] };
   const server = http.createServer((request, response) => {
     const url = new URL(request.url, 'http://localhost');
@@ -38,7 +39,7 @@ async function serveAquarium(wrapper) {
       // Clock is installed before document scripts; inject the real wallpaper
       // wrapper before the real deferred module, matching native initialization.
       // Two independent addInitScripts have undefined ordering in Playwright.
-      content = content.toString('utf8').replace('<head>', `<head><script>${wrapper}</script>`);
+      content = content.toString('utf8').replace('<head>', '<head><script>'+bootstrap(wrapper)+'</script>');
     }
     response.end(content);
   });
@@ -62,20 +63,22 @@ async function advanceUntilEaten(page, previousEaten) {
   assert.fail(`Fish did not consume food within 30 simulation seconds: ${JSON.stringify(state)}`);
 }
 
-// Execute the production script verbatim, as native eval_with_callback does.
+// Exercise the production generic operation transport, observing real scene state.
 async function hostFeed(page) {
-  return page.evaluate(script => {
-    const before = window.aquarium.getState();
-    const reply = (0, eval)(script);
-    return { before, reply, after: window.aquarium.getState() };
-  }, feedScript);
+  return page.evaluate(() => {
+    const before=window.aquarium.getState();
+    window.__testRequest=(window.__testRequest||0)+1;
+    const reply=window.__SCREEN_GARDEN_INVOKE_ACTION({protocolVersion:1,
+      instanceId:wallpaperHost.instanceId,requestId:'test-'+window.__testRequest,actionId:'feed'}).result;
+    return {before,reply,after:window.aquarium.getState()};
+  });
 }
 
 function assertOnePortion({ before, reply, after }) {
   assert.equal(after.totalFed, before.totalFed + 7, 'The existing feed handler must add seven food particles');
   assert.equal(after.foods, before.foods + 7);
   assert.equal(after.fish, 30);
-  assert.deepEqual(reply, { ok: true, foods: after.foods, totalFed: after.totalFed },
+  assert.deepEqual(reply.data, { foods: after.foods, totalFed: after.totalFed },
     'The native callback must confirm the food was actually added');
 }
 
@@ -95,11 +98,6 @@ function assertOnePortion({ before, reply, after }) {
 
     async function test(name, wallpaperMode, body) {
       const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'zh-CN' });
-      await context.addInitScript(script => {
-        // At document creation the actual module has not initialized its HUD or
-        // diagnostics yet. Test the real bridge's loading response at that time.
-        window.__aquariumFeedBeforeReady = (0, eval)(script);
-      }, feedScript);
       const page = await context.newPage();
       page.setDefaultTimeout(120000);
       const start = new Date('2026-11-11T00:00:00Z');
@@ -127,9 +125,9 @@ function assertOnePortion({ before, reply, after }) {
       } finally { await context.close(); }
     }
 
-    await test('hidden wallpaper HUD still accepts host feeding and fish consume the food', true, async page => {
+    await test('wallpaper-owned controls accept generic feeding and fish consume the food', true, async page => {
       assert.equal(await page.locator('html').getAttribute('data-screen-garden-wallpaper'), 'true');
-      assert.equal(await page.locator('#feed').isVisible(), false, 'Wallpaper mode intentionally hides its web controls');
+      assert.equal(await page.locator('#feed').isVisible(), true, 'The wallpaper owns its visible controls');
       const portion = await hostFeed(page);
       assertOnePortion(portion);
       assert.ok(portion.after.foods > 0);
@@ -139,7 +137,7 @@ function assertOnePortion({ before, reply, after }) {
     });
 
     await test('host pause queues food and resume restores simulation and feeding', true, async page => {
-      await page.evaluate(() => window.__SCREEN_GARDEN_SET_PAUSED(true));
+      await page.evaluate(() => window.__SCREEN_GARDEN_SET_PAUSED({paused:true,pauseReason:'occluded'}));
       const frozen = await aquariumState(page);
       await page.clock.runFor(1000);
       assert.equal((await aquariumState(page)).frames, frozen.frames, 'Host pause must freeze animation frames');
@@ -181,23 +179,26 @@ function assertOnePortion({ before, reply, after }) {
       const loading = await page.evaluate(() => window.__aquariumFeedBeforeReady);
       assert.equal(loading.ok, false);
       assert.match(loading.message, /正在载入/);
-      await page.keyboard.press('Space');
+      await page.evaluate(()=>document.getElementById('pause').click());
       const paused = await hostFeed(page);
       assert.equal(paused.before.paused, true);
-      assert.deepEqual(paused.reply, { ok: false, message: '水族箱已暂停，请先继续播放。' });
+      assert.equal(paused.reply.ok,false);
+      assert.equal(paused.reply.code,'DISABLED');
+      assert.match(paused.reply.message,/已暂停/);
       assert.equal(paused.after.totalFed, paused.before.totalFed);
       assert.equal(paused.after.foods, paused.before.foods);
-      await page.keyboard.press('Space');
-      const meal = await page.evaluate(script => {
-        const before = window.aquarium.getState();
-        const replies = Array.from({ length: 8 }, () => (0, eval)(script));
-        return { before, replies, after: window.aquarium.getState() };
-      }, feedScript);
+      await page.evaluate(()=>document.getElementById('pause').click());
+      const meal = await page.evaluate(() => {
+        const before=window.aquarium.getState();
+        const replies=Array.from({length:8},(_,i)=>window.__SCREEN_GARDEN_INVOKE_ACTION({
+          protocolVersion:1,instanceId:wallpaperHost.instanceId,requestId:'meal-'+i,actionId:'feed'}).result);
+        return {before,replies,after:window.aquarium.getState()};
+      });
       assert.equal(meal.replies.filter(reply => reply.ok).length, 7);
       assert.equal(meal.after.foods, 49, 'The existing module permits seven portions before its >42 limit');
       assert.equal(meal.after.totalFed, meal.before.totalFed + 49);
-      assert.deepEqual(meal.replies.at(-1), { ok: false, message: '先让鱼儿慢慢吃完这一餐。' },
-        'A meal rejected by the real handler must not be acknowledged as successful');
+      assert.equal(meal.replies.at(-1).ok,false);
+      assert.equal(meal.replies.at(-1).message,'先让鱼儿慢慢吃完这一餐。');
     });
 
     await test('desktop clicks feed at the original screen position with a complete pointer sequence', true, async page => {
@@ -209,7 +210,7 @@ function assertOnePortion({ before, reply, after }) {
         return {reply, before, after:window.aquarium.getState(), events, width:innerWidth, height:innerHeight, focusPreserved:focused===document.activeElement};
       });
       assert.equal(result.reply.delivered, true);
-      assert.equal(result.reply.added, 7);
+      assert.equal(result.reply.added, undefined, 'The generic transport does not inspect scene-specific food state');
       assert.equal(result.after.totalFed, result.before.totalFed + 7);
       assert.deepEqual(result.events.map(event=>event.type), ['pointerdown','mousedown','pointerup','mouseup','click']);
       assert.deepEqual(result.events.map(event=>event.buttons), [1,1,0,0,0]);
@@ -223,13 +224,14 @@ function assertOnePortion({ before, reply, after }) {
         const before=window.aquarium.getState();
         const bad=[[-0.01,0.5],[1,0.5],[0.5,1],[NaN,0.5],[Infinity,0.5],['0.5',0.5]].map(([x,y])=>window.__SCREEN_GARDEN_DESKTOP_CLICK(x,y));
         const rejected=window.aquarium.getState();
-        window.__SCREEN_GARDEN_SET_PAUSED(true);
+        window.__SCREEN_GARDEN_SET_PAUSED({paused:true,pauseReason:'occluded'});
         const queued=window.__SCREEN_GARDEN_DESKTOP_CLICK(0.25,0.4);
         return {before,bad,rejected,queued,after:window.aquarium.getState()};
       });
       assert.ok(result.bad.every(reply=>reply.delivered===false));
       assert.equal(result.rejected.totalFed,result.before.totalFed);
-      assert.equal(result.queued.added,7);
+      assert.equal(result.queued.delivered,true);
+      assert.equal(result.after.totalFed,result.before.totalFed+7);
       await page.clock.runFor(1000);
       const frozen=await aquariumState(page);
       assert.equal(frozen.frames,result.after.frames);

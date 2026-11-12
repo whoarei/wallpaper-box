@@ -70,7 +70,7 @@ function fixtures() {
         { id: 'secondary', name: '副显示器', primary: false, width: 1920, height: 1080, scale: 1 },
       ], modules, warnings: [], downloads: [], last_error: null,
       wallpapers: [{ display_id: 'primary', module_id: 'aquarium', name: '水族箱',
-        paused: false, auto_paused: false,
+        paused: false, auto_paused: false, instance_id:'primary-document', actions:[{id:'feed',label:'投喂鱼儿',enabled:true,allowWhenOccluded:true}],
         resources: { status: 'ready', cpu_percent: 1.2, memory_bytes: 134217728 } }],
       online: { catalog: null, checked_at: 0, cached: false, last_error: null },
     },
@@ -99,7 +99,7 @@ function wallpaperHistory(fixture) {
 // This fixture owns native state. UI updates only through the production invoke
 // API and its ordinary one-second polling, matching a Tauri manager window.
 function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppCheck, failAppInstall,
-  failPreview, deferApply, deferInstall, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures, deferCancellation, importedModule, failAutoStart, deferAutoStart, persistAutoStart, historyPages, failHistory, deferHistory, coverData, initialWindowState }) {
+  failPreview, deferApply, deferInstall, deferAction, failAction, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures, deferCancellation, importedModule, failAutoStart, deferAutoStart, persistAutoStart, historyPages, failHistory, deferHistory, coverData, initialWindowState }) {
   const copy = value => JSON.parse(JSON.stringify(value));
   if (persistProxy && sessionStorage.getItem('native-proxy')) {
     state.proxy = JSON.parse(sessionStorage.getItem('native-proxy'));
@@ -172,6 +172,8 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
     releaseWindowRead() { releaseWindowRead(); releaseWindowRead = null; },
     failNextCheck() { pendingFailure = true; },
     state() { return copy(state); },
+    setWallpaper(displayId, patch) {Object.assign(state.wallpapers.find(w=>w.display_id===displayId),copy(patch));},
+    selectDisplay(displayId) {state.selected_monitor=displayId;},
     setAppUpdate(patch) { Object.assign(state.app_update, copy(patch)); },
     setResources(displayId, resources) { state.wallpapers.find(w => w.display_id === displayId).resources = copy(resources); },
     finishOperation() { assertPendingOperation(); finishOperation(); finishOperation = null; },
@@ -288,12 +290,16 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
         playing.paused = args.paused;
         return copy(state);
       }
-      case 'feed_aquarium': {
-        const playing = state.wallpapers.find(wallpaper => wallpaper.display_id === args.monitorId);
-        if (playing?.module_id !== 'aquarium' || playing.paused) {
-          throw new Error('Test IPC: cannot feed this display');
+      case 'invoke_wallpaper_action': {
+        if(deferAction)await new Promise(resolve=>{finishOperation=resolve;});
+        const playing=state.wallpapers.find(wallpaper=>wallpaper.display_id===args.monitorId);
+        if(playing?.instance_id!==args.instanceId)return {ok:false,requestId:'test-request',code:'STALE_INSTANCE',message:'壁纸已经切换或重新加载。'};
+        const action=playing.actions?.find(action=>action.id===args.actionId);
+        if(!action||!action.enabled||playing.paused||(playing.auto_paused&&!action.allowWhenOccluded)){
+          return {ok:false,requestId:'test-request',code:'DISABLED',message:'这个壁纸操作暂时不可用。'};
         }
-        return copy(state);
+        if(failAction)return {ok:false,requestId:'test-request',code:'RESULT_UNKNOWN',message:'未能确认操作结果，请先查看壁纸，避免重复操作。'};
+        return {ok:true,requestId:'test-request'};
       }
       case 'check_online':
         if (pendingFailure) {
@@ -345,7 +351,7 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
         if (deferApply) await new Promise(resolve => { finishOperation = resolve; });
         state.wallpapers = state.wallpapers.filter(wallpaper => wallpaper.display_id !== args.monitorId);
         state.wallpapers.push({ display_id: args.monitorId, module_id: module.id,
-          name: module.name, paused: false, auto_paused: false });
+          name: module.name, paused: false, auto_paused: false, instance_id:'document-'+args.monitorId+'-'+module.id, actions:copy(module.actions||[]) });
         return copy(state);
       }
       case 'rollback_wallpaper': {
@@ -1598,39 +1604,70 @@ async function noHorizontalOverflow(page, label) {
       ]);
     });
 
-    await test('aquarium feeding targets the selected screen and respects wallpaper and pause state', fixture => {
-      fixture.state.wallpapers.push({ display_id: 'secondary', module_id: 'aquarium',
-        name: '水族箱', paused: false, auto_paused: true });
+    await test('declared wallpaper operations bind a document and respect explicit occlusion policy', fixture => {
+      fixture.state.wallpapers.push({display_id:'secondary',module_id:'local:custom',name:'自定义画面',
+        paused:false,auto_paused:true,instance_id:'secondary-document',
+        actions:[{id:'spark',label:'点亮',enabled:true,allowWhenOccluded:true}]});
     }, async page => {
-      const feed = page.locator('#feed-aquarium');
-      await visible(feed);
-      assert.equal(await feed.isEnabled(), true);
-      await feed.click();
-      await monitorChoice(page, 'secondary').click();
-      await page.waitForFunction(() => document.getElementById('current-status').textContent === '遮挡，自动暂停');
-      assert.equal(await feed.isEnabled(), true, 'Occlusion must allow queuing food before returning to the desktop');
-      await feed.click();
-      await moduleCard(page, '#modules', '松风镇').getByRole('button', { name: '应用壁纸', exact: true }).click();
-      await page.waitForFunction(() => document.getElementById('feed-aquarium').hidden);
-      assert.equal(await feed.isVisible(), false, 'Feeding must be hidden for other wallpaper modules');
-      await monitorChoice(page, 'primary').click();
-      await visible(feed);
-      await page.locator('#pause').click();
-      await page.waitForFunction(() => document.getElementById('feed-aquarium').disabled);
-      assert.equal(await feed.isDisabled(), true, 'Manual pause must disable feeding');
-      await page.locator('#pause').click();
-      await page.waitForFunction(() => !document.getElementById('feed-aquarium').disabled);
-      assert.equal(await feed.isEnabled(), true);
-      const calls = await actions(page);
-      assert.deepEqual(calls.filter(call => call.command === 'feed_aquarium'), [
-        { command: 'feed_aquarium', args: { monitorId: 'primary' } },
-        { command: 'feed_aquarium', args: { monitorId: 'secondary' } },
+      const action=page.locator('#wallpaper-action');
+      await visible(action);assert.equal(await action.textContent(),'投喂鱼儿');
+      await action.click();
+      await monitorChoice(page,'secondary').click();
+      await page.waitForFunction(()=>document.getElementById('wallpaper-action').textContent==='点亮');
+      assert.equal(await action.isEnabled(),true);
+      await action.click();
+      await page.evaluate(()=>window.__uiTest.setWallpaper('secondary',{actions:[]}));
+      await page.waitForFunction(()=>document.getElementById('wallpaper-actions').hidden);
+      await monitorChoice(page,'primary').click();await visible(action);
+      await page.locator('#pause').click();await page.waitForFunction(()=>document.getElementById('wallpaper-action').disabled);
+      await page.locator('#pause').click();await page.waitForFunction(()=>!document.getElementById('wallpaper-action').disabled);
+      const calls=await actions(page);
+      assert.deepEqual(calls.filter(call=>call.command==='invoke_wallpaper_action'),[
+        {command:'invoke_wallpaper_action',args:{monitorId:'primary',instanceId:'primary-document',actionId:'feed'}},
+        {command:'invoke_wallpaper_action',args:{monitorId:'secondary',instanceId:'secondary-document',actionId:'spark'}}
       ]);
-      assert.deepEqual(calls.filter(call => call.command === 'pause_wallpaper'), [
-        { command: 'pause_wallpaper', args: { monitorId: 'primary', paused: true } },
-        { command: 'pause_wallpaper', args: { monitorId: 'primary', paused: false } },
-      ]);
-      assert.equal(calls.some(call => ['check_online', 'install_online'].includes(call.command)), false);
+    });
+
+    await test('all declared operations remain reachable and labels are rendered as plain text', fixture => {
+      const playing=fixture.state.wallpapers[0];
+      playing.module_id='local:unrecognized';playing.name='第三方壁纸';
+      playing.actions=Array.from({length:16},(_,i)=>({id:'action-'+i,label:i===0?'<b>点亮</b>':'操作 '+i,enabled:i!==3,disabledReason:i===3?'正在冷却':undefined}));
+    }, async page => {
+      assert.equal(await page.locator('#wallpaper-action').textContent(),'<b>点亮</b>');
+      assert.equal(await page.locator('#wallpaper-action b').count(),0);
+      await page.locator('#wallpaper-actions-menu summary').click();
+      assert.equal(await page.locator('#wallpaper-extra-actions button').count(),15);
+      assert.equal(await page.locator('[data-wallpaper-action="action-3"]').isDisabled(),true);
+      assert.equal(await page.locator('[data-wallpaper-action="action-3"]').getAttribute('title'),'正在冷却');
+      await page.locator('[data-wallpaper-action="action-15"]').click();
+      assert.equal((await actions(page)).at(-1).args.actionId,'action-15');
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    });
+
+    await test('pending operations prevent duplicates and never redirect to a new document', fixture => {
+      fixture.deferAction=true;
+    }, async page => {
+      await page.evaluate(()=>{document.getElementById('wallpaper-action').click();document.getElementById('wallpaper-action').click();});
+      await page.waitForFunction(()=>document.getElementById('wallpaper-action').disabled);
+      await page.evaluate(()=>{
+        window.__uiTest.setWallpaper('primary',{instance_id:'replacement-document',actions:[]});
+        window.__uiTest.finishOperation();
+      });
+      await page.waitForFunction(()=>document.getElementById('error').textContent.includes('重新加载'));
+      assert.equal((await actions(page)).filter(call=>call.command==='invoke_wallpaper_action').length,1);
+      assert.deepEqual((await actions(page)).find(call=>call.command==='invoke_wallpaper_action').args,
+        {monitorId:'primary',instanceId:'primary-document',actionId:'feed'});
+    });
+
+    await test('unknown action outcomes remain visible and are never automatically retried', fixture => {
+      fixture.failAction=true;
+    }, async page => {
+      await page.locator('#wallpaper-action').click();
+      await page.waitForFunction(()=>document.getElementById('error').textContent.includes('避免重复操作'));
+      await page.evaluate(()=>window.__uiTest.emit('host-updated'));
+      await page.waitForFunction(()=>!document.getElementById('wallpaper-action').disabled);
+      assert.equal((await actions(page)).filter(call=>call.command==='invoke_wallpaper_action').length,1);
+      assert.match(await page.locator('#error').textContent(),/避免重复操作/);
     });
 
     await test('background app downloads show progress and ready never installs automatically', fixture => {

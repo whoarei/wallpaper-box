@@ -9,7 +9,9 @@
     "check:version": "node scripts/check-version.mjs",
     "test:ui": "node ../tests/ui.test.cjs",
     "test:aquarium": "node ../tests/aquarium.test.cjs",
-    "test:pinewind": "node ../tests/pinewind.test.cjs"
+    "test:pinewind": "node ../tests/pinewind.test.cjs",
+    "test:protocol": "node ../tests/wallpaper-protocol.test.cjs",
+    "test:modules": "node ../tests/wallpaper-modules.test.cjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.4",
