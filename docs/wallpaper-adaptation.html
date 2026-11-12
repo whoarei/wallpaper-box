@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="面向网页壁纸开发者的适配规范：从本地目录、环境检测到控制栏、输入、暂停与可选主程序操作。含可下载的完整示例。">
+<meta name="color-scheme" content="light dark">
+<title>壁纸适配规范 · 壁纸盒子开发者文档</title>
+<style>
+:root{color-scheme:light;--bg:#f5f4ee;--paper:#fffef9;--ink:#21332e;--muted:#63736b;--line:#dce2d8;--accent:#126c57;--soft:#e8f2e9;--warm:#986022;--warm-bg:#fbf0dc;--code:#172b27;--code-ink:#e2eee4;--shadow:0 16px 42px #19372808;--radius:16px}
+html[data-theme=dark]{color-scheme:dark;--bg:#101b18;--paper:#172520;--ink:#e5ece3;--muted:#a6b6aa;--line:#30453a;--accent:#86d8b0;--soft:#203a2c;--warm:#edc27c;--warm-bg:#3b3020;--code:#0d1814;--code-ink:#e2eee4;--shadow:0 16px 42px #0002}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:90px}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.85 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}a{color:var(--accent);text-underline-offset:4px}button,input{font:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:4px}button{color:inherit}::selection{background:#bbe1c6;color:#153529}
+.progress{position:fixed;left:0;top:0;height:3px;background:var(--accent);width:0;z-index:30}.topbar{position:sticky;top:0;z-index:20;background:var(--paper);border-bottom:1px solid var(--line)}.top-inner{max-width:1460px;margin:auto;padding:13px 40px;display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{display:flex;align-items:center;gap:12px;color:var(--ink);text-decoration:none;font-size:13px;font-weight:700;letter-spacing:.08em}.brand-mark{width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:var(--accent);color:var(--paper);font:700 16px/1 Georgia,serif}.top-actions{display:flex;gap:8px}.quiet-button{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:6px 12px;font-size:12px;line-height:1.6}.quiet-button:hover{background:var(--soft)}.status-chip{padding:4px 9px;border-radius:5px;background:var(--warm-bg);color:var(--warm);font-size:10px;font-weight:600;white-space:nowrap;letter-spacing:.05em}
+.layout{display:grid;grid-template-columns:244px minmax(0,1fr);gap:54px;max-width:1340px;padding:42px 42px 80px;margin:auto}.sidebar{position:sticky;top:94px;align-self:start;max-height:calc(100vh - 120px);overflow:auto;padding-right:12px}.side-label{font-size:10px;color:var(--muted);letter-spacing:.18em;font-weight:700;margin:4px 0 16px}.sidebar nav a{display:flex;gap:12px;align-items:baseline;padding:9px 12px;text-decoration:none;color:var(--muted);border-left:2px solid transparent;font-size:13px;line-height:1.6;border-radius:0 8px 8px 0}.sidebar nav a span{font:11px/1.6 Consolas,monospace;opacity:.7}.sidebar nav a:hover,.sidebar nav a.active{color:var(--accent);background:var(--soft);border-color:var(--accent)}.side-foot{font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding:18px 12px;margin-top:20px}.side-foot b{color:var(--ink);font-weight:500}.main{min-width:0;max-width:960px}.mobile-nav{display:none}
+.hero{padding:8px 0 28px;border-bottom:1px solid var(--line)}.eyebrow{display:flex;align-items:center;gap:12px;color:var(--accent);font:11px/1.8 Consolas,monospace;letter-spacing:.11em}.hero h1{font-size:clamp(34px,4.5vw,54px);line-height:1.25;font-weight:700;letter-spacing:-.045em;margin:18px 0 18px}.hero .lead{font-size:17px;line-height:1.9;color:var(--muted);max-width:760px}.hero-meta{display:flex;flex-wrap:wrap;gap:9px 22px;font-size:11px;color:var(--muted);margin:22px 0}.hero-meta b{font-weight:600;color:var(--ink)}.hero-route{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}.hero-route a{border:1px solid var(--line);padding:7px 12px;border-radius:7px;text-decoration:none;font-size:12px;background:var(--paper)}.hero-route a:first-child{background:var(--accent);border-color:var(--accent);color:var(--paper)}
+.section{padding-top:44px;margin-top:8px}.section-header{display:flex;gap:15px;align-items:baseline;margin-bottom:10px}.section-number{font:12px/1 Consolas,monospace;color:var(--accent)}h2{font-size:25px;font-weight:650;letter-spacing:-.025em;line-height:1.5;margin:0}h3{font-size:17px;line-height:1.6;margin:28px 0 10px;font-weight:650}h4{font-size:14px;margin:20px 0 8px}p{margin:10px 0 16px}.section-intro{color:var(--muted);margin:0 0 22px}.section ul,.section ol{padding-left:23px;margin:12px 0 20px}.section li{margin:6px 0}.section li::marker{color:var(--accent)}strong{font-weight:650}code,kbd{font: .86em/1.7 Consolas,"SFMono-Regular","Liberation Mono",monospace}p code,li code,td code,.note code{padding:2px 5px;border:1px solid var(--line);background:var(--soft);border-radius:4px;overflow-wrap:anywhere}kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:2px 6px}
+.note{border:1px solid var(--line);border-left:3px solid var(--accent);background:var(--soft);padding:17px 19px;border-radius:0 10px 10px 0;margin:20px 0;font-size:13px}.note>strong{display:block;margin-bottom:5px;color:var(--accent)}.note.warn{background:var(--warm-bg);border-left-color:var(--warm)}.note.warn>strong{color:var(--warm)}.note p{margin:5px 0}.tag{display:inline-block;border-radius:4px;background:var(--soft);color:var(--accent);font-size:10px;line-height:1.7;padding:2px 6px;white-space:nowrap}.tag.draft{color:var(--warm);background:var(--warm-bg)}.tag.existing{color:var(--muted);background:var(--bg)}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin:20px 0}.card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}.card .index{font:11px Consolas,monospace;color:var(--accent)}.card h3{margin:9px 0;font-size:15px}.card p{font-size:13px;color:var(--muted);line-height:1.8;margin:0}.flow{display:flex;align-items:stretch;gap:12px;margin:20px 0}.flow>div{flex:1;border:1px solid var(--line);background:var(--paper);border-radius:12px;padding:18px}.flow b{display:block;font-size:14px}.flow small{display:block;font-size:12px;color:var(--muted);margin-top:6px}.flow .arrow{flex:0;display:flex;align-items:center;border:0;background:transparent;color:var(--accent);padding:0;font-size:20px}
+.table-wrap{max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:12px;margin:18px 0;background:var(--paper)}table{width:100%;border-collapse:collapse;min-width:580px;font-size:13px;line-height:1.8}th,td{padding:13px 16px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{background:var(--soft);color:var(--accent);font-weight:650;font-size:12px}tr:last-child td{border-bottom:0}td:first-child{font-weight:550}td .sub{display:block;color:var(--muted);font-size:12px;font-weight:400}.code{margin:18px 0 24px;border-radius:12px;overflow:hidden;background:var(--code);color:var(--code-ink);border:1px solid #ffffff0c}.code-head{display:flex;justify-content:space-between;gap:10px;padding:9px 15px;border-bottom:1px solid #ffffff14;color:#a4bdae;font:10px/1.7 Consolas,monospace;letter-spacing:.04em}.copy{border:1px solid #ffffff24;border-radius:5px;background:transparent;padding:2px 8px;color:#dce9dc;font-size:10px}.copy:hover{background:#ffffff12}.code pre{padding:18px 20px;margin:0;overflow:auto;font-size:12px;line-height:1.85;tab-size:2}.code code{font-size:inherit;line-height:inherit}
+details{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:var(--paper);overflow:hidden}summary{padding:15px 18px;cursor:pointer;list-style-position:inside;font-weight:600;font-size:13px;color:var(--accent)}details[open]>summary{border-bottom:1px solid var(--line);background:var(--soft)}.details-body{padding:0 20px 12px}.details-body>p:first-child{margin-top:18px}.details-body .table-wrap{border-radius:8px}
+.demo{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--paper);margin:20px 0}.demo-head{padding:15px 20px;display:flex;gap:15px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}.demo-head>span{font-size:11px;color:var(--muted)}.segments{display:flex;padding:3px;border:1px solid var(--line);border-radius:8px;gap:3px;background:var(--bg)}.segments button{font-size:11px;padding:5px 10px;background:transparent;border:0;border-radius:5px;color:var(--muted)}.segments button[aria-pressed=true]{background:var(--accent);color:var(--paper)}.demo-stage{min-height:220px;padding:26px 30px;position:relative;overflow:hidden;display:flex;align-items:flex-start;justify-content:space-between;color:#e5ecd2;background:linear-gradient(150deg,#244e45,#335f46 60%,#697c4d)}.demo-stage:before{content:"";width:320px;height:320px;position:absolute;right:8%;top:90px;border:1px solid #eef4d51f;border-radius:50%;box-shadow:0 0 0 42px #eff8cb05,0 0 0 85px #eff8cb05;pointer-events:none}.demo-label{font-size:11px;letter-spacing:.12em;z-index:1}.demo-label small{display:block;letter-spacing:0;font-size:11px;opacity:.65;margin-top:6px}.demo-time{font:25px/1.4 Consolas,monospace;z-index:1}.demo-dock{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;background:#123c32c9;border:1px solid #e4eec835;padding:9px 13px;border-radius:12px;white-space:nowrap}.demo-dock button{font-size:11px;padding:7px 12px;background:transparent;color:#e4ecd6;border:0;border-radius:5px}.demo-dock button:hover{background:#ffffff12}.demo-dock .demo-fullscreen[hidden]{display:none}.demo-note{padding:14px 20px;font-size:12px;color:var(--muted)}.demo-note strong{color:var(--ink)}.demo-stage.rain{background:linear-gradient(150deg,#253e48,#3c5c61 60%,#6b7776)}
+.check-list{list-style:none!important;padding:0!important;counter-reset:checks}.check-list li{display:flex;gap:11px;padding:13px 16px;border-bottom:1px solid var(--line);margin:0;background:var(--paper);font-size:13px}.check-list li:before{content:"✓";font-size:12px;color:var(--accent);font-weight:700}.check-list li:first-child{border-radius:10px 10px 0 0}.check-list li:last-child{border-bottom:0;border-radius:0 0 10px 10px}.reference-list{font-size:12px;word-break:break-word}.reference-list a{font-family:Consolas,"Microsoft YaHei",monospace}.doc-footer{padding:28px 0 0;margin-top:44px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:20px;color:var(--muted);font-size:11px}.download{display:inline-block;background:var(--accent);color:var(--paper);border:0;border-radius:8px;padding:10px 17px;font-size:13px}.caption{font-size:11px;color:var(--muted)}.skip{position:fixed;left:10px;top:-80px;background:var(--paper);color:var(--accent);padding:8px 12px;z-index:40}.skip:focus{top:10px}
+@media(max-width:1120px){.layout{gap:32px;grid-template-columns:210px minmax(0,1fr);padding:30px}.top-inner{padding:12px 30px}.cards{grid-template-columns:1fr}.card{padding:16px 20px}.hero h1{font-size:42px}}
+@media(max-width:820px){.top-inner{padding:12px 20px;gap:8px}.brand{font-size:11px;gap:8px}.status-chip{display:none}.top-actions{gap:5px}.quiet-button{padding:6px 9px;font-size:11px}.layout{display:block;padding:20px 22px 45px}.sidebar{display:none}.mobile-nav{display:block;margin:0 0 26px}.mobile-nav details{margin:0}.mobile-nav nav{padding:12px 18px;display:grid;grid-template-columns:1fr 1fr;gap:8px}.mobile-nav a{font-size:12px;text-decoration:none}.hero h1{font-size:36px}.hero .lead{font-size:15px}.hero-meta{gap:5px 14px}.section{padding-top:33px}h2{font-size:22px}.section-header{gap:10px}.flow{display:block}.flow>div{margin:8px 0}.flow .arrow{display:none}.code pre{padding:16px;font-size:11px}.demo-head{display:block}.demo-head>span{display:block;margin-bottom:10px}.segments{width:max-content}.demo-stage{padding:22px;min-height:210px}.demo-time{font-size:22px}.demo-dock{bottom:22px;gap:0}.demo-dock button{padding:6px 10px}.doc-footer{display:block}.doc-footer span{display:block;margin:5px 0}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+@page{size:A4;margin:15mm 14mm}
+@media print{:root,html[data-theme=dark]{color-scheme:light;--bg:white;--paper:white;--ink:#172c24;--muted:#526357;--line:#cfd9cf;--accent:#126c57;--soft:#edf5ee;--warm:#805019;--warm-bg:#fcf5e7;--code:#f1f4f0;--code-ink:#1b3429;--shadow:none}body{background:white;font-size:10pt;line-height:1.7}.topbar,.sidebar,.mobile-nav,.progress,.copy,.hero-route,.download,.top-actions{display:none!important}.layout{display:block;max-width:none;padding:0}.main{max-width:none}.hero{padding-top:0}.hero h1{font-size:32pt}.hero .lead{font-size:11pt}.hero-meta{font-size:8pt}.section{padding-top:22px;margin-top:0}.section-header{break-after:avoid}h2{font-size:18pt}h3{font-size:12pt;break-after:avoid}.card,.note,.demo,.flow{break-inside:avoid}.table-wrap{overflow:visible;border-radius:0}table{min-width:0;font-size:8pt}th,td{padding:7px 9px}thead{display:table-header-group}tr{break-inside:avoid}.code{border:1px solid var(--line);border-radius:0;break-inside:auto}.code-head{border-color:var(--line);color:var(--muted);font-size:8pt;padding:6px 10px}.code pre{font-size:7.3pt;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;overflow:visible;padding:12px}.note{font-size:9pt;padding:10px 13px}details{border-radius:0;overflow:visible}details>summary{font-size:10pt}.details-body{padding:0 12px 8px}.cards{grid-template-columns:repeat(3,1fr)}.card{padding:12px}.card p{font-size:9pt}.demo-stage{min-height:170px}.demo-head,.demo-note{font-size:9pt}.segments{display:none}.doc-footer{font-size:8pt}.check-list li{font-size:9pt}a{color:inherit;text-decoration:none}.reference-list{font-size:8pt}}
+</style>
+</head>
+<body id="top">
+<a class="skip" href="#content">跳到正文</a>
+<div class="progress" aria-hidden="true"></div>
+<header class="topbar"><div class="top-inner">
+<a class="brand" href="#top"><span class="brand-mark" aria-hidden="true">W</span>壁纸盒子 / 开发者文档</a>
+<div class="top-actions"><span class="status-chip">适配规范 · 评审稿 r1</span><button class="quiet-button" id="theme" type="button">深色模式</button><button class="quiet-button" id="print" type="button">打印 / PDF</button></div>
+</div></header>
+<div class="layout">
+<aside class="sidebar" aria-label="文档导航"><div class="side-label">DEVELOPER GUIDE / CONTENTS</div><nav><a href="#start"><span>01</span>先记住这三条</a><a href="#package"><span>02</span>准备一个能离线运行的目录</a><a href="#environment"><span>03</span>识别自己运行在哪里</a><a href="#controls"><span>04</span>让控制栏在桌面上也好用</a><a href="#input"><span>05</span>接收点击与移动</a><a href="#pause"><span>06</span>处理暂停，避免后台继续忙</a><a href="#actions"><span>07</span>可选：把操作放进主程序</a><a href="#example"><span>08</span>完整示例：复制后就能打开</a><a href="#compatibility"><span>09</span>旧壁纸怎么兼容，内容怎么更新</a><a href="#verify"><span>10</span>交付前，按这张清单检查</a><a href="#troubleshooting"><span>11</span>常见问题，先从这里查</a><a href="#references"><span>12</span>版本状态与参考来源</a></nav>
+<div class="side-foot">只做基本播放与点击？<br><b>先看 02—06 节。</b><br><br>要在主程序中增加操作？<br><b>再看 07 节的可选接口。</b><br><br>示例与文档均可离线使用。</div></aside>
+<main class="main" id="content">
+<div class="mobile-nav"><details><summary>展开目录 · 12 个章节</summary><nav><a href="#start"><span>01</span>先记住这三条</a><a href="#package"><span>02</span>准备一个能离线运行的目录</a><a href="#environment"><span>03</span>识别自己运行在哪里</a><a href="#controls"><span>04</span>让控制栏在桌面上也好用</a><a href="#input"><span>05</span>接收点击与移动</a><a href="#pause"><span>06</span>处理暂停，避免后台继续忙</a><a href="#actions"><span>07</span>可选：把操作放进主程序</a><a href="#example"><span>08</span>完整示例：复制后就能打开</a><a href="#compatibility"><span>09</span>旧壁纸怎么兼容，内容怎么更新</a><a href="#verify"><span>10</span>交付前，按这张清单检查</a><a href="#troubleshooting"><span>11</span>常见问题，先从这里查</a><a href="#references"><span>12</span>版本状态与参考来源</a></nav></details></div>
+<div class="hero">
+<div class="eyebrow">WALLPAPER INTEGRATION GUIDE <span class="status-chip">WEB / HTML + CSS + JS</span></div>
+<h1>壁纸适配规范</h1>
+<p class="lead">把一个好用的网页，变成一张好用的桌面壁纸。<br>页面保持独立，按运行能力适配，业务逻辑留在壁纸里。</p>
+<div class="hero-meta"><span>面向 <b>网页壁纸开发者</b></span><span>拟议协议 <b>v1 · 待实现</b></span><span>核对基线 <b>v0.9.0</b></span><span>更新 <b>2026.11.12</b></span></div>
+<div class="hero-route"><a href="#example">下载完整示例 ↗</a><a href="#package">从一个目录开始</a><a href="#verify">查看交付检查</a></div>
+</div>
+<section class="section" id="start"><div class="section-header"><span class="section-number">01</span><h2>先记住这三条</h2></div><p class="section-intro">适用对象：使用 HTML、CSS、JavaScript 开发网页壁纸的作者。宿主指“壁纸盒子”主程序。</p>
+<div class="cards">
+  <div class="card"><span class="index">01 / 普通网页优先</span><h3>先在浏览器里运行</h3><p>不安装 SDK 也能播放。没有宿主接口时，场景、按钮和页面交互仍可用。</p></div>
+  <div class="card"><span class="index">02 / 界面由壁纸负责</span><h3>控件怎么显示，你决定</h3><p>宿主不按壁纸名称、DOM ID 或 CSS 类名隐藏、修改你的界面。</p></div>
+  <div class="card"><span class="index">03 / 按能力提供功能</span><h3>桌面不等于浏览器</h3><p>桌面模式保留鼠标穿透，不能依赖键盘焦点、原生悬停和浏览器用户激活。</p></div>
+</div>
+<aside class="note warn"><strong>这是一份待实现的 v1 规范</strong><div>本文给出后续统一适配的开发约定。新增的 <code>window.wallpaperHost</code>、<code>window.wallpaperApp</code> 和状态事件，在核对基线 <strong>v0.9.0 / 66fbf98</strong> 中尚未实现，不能当作当前版本已经支持的 API。现有模式标识与输入行为会单独注明。</div></aside>
+<p>只想做好页面播放和桌面点击，阅读第 02—06 节即可；希望在主程序或托盘里显示“投喂”“召唤”等按钮，再阅读第 07 节。第 08 节提供可直接下载的完整示例。</p>
+<div class="table-wrap"><table><thead><tr><th>谁来做</th><th>负责什么</th><th>不应做什么</th></tr></thead><tbody><tr><td>壁纸盒子（宿主）</td><td>创建窗口、告知运行环境、转发有效输入、暂停与恢复、调用壁纸声明的操作。</td><td>识别某张壁纸的内部变量，查找它的按钮，替它修改样式和说明。</td></tr><tr><td>你的壁纸</td><td>绘制场景、控制栏、帮助文案、昼夜天气等业务逻辑，以及对运行环境的适配。</td><td>假定自己总能获得键盘焦点，或需要宿主为自己的 DOM 写一段专用代码。</td></tr><tr><td>可选操作接口</td><td>让主程序展示壁纸主动声明的功能，调用统一入口并读取结果。</td><td>根据壁纸 ID 写 <code>if / else</code>，或把操作 ID 当作系统权限。</td></tr></tbody></table></div></section><section class="section" id="package"><div class="section-header"><span class="section-number">02</span><h2>准备一个能离线运行的目录</h2></div><p class="section-intro">HTML、脚本、样式和素材放在一起，使用相对路径。先保证断网后也能打开。</p><div class="code"><div class="code-head"><span>目录结构</span><button class="copy" type="button">复制代码</button></div><pre><code>meadow/
+├─ index.html        页面入口
+├─ module.json       壁纸信息
+├─ cover.jpg         列表封面
+├─ scene.js          可选：场景逻辑
+├─ scene.css         可选：样式
+└─ assets/           可选：图片、字体、音频等素材</code></pre></div>
+<h3>填写 module.json</h3><p>以下沿用现有 <code>schemaVersion: 1</code> 的格式，不为本规范新增未实现的清单字段。自定义本地壁纸可省略清单；准备分发时建议完整填写，官方内容包需满足内容库要求。</p>
+<div class="code"><div class="code-head"><span>JSON · 基础网页示例</span><button class="copy" type="button">复制代码</button></div><pre><code>{
+  &quot;schemaVersion&quot;: 1,
+  &quot;id&quot;: &quot;meadow&quot;,
+  &quot;type&quot;: &quot;web&quot;,
+  &quot;name&quot;: &quot;林间微光&quot;,
+  &quot;description&quot;: &quot;点击空白处，点亮一束星光。&quot;,
+  &quot;entry&quot;: &quot;index.html&quot;,
+  &quot;cover&quot;: &quot;cover.jpg&quot;,
+  &quot;version&quot;: &quot;1.0.0&quot;,
+  &quot;minAppVersion&quot;: &quot;0.2.0&quot;,
+  &quot;tags&quot;: [&quot;自然&quot;, &quot;点击互动&quot;]
+}</code></pre></div><div class="table-wrap"><table><thead><tr><th>字段 / 项目</th><th>怎么填写</th></tr></thead><tbody><tr><td>id</td><td>使用小写字母、数字、连字符，长度不超过 64，首字符为字母或数字；避开 Windows 保留名。此处示例为 <code>meadow</code>。本地导入后的运行 ID 可能带 <code>local:</code> 前缀，不要在网页内按运行 ID 分支。</td></tr><tr><td>entry / cover</td><td>相对于壁纸目录的文件路径，例如 <code>index.html</code>、<code>assets/cover.jpg</code>。不使用绝对路径、反斜杠或 <code>../</code>。</td></tr><tr><td>version</td><td>这张壁纸的内容版本。改动 HTML、脚本或素材后更新版本，不覆盖已发布的同版本包。</td></tr><tr><td>minAppVersion</td><td>能满足该包实际需求的最低主程序版本。上例只表示普通网页，不承诺 v1 接口；强依赖新接口的包必须填写正式提供该接口的主程序版本。</td></tr><tr><td>依赖与资源</td><td>核心素材、脚本和字体随包提供，不依赖 CDN 才能显示；不包含机器本地路径、密钥和可执行后端。网络增强功能失败时仍保留基本场景。</td></tr></tbody></table></div><aside class="note info"><strong>两个版本号不要混淆</strong><div><code>module.json.schemaVersion</code> 是文件清单格式，<code>protocolVersion</code> 是运行时接口格式。本文的 v1 草案不会自动改变清单格式，也不表示某个尚未确定的主程序发行版本已经支持它。</div></aside></section><section class="section" id="environment"><div class="section-header"><span class="section-number">03</span><h2>识别自己运行在哪里</h2></div><p class="section-intro">先识别环境，再决定显示哪些入口；不通过壁纸名称或页面地址猜测。</p><div class="table-wrap"><table><thead><tr><th>运行环境</th><th>页面应如何工作</th><th>能力来源</th></tr></thead><tbody><tr><td>桌面壁纸 desktop</td><td>鼠标穿透、不抢焦点。提供可点击的页面按钮；隐藏不可用的网页全屏及键盘提示。</td><td>v1 使用宿主提供的能力；旧宿主仅有模式标识时采取保守降级。</td></tr><tr><td>应用内预览 preview</td><td>普通窗口内展示壁纸；键盘仅在窗口聚焦时可用。预览不修改当前桌面分配。</td><td>v1 预览提供环境信息，但不接入桌面管理操作或宿主暂停。</td></tr><tr><td>独立浏览器 browser</td><td>没有壁纸盒子接口也能运行。普通鼠标、聚焦后的键盘和浏览器允许的全屏可用。</td><td>壁纸自行使用浏览器能力检测，不能访问宿主专用接口。</td></tr></tbody></table></div>
+<h3>推荐的环境检测写法 <span class="tag draft">含拟议 v1 接口</span></h3>
+<p>把初始化放在 DOM 就绪后执行；兼容旧宿主时，也能避免过早读取尚未设置的模式标识。完整示例已经包含这个等待。</p>
+<div class="code"><div class="code-head"><span>javascript</span><button class="copy" type="button">复制代码</button></div><pre><code>const host = window.wallpaperHost?.protocolVersion === 1
+  ? window.wallpaperHost
+  : null;
+
+// 现有宿主已经设置的旧模式标识。它不代表 v1 已经就绪。
+const legacyDesktop = !host &amp;&amp;
+  document.documentElement.dataset.screenGardenWallpaper === &quot;true&quot;;
+
+const mode = host?.mode ?? (legacyDesktop ? &quot;desktop&quot; : &quot;browser&quot;);
+const capabilities = host?.capabilities ?? {
+  pointer: legacyDesktop ? &quot;relayed&quot; : &quot;native&quot;,
+  pointerMove: !legacyDesktop,   // 旧标识不能证明有移动转发能力
+  keyboard: !legacyDesktop,
+  fullscreen: !legacyDesktop &amp;&amp; Boolean(document.fullscreenEnabled),
+  pause: false,                 // 不代表旧宿主不会冻结 RAF，只是没有 v1 状态接口
+  actions: false
+};
+
+document.documentElement.dataset.sceneMode = mode; // 壁纸自己的样式标识
+document.querySelector(&quot;.fullscreen-button&quot;).hidden = !capabilities.fullscreen;</code></pre></div><aside class="note warn"><strong>兼容旧版本时，宁可少承诺一点</strong><div>没有 v1 对象时不调用新接口。只有旧桌面标识时，不承诺键盘、全屏或完整暂停状态；不能确认鼠标移动可用时，建议让控制栏保持可见。v1 之前的宿主仍可能强制覆盖页面样式，单靠此检测不能消除旧宿主的干预。</div></aside>
+<details><summary>参考：v1 宿主对象的完整约定（供接入时查阅）</summary><div class="details-body">
+<p>对象由宿主在壁纸脚本执行前提供，字段只读。每次页面导航获得新的 <code>instanceId</code>；普通窗口 resize 不更换实例。预览只注入环境信息，不注入桌面输入，也不冻结预览的 RAF。</p>
+<div class="code"><div class="code-head"><span>javascript</span><button class="copy" type="button">复制代码</button></div><pre><code>// 拟议 v1 · 仅展示宿主注入的对象结构，壁纸不要自行覆盖它。
+window.wallpaperHost = {
+  protocolVersion: 1,
+  mode: &quot;desktop&quot;,                  // 宿主仅提供 desktop 或 preview
+  instanceId: &quot;opaque-instance-id&quot;, // 不解析、不保存为用户配置
+  capabilities: {
+    pointer: &quot;relayed&quot;,             // desktop: relayed；preview: native
+    pointerMove: true,
+    keyboard: false,
+    fullscreen: false,
+    pause: true,
+    actions: true
+  },
+  getState() {
+    return { paused: false, pauseReason: &quot;none&quot; };
+  }
+};</code></pre></div>
+<p><code>getState()</code> 同步返回当前快照。桌面模式的键盘和全屏能力为 <code>false</code>；暂停和操作能力以实际字段为准。预览中的 <code>pause</code>、<code>actions</code> 为 <code>false</code>，其全屏能力还需结合浏览器权限。能力为 <code>false</code> 时，不以“接口碰巧存在”绕过它。</p>
+<p>只读对象用于防止误改，不能替代宿主的原生实例、来源和权限校验。旧的 <code>data-screen-garden-wallpaper</code> 标识保留作兼容；普通浏览器没有宿主对象，<code>browser</code> 是壁纸自身的回退值。</p>
+</div></details>
+</section><section class="section" id="controls"><div class="section-header"><span class="section-number">04</span><h2>让控制栏在桌面上也好用</h2></div><p class="section-intro">控制栏属于你的页面。宿主不提供按钮选择器，也不要求固定类名。</p>
+<div class="demo" aria-label="运行模式的界面对照示意">
+<div class="demo-head"><span>交互示意 · 切换查看界面差异，不连接真实宿主</span><div class="segments" role="group" aria-label="示意运行模式">
+<button type="button" data-demo-mode="desktop" aria-pressed="true">桌面壁纸</button><button type="button" data-demo-mode="preview" aria-pressed="false">应用内预览</button><button type="button" data-demo-mode="browser" aria-pressed="false">独立浏览器</button></div></div>
+<div class="demo-stage"><div class="demo-label">林间微光<small id="demo-mode-label">桌面壁纸</small></div><div class="demo-time">18:42</div>
+<div class="demo-dock"><button id="demo-weather" type="button">☀ 晴天</button><button type="button" class="demo-fullscreen" hidden>⛶ 全屏</button><span style="font-size:11px;opacity:.7;padding:0 8px">控制栏由壁纸决定</span></div></div>
+<div class="demo-note"><strong>开发要点：</strong><span id="demo-explanation" aria-live="polite">鼠标点击和移动可用；不依赖键盘、原生悬停或网页全屏。</span></div></div>
+<ul>
+<li><strong>操作入口可发现：</strong>昼夜、天气、投喂等功能有可点击按钮，不能只提供快捷键；桌面模式的说明不写“按 F / H / 空格操作”。</li>
+<li><strong>自动淡出可以保留：</strong>监听 <code>document</code> 的 <code>pointermove</code> 和 <code>pointerdown</code> 唤醒；帮助面板打开或键盘焦点在控制栏内时，不自动隐藏。</li>
+<li><strong>不要只靠悬停：</strong>桌面合成的移动事件不会自动产生浏览器原生 <code>:hover</code>、<code>pointerenter</code>、<code>pointerleave</code> 或 <code>title</code> 提示。必要的标签直接展示，悬停效果由壁纸自己的事件逻辑实现。</li>
+<li><strong>按钮别误触场景：</strong>把场景点击绑定在 canvas 或场景容器上，控制栏阻止冒泡；点“天气”不能同时在背景种花或投喂。</li>
+<li><strong>支持不同窗口：</strong>使用响应式布局；不能假定固定 960 × 600、横屏或固定任务栏高度。宿主按工作区布局，壁纸通常不再重复减一次任务栏高度。</li>
+<li><strong>交互保持轻量：</strong>桌面没有可靠的文本输入焦点；复杂表单、文件选择和配置功能不依赖直接在壁纸层输入。</li>
+</ul>
+<div class="code"><div class="code-head"><span>javascript</span><button class="copy" type="button">复制代码</button></div><pre><code>const controls = document.querySelector(&quot;.scene-controls&quot;);
+let idleTimer;
+let helpOpen = false; // 由你的帮助面板更新
+
+function wakeControls() {
+  controls.classList.remove(&quot;is-idle&quot;);
+  clearTimeout(idleTimer);
+  if (!capabilities.pointerMove) return; // 不确定能否唤醒，就不自动淡出
+  idleTimer = setTimeout(() =&gt; {
+    if (!helpOpen &amp;&amp; !controls.contains(document.activeElement)) {
+      controls.classList.add(&quot;is-idle&quot;);
+    }
+  }, 8500);
+}
+
+controls.addEventListener(&quot;click&quot;, event =&gt; event.stopPropagation());
+document.addEventListener(&quot;pointermove&quot;, wakeControls, { passive: true });
+document.addEventListener(&quot;pointerdown&quot;, wakeControls, { passive: true });
+// helpOpen 由你的帮助面板维护；页面卸载时清理定时器与监听。</code></pre></div><aside class="note info"><strong>桌面图标优先</strong><div>宿主只转发桌面空白处的有效输入。控制栏上方覆盖了桌面图标、任务栏或其他窗口时，该位置不会穿透操作壁纸。这是输入边界，不应通过抢焦点或拦截 Explorer 来“修复”。</div></aside></section><section class="section" id="input"><div class="section-header"><span class="section-number">05</span><h2>接收点击与移动</h2></div><p class="section-intro">场景继续使用标准 DOM 事件，不需要调用内部的 __SCREEN_GARDEN_* 函数。</p><div class="table-wrap"><table><thead><tr><th>输入</th><th>开发者可以依赖的行为</th><th>需要避免的假设</th></tr></thead><tbody><tr><td>桌面短点击</td><td>有效左键短点击按 <code>pointerdown → mousedown → pointerup → mouseup → click</code> 顺序投递，命中页面对应元素并冒泡。</td><td>不要同时在 pointerdown 和 click 做同一次业务操作；不要因为 <code>isTrusted === false</code> 拒绝桌面交互。</td></tr><tr><td>桌面鼠标移动</td><td>通过空白区域检查后投递低频 <code>pointermove</code>，可用于唤醒控制栏。核对基线最多约 10 次 / 秒，并可能更少。</td><td>不保证逐像素移动，不适合依赖连续轨迹的画笔、拖动或精确悬停；鼠标移入图标或其他窗口后可能直接停止收到事件。</td></tr><tr><td>键盘 / 滚轮 / 拖动 / 右键</td><td>普通浏览器与预览按浏览器规则运行。v1 桌面输入不承诺转发这些事件。</td><td>不能只用键盘、滚轮或拖拽才能完成核心操作，也不能要求宿主安装全局键盘钩子。</td></tr><tr><td>浏览器用户激活</td><td>桌面投递的是合成事件，不产生真实的浏览器用户激活。</td><td>不能依赖它开启全屏、弹出文件选择器、播放受限制的声音或调用剪贴板；要有可用的降级入口。</td></tr></tbody></table></div>
+<h3>坐标换算：使用事件位置和当前画布矩形</h3>
+<div class="code"><div class="code-head"><span>javascript</span><button class="copy" type="button">复制代码</button></div><pre><code>canvas.addEventListener(&quot;click&quot;, event =&gt; {
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width &lt;= 0 || rect.height &lt;= 0) return;
+
+  const u = (event.clientX - rect.left) / rect.width;
+  const v = (event.clientY - rect.top) / rect.height;
+  if (u &lt; 0 || u &gt;= 1 || v &lt; 0 || v &gt;= 1) return;
+
+  // 仅适用于画面直接拉伸填满 canvas 的情况。
+  const x = u * logicalWidth;
+  const y = v * logicalHeight;
+  handleSceneClick(x, y);
+});</code></pre></div>
+<p>如果使用 <code>object-fit: cover</code>、留黑边、CSS 变换或相机缩放，还要按你的实际绘制变换做逆变换。不要把宿主物理像素、<code>screenX</code> 或固定的系统缩放比例直接当作场景坐标。</p>
+<details><summary>参考：宿主转发与输入边界</summary><div class="details-body">
+<p>宿主负责排除桌面图标及文字、任务栏、菜单、其他窗口、拖动、长按和带 Ctrl / Shift / Alt 的点击；这些规则在原生层执行，不交给壁纸猜测。按下与松开必须属于同一有效区域和同一运行实例。</p>
+<p>宿主内部使用归一化坐标 <code>0 ≤ u,v &lt; 1</code>，再转换为页面坐标 <code>x = floor(u × innerWidth)</code>、<code>y = floor(v × innerHeight)</code>。负坐标显示器和 DPI 差异由宿主处理；页面只消费 DOM 事件。</p>
+<p>点击的 <code>button</code> 为 0，按下阶段 <code>buttons</code> 为 1，松开与点击阶段为 0；移动事件 <code>buttons</code> 为 0。不要把桌面合成移动用于判断真实的鼠标按键状态。输入回执只说明事件是否投递，不能代表种花、投喂等业务已经成功。</p>
+</div></details>
+</section><section class="section" id="pause"><div class="section-header"><span class="section-number">06</span><h2>处理暂停，避免后台继续忙</h2></div><p class="section-intro">把“主程序暂停”和“页面自己的暂停”分开保存；恢复时不能互相覆盖。</p>
+<div class="flow"><div><b>主程序暂停</b><small>例如用户手动暂停、窗口遮挡。通过 v1 状态接口读取。</small></div><div class="arrow">＋</div><div><b>页面自己的暂停</b><small>用户在壁纸按钮里暂停画面，由壁纸保存。</small></div><div class="arrow">→</div><div><b>实际停止条件</b><small>任一暂停成立，场景就不推进。</small></div></div>
+<div class="code"><div class="code-head"><span>javascript</span><button class="copy" type="button">复制代码</button></div><pre><code>const host = window.wallpaperHost?.protocolVersion === 1
+  ? window.wallpaperHost
+  : null;
+let userPaused = false;
+let hostPaused = host?.getState().paused ?? false;
+let lastFrame = performance.now();
+
+window.addEventListener(&quot;wallpaperhost:statechange&quot;, () =&gt; {
+  if (!host) return;
+  hostPaused = host.getState().paused;
+  lastFrame = performance.now(); // 恢复时重置时钟
+});
+
+function frame(now) {
+  const dt = Math.min(Math.max((now - lastFrame) / 1000, 0), 0.1);
+  lastFrame = now;
+  if (!userPaused &amp;&amp; !hostPaused) updateScene(dt);
+  drawScene();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+// updateScene / drawScene 是你的场景函数。</code></pre></div>
+<ul>
+<li>v1 的状态是 <code>{ paused, pauseReason }</code>，原因为 <code>none</code>、<code>manual</code>、<code>occluded</code> 或 <code>system</code>。宿主应在页面开始运行前提供正确初始状态；开发者先读快照，再监听变化。</li>
+<li>宿主的 RAF 暂停包装不能自动暂停 <code>setInterval</code>、Worker、CSS 动画、视频或音频。壁纸应在状态变化时停止自己的持续工作，恢复时按原状态继续；不要恢复用户本来就暂停的声音或视频。</li>
+<li>视频或音频恢复可能受浏览器策略限制；捕获 <code>play()</code> 的拒绝并展示可理解的状态，不假装已恢复播放。</li>
+<li>非必须的计时任务采用合理频率；不要为轮询宿主能力增加高频定时器。窗口关闭、重新加载时清理资源。</li>
+</ul>
+<details><summary>参考：暂停状态事件的约定 <span class="tag draft">v1 待实现</span></summary><div class="details-body">
+<p>事件在 <code>window</code> 上触发，名称为 <code>wallpaperhost:statechange</code>，<code>event.detail</code> 为与 <code>getState()</code> 同结构的状态快照。宿主先更新内部状态，再发送事件；即使 RAF 已冻结，状态事件仍要送达。</p>
+<p>多个原因同时存在时，v1 快照按 <code>manual → system → occluded → none</code> 的优先级报告。宿主恢复不能清除页面自己的暂停。页面也不能用派发同名 DOM 事件改变真实宿主状态。</p>
+<p>不要调用或覆写 <code>window.__SCREEN_GARDEN_SET_PAUSED</code>，也不要把合成的 <code>visibilitychange</code> 当作完整的宿主暂停状态协议。旧宿主没有 v1 状态接口时，至少限制帧间时间差，防止恢复后场景突然快进。</p>
+</div></details>
+</section><section class="section" id="actions"><div class="section-header"><span class="section-number">07</span><h2>可选：把操作放进主程序</h2></div><p class="section-intro">只有希望在管理窗口或托盘中提供“投喂”“召唤”等操作时，才需要实现这一节。页面里的按钮和桌面点击不依赖它。</p><aside class="note warn"><strong>这一整节属于拟议 v1 接口</strong><div>当前核对版本还没有这个发现与调用机制。宿主需要先实现协议，壁纸再按能力接入；不能仅添加下面的对象，就期待当前主程序自动出现按钮。</div></aside>
+<p>你在页面里提供 <code>window.wallpaperApp</code>。主程序读取操作列表，按列表显示文字和可用状态；用户点击后，主程序调用统一入口。<strong>“投喂能否成功”“是否饱食”由壁纸判断，宿主不再读取鱼食数量或点击你的某个 DOM 按钮。</strong></p>
+<div class="flow"><div><b>getActions()</b><small>告诉主程序：有哪些操作、显示什么文字、现在能不能点。</small></div><div class="arrow">→</div><div><b>invoke(request)</b><small>执行指定操作，与页面按钮共用你的业务函数。</small></div><div class="arrow">→</div><div><b>返回实际结果</b><small>成功才返回 ok；不能执行时说明原因。</small></div></div>
+<div class="code"><div class="code-head"><span>javascript</span><button class="copy" type="button">复制代码</button></div><pre><code>// 拟议 v1 · 结构示意；完整可运行写法见第 08 节。
+window.wallpaperApp = {
+  protocolVersion: 1,
+  getActions() {
+    return [{
+      id: &quot;burst&quot;,
+      label: &quot;点亮星光&quot;,
+      enabled: true,
+      allowWhenOccluded: false
+    }];
+  },
+  invoke(request) {
+    // 校验 request；调用页面按钮使用的同一个业务函数。
+    // 根据真实执行结果返回，不能“收到请求就算成功”。
+  }
+};</code></pre></div>
+<p>v1 只支持<strong>立即完成并同步返回 JSON 结果</strong>的页面操作。不返回 Promise；不把网络请求、文件选择或系统设置混进这个接口。普通网页不实现它也能播放，主程序仅不展示这些额外按钮。</p>
+<details><summary>参考 A：操作描述、调用参数与返回值</summary><div class="details-body">
+<div class="table-wrap"><table><thead><tr><th>入口 / 字段</th><th>v1 约定</th></tr></thead><tbody><tr><td>protocolVersion</td><td>固定为整数 <code>1</code>。不支持的协议版本视为没有可用操作。</td></tr><tr><td>getActions()</td><td>同步返回数组，最多 16 项。不得在查询时触发场景操作；在 DOMContentLoaded 时可用。尚未就绪时返回空数组。</td></tr><tr><td>操作 id</td><td>每张壁纸内唯一且稳定，匹配 <code>^[a-z][a-z0-9-]{0,47}$</code>。它是普通业务名称，不是主程序权限名称。</td></tr><tr><td>label / enabled</td><td><code>label</code> 为 1—32 个 UTF-16 代码单元；<code>enabled</code> 为布尔值。禁止 HTML 标签或依赖外部图片显示操作名称。</td></tr><tr><td>disabledReason</td><td>禁用时建议提供，最多 120 个 UTF-16 代码单元。比如“请先继续画面”或“先等鱼儿吃完”。</td></tr><tr><td>allowWhenOccluded</td><td>可选布尔值，默认 false。只有 true 且壁纸仍声明 enabled 时，才允许在仅因遮挡而暂停期间执行；手动或系统暂停时始终不允许。</td></tr><tr><td>invoke(request)</td><td>同步接收下面的调用对象，返回下面的结果对象。v1 不提供任意用户输入参数，也不接受代码字符串。</td></tr></tbody></table></div><div class="code"><div class="code-head"><span>JSON · 请求与结果</span><button class="copy" type="button">复制代码</button></div><pre><code>// 宿主传给 invoke 的调用对象
+{
+  &quot;protocolVersion&quot;: 1,
+  &quot;instanceId&quot;: &quot;opaque-instance-id&quot;,
+  &quot;requestId&quot;: &quot;opaque-request-id&quot;,
+  &quot;actionId&quot;: &quot;burst&quot;
+}
+
+// 成功：场景状态确实已改变
+{
+  &quot;ok&quot;: true,
+  &quot;requestId&quot;: &quot;opaque-request-id&quot;,
+  &quot;data&quot;: { &quot;total&quot;: 12 }
+}
+
+// 失败：没有把操作当成成功
+{
+  &quot;ok&quot;: false,
+  &quot;requestId&quot;: &quot;opaque-request-id&quot;,
+  &quot;code&quot;: &quot;PAUSED&quot;,
+  &quot;message&quot;: &quot;画面已暂停，请先继续。&quot;
+}</code></pre></div>
+<p><code>requestId</code>、<code>instanceId</code> 为非空字符串，长度不超过 128 个 UTF-16 代码单元。成功和失败结果都回传原 <code>requestId</code>。<code>data</code> 可省略，须能序列化为 JSON；单次操作列表和单次结果分别不超过 8 KiB UTF-8。字段长度统一按 JavaScript <code>string.length</code> 计算。</p>
+<p>宿主将标签、原因和消息作为纯文本显示，不执行壁纸提供的 HTML 或代码。<code>data</code> 中的业务字段仅用于通用显示或诊断，不成为宿主按壁纸类型分支的依据。</p>
+</div></details>
+<details><summary>参考 B：暂停、重复点击与结果不确定时怎么处理</summary><div class="details-body">
+<ul>
+<li>宿主在打开菜单、切换屏幕以及调用前后重新读取操作列表；开放着的管理界面可随正常状态刷新更新按钮。v1 不要求壁纸建立主动跨进程通知通道。</li>
+<li>宿主执行前复核当前实例、动作存在性、enabled 和暂停状态；壁纸执行时再次检查自己的条件。界面上的旧状态不能代替执行时的检查。</li>
+<li>一次请求绑定发起时的屏幕和运行实例；切屏、换壁纸、重新加载后，不把旧请求或旧回执套到新的实例。</li>
+<li>宿主为同一实例的操作串行调用，等待回执期间阻止重复提交；不会把选择新屏幕后的一次点击偷偷改投到旧屏幕。</li>
+<li>壁纸保存当前页面最近 128 个有效请求的结果。同一个 requestId、同一个动作重复到达时返回缓存结果；同一个 requestId 换了动作时拒绝。主程序仍不得自动重试非幂等操作。</li>
+<li>操作列表查询和动作回执的宿主等待上限均为 2 秒。超时或回执丢失时，操作可能已经发生；显示“结果未知”，不要当成成功，也不要自动再投喂一次。超时不代表网页代码已被取消。</li>
+<li>调用抛错或返回格式错误时，如果无法确认是否已有副作用，也按结果未知处理；不能推断“肯定没有执行”。</li>
+<li>允许遮挡期间执行的动作，应已完成内存中的真实状态更新；画面可在恢复后呈现。仍不能绕过页面自己的暂停、容量和冷却规则。</li>
+</ul>
+</div></details>
+<details><summary>参考 C：建议使用的错误码</summary><div class="details-body">
+<div class="table-wrap"><table><thead><tr><th>错误码</th><th>含义 / 页面或宿主的处理</th></tr></thead><tbody><tr><td>NOT_READY</td><td>页面或业务数据还未准备好。暂不展示可点的操作，或提示稍后再试。</td></tr><tr><td>UNSUPPORTED</td><td>未接入该协议或不支持该能力。基本播放继续工作。</td></tr><tr><td>UNKNOWN_ACTION</td><td>动作不存在。刷新操作列表，不猜测替代按钮。</td></tr><tr><td>DISABLED</td><td>动作因容量、冷却等业务条件暂不可执行。</td></tr><tr><td>PAUSED</td><td>宿主规则或页面自身暂停不允许当前动作。</td></tr><tr><td>INVALID_REQUEST</td><td>参数、格式、重复请求内容或结果格式不符合约定。</td></tr><tr><td>STALE_INSTANCE</td><td>请求属于已经切换、关闭或重新加载的实例。</td></tr><tr><td>BUSY</td><td>该实例仍在处理上一次调用，不重复提交。</td></tr><tr><td>FAILED</td><td>已知执行失败，给出简短、可理解的原因。</td></tr><tr><td>RESULT_UNKNOWN</td><td>宿主等待超时或丢失回执，不能确认是否执行；不自动重试。</td></tr></tbody></table></div>
+</div></details>
+</section><section class="section" id="example"><div class="section-header"><span class="section-number">08</span><h2>完整示例：复制后就能打开</h2></div><p class="section-intro">示例是一个纯本地网页：点击画面或按钮增加星光，支持暂停、响应式画布和可选的 v1 操作。</p>
+<p>点击下载后将文件保存为 <code>index.html</code>，直接用浏览器打开即可。配合第 02 节的 <code>module.json</code> 可组成一个壁纸目录；正式分发前自行制作封面。</p>
+<button class="download" id="download-example" type="button">下载最小示例 index.html</button>
+<p class="caption">不联网、不加载第三方库。网页部分可直接运行；宿主对象和操作协议需等 v1 实现后才会接入主程序。</p>
+<details><summary>展开完整 HTML 源码（含可选 v1 操作）</summary><div class="details-body">
+<div class="code"><div class="code-head"><span>HTML · 完整示例</span><button class="copy" type="button">复制代码</button></div><pre id="complete-example"><code>&lt;!doctype html&gt;
+&lt;html lang=&quot;zh-CN&quot;&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width,initial-scale=1&quot;&gt;
+&lt;title&gt;林间微光 · 最小适配示例&lt;/title&gt;
+&lt;style&gt;
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#173c32;color:#f4f5df;font:14px/1.7 system-ui,sans-serif}
+canvas{display:block;width:100%;height:100%}
+.scene-controls{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);display:flex;gap:8px;padding:10px;border:1px solid #dcebc344;border-radius:12px;background:#16372de8;transition:opacity .3s}
+.scene-controls.is-idle{opacity:0;pointer-events:none}
+button{font:inherit;white-space:nowrap;color:inherit;background:#ffffff12;border:0;border-radius:6px;padding:8px 12px;cursor:pointer}
+button:focus-visible{outline:2px solid #e1eab5;outline-offset:3px}
+button[hidden]{display:none}
+.scene-status{position:fixed;top:20px;left:24px;right:24px;font-size:12px;color:#d4e4c7}
+@media(max-width:480px){.scene-controls{bottom:16px;gap:5px;padding:8px}button{font-size:12px;padding:8px 9px}}
+@media(prefers-reduced-motion:reduce){.scene-controls{transition:none}}
+&lt;/style&gt;
+&lt;canvas id=&quot;scene&quot; aria-label=&quot;点击画面点亮星光&quot;&gt;&lt;/canvas&gt;
+&lt;div class=&quot;scene-status&quot; role=&quot;status&quot; aria-live=&quot;polite&quot;&gt;点击画面点亮星光。&lt;/div&gt;
+&lt;nav class=&quot;scene-controls&quot; aria-label=&quot;画面控制&quot;&gt;
+  &lt;button id=&quot;burst&quot; type=&quot;button&quot;&gt;点亮星光&lt;/button&gt;
+  &lt;button id=&quot;pause&quot; type=&quot;button&quot;&gt;暂停画面&lt;/button&gt;
+  &lt;button class=&quot;fullscreen-button&quot; type=&quot;button&quot;&gt;全屏&lt;/button&gt;
+&lt;/nav&gt;
+&lt;script&gt;
+(() =&gt; {
+  function startScene() {
+  const root = document.documentElement;
+  const host = window.wallpaperHost?.protocolVersion === 1 ? window.wallpaperHost : null;
+  const legacy = !host &amp;&amp; root.dataset.screenGardenWallpaper === &quot;true&quot;;
+  const mode = host?.mode ?? (legacy ? &quot;desktop&quot; : &quot;browser&quot;);
+  const caps = host?.capabilities ?? {
+    pointer: legacy ? &quot;relayed&quot; : &quot;native&quot;,
+    pointerMove: !legacy, keyboard: !legacy,
+    fullscreen: !legacy &amp;&amp; Boolean(document.fullscreenEnabled),
+    pause: false, actions: false
+  };
+  root.dataset.sceneMode = mode;
+  const canvas = document.getElementById(&quot;scene&quot;), ctx = canvas.getContext(&quot;2d&quot;);
+  const controls = document.querySelector(&quot;.scene-controls&quot;);
+  const status = document.querySelector(&quot;.scene-status&quot;);
+  const fullscreen = document.querySelector(&quot;.fullscreen-button&quot;);
+  fullscreen.hidden = !caps.fullscreen;
+  status.textContent = mode === &quot;desktop&quot;
+    ? &quot;点击桌面空白处点亮星光；移动鼠标可唤回控制栏。&quot;
+    : &quot;点击画面点亮星光；也可以使用下方按钮。&quot;;
+  if (mode === &quot;desktop&quot; &amp;&amp; !caps.pointerMove) {
+    status.textContent = &quot;点击桌面空白处点亮星光；当前保持控制栏可见。&quot;;
+  }
+  let width = 1, height = 1, time = 0, total = 0, userPaused = false;
+  let hostPaused = host?.getState().paused ?? false;
+  let last = performance.now(), wakeAt = last;
+  const dots = [], replies = new Map();
+  function canAct() { return !userPaused &amp;&amp; !hostPaused; }
+  function draw() {
+    ctx.fillStyle = &quot;#173c32&quot;; ctx.fillRect(0,0,width,height);
+    for (const dot of dots) {
+      ctx.globalAlpha = .55 + .4 * Math.sin(time * 1.4 + dot.phase);
+      ctx.fillStyle = &quot;#e3ecb7&quot;;
+      ctx.fillRect(dot.u * width, dot.v * height, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+  function resize() {
+    const rect = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1,2);
+    width = Math.max(1,rect.width); height = Math.max(1,rect.height);
+    canvas.width = Math.floor(width * dpr); canvas.height = Math.floor(height * dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0); draw();
+  }
+  function wake() { wakeAt = performance.now(); controls.classList.remove(&quot;is-idle&quot;); }
+  function burst(u = .5,v = .5) {
+    if (!canAct()) return false;
+    dots.push({u,v,phase:Math.random() * Math.PI * 2});
+    if (dots.length &gt; 100) dots.shift();
+    total++; status.textContent = &quot;已点亮 &quot; + total + &quot; 束星光。&quot;; draw();
+    return true;
+  }
+  controls.addEventListener(&quot;click&quot;,event =&gt; event.stopPropagation());
+  document.getElementById(&quot;burst&quot;).onclick = () =&gt; burst();
+  document.getElementById(&quot;pause&quot;).onclick = event =&gt; {
+    userPaused = !userPaused; last = performance.now();
+    event.currentTarget.textContent = userPaused ? &quot;继续画面&quot; : &quot;暂停画面&quot;; wake();
+  };
+  fullscreen.onclick = async () =&gt; {
+    if (!caps.fullscreen) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await root.requestFullscreen();
+    } catch { status.textContent = &quot;当前环境不允许网页全屏。&quot;; }
+  };
+  canvas.addEventListener(&quot;click&quot;,event =&gt; {
+    const r = canvas.getBoundingClientRect();
+    if (r.width &lt;= 0 || r.height &lt;= 0) return;
+    const u = (event.clientX-r.left)/r.width, v = (event.clientY-r.top)/r.height;
+    if (u &gt;= 0 &amp;&amp; u &lt; 1 &amp;&amp; v &gt;= 0 &amp;&amp; v &lt; 1) burst(u,v);
+  });
+  document.addEventListener(&quot;pointermove&quot;,wake,{passive:true});
+  document.addEventListener(&quot;pointerdown&quot;,wake,{passive:true});
+  window.addEventListener(&quot;resize&quot;,resize);
+  window.addEventListener(&quot;wallpaperhost:statechange&quot;,() =&gt; {
+    if (!host) return;
+    hostPaused = host.getState().paused; last = performance.now();
+  });
+  function frame(now) {
+    const dt = Math.min(Math.max((now-last)/1000,0),.1); last = now;
+    if (canAct()) { time += dt; draw(); }
+    if (caps.pointerMove &amp;&amp; now-wakeAt &gt; 8500 &amp;&amp; !controls.contains(document.activeElement)) {
+      controls.classList.add(&quot;is-idle&quot;);
+    }
+    requestAnimationFrame(frame);
+  }
+  // 可选 v1 操作。它与页面按钮共用 burst()，不需要宿主认识这张壁纸。
+  function fail(requestId,code,message) { return {ok:false,requestId,code,message}; }
+  window.wallpaperApp = Object.freeze({
+    protocolVersion: 1,
+    getActions() {
+      if (!host || !caps.actions) return [];
+      return [{
+        id:&quot;burst&quot;,label:&quot;点亮星光&quot;,enabled:canAct(),
+        disabledReason:canAct() ? undefined : &quot;画面已暂停，请先继续。&quot;,
+        allowWhenOccluded:false
+      }];
+    },
+    invoke(request) {
+      const id = typeof request?.requestId === &quot;string&quot; ? request.requestId : &quot;&quot;;
+      if (!host || !caps.actions) return fail(id,&quot;UNSUPPORTED&quot;,&quot;当前环境没有主程序操作能力。&quot;);
+      if (!request || request.protocolVersion !== 1 || !id || id.length &gt; 128 ||
+          typeof request.actionId !== &quot;string&quot; || !/^[a-z][a-z0-9-]{0,47}$/.test(request.actionId) ||
+          typeof request.instanceId !== &quot;string&quot; || !request.instanceId || request.instanceId.length &gt; 128) {
+        return fail(id,&quot;INVALID_REQUEST&quot;,&quot;调用参数无效。&quot;);
+      }
+      if (request.instanceId !== host.instanceId) return fail(id,&quot;STALE_INSTANCE&quot;,&quot;画面已经切换。&quot;);
+      const old = replies.get(id);
+      if (old) return old.actionId === request.actionId ? old.result : fail(id,&quot;INVALID_REQUEST&quot;,&quot;重复请求内容不一致。&quot;);
+      let result;
+      if (request.actionId !== &quot;burst&quot;) result = fail(id,&quot;UNKNOWN_ACTION&quot;,&quot;没有这个操作。&quot;);
+      else if (!burst()) result = fail(id,&quot;PAUSED&quot;,&quot;画面已暂停，请先继续。&quot;);
+      else result = {ok:true,requestId:id,data:{total}};
+      replies.set(id,{actionId:request.actionId,result});
+      if (replies.size &gt; 128) replies.delete(replies.keys().next().value);
+      return result;
+    }
+  });
+  resize(); requestAnimationFrame(frame);
+  }
+  if (document.readyState === &quot;loading&quot;) {
+    document.addEventListener(&quot;DOMContentLoaded&quot;,startScene,{once:true});
+  } else startScene();
+})();
+&lt;/script&gt;
+&lt;/html&gt;</code></pre></div>
+</div></details>
+<aside class="note info"><strong>示例不是宿主实现</strong><div>在浏览器里直接运行时会自动回退，页面按钮可用，但不会在当前主程序中注册任何原生菜单。自动化测试中的模拟宿主也只用于检查分支，不代表已经完成 Windows 桌面适配。</div></aside></section><section class="section" id="compatibility"><div class="section-header"><span class="section-number">09</span><h2>旧壁纸怎么兼容，内容怎么更新</h2></div><p class="section-intro">不要为了照顾旧包，又把针对某张壁纸的补丁放回宿主。</p><div class="table-wrap"><table><thead><tr><th>组合</th><th>应有结果</th><th>作者需要注意</th></tr></thead><tbody><tr><td>普通浏览器 + 任意壁纸</td><td>基本场景和页面交互可用，没有宿主也不报错。</td><td>新接口全部按存在性和版本检测；不能在顶层直接无条件调用宿主。</td></tr><tr><td>符合 v1 的新宿主 + 未适配旧包</td><td>宿主不强制隐藏旧包的界面，转发通用点击与移动。</td><td>旧包的全屏入口、快捷键文案和自身暂停机制不会自动改好；需要内容更新。未声明的主程序扩展操作不显示。</td></tr><tr><td>符合 v1 的新宿主 + v1 壁纸</td><td>按能力展示界面，接收状态变化，声明并执行可选操作。</td><td>对不支持的能力保持可用降级；主程序不因壁纸名称增加新代码。</td></tr><tr><td>旧宿主 + 新壁纸包</td><td>普通网页功能可按作者设计回退，但不承诺完整桌面适配。</td><td>旧宿主的强制 CSS 规则仍可能干扰界面。必须依赖 v1 才能正常工作的包应提高 minAppVersion，不能继续标旧最低版本。</td></tr></tbody></table></div><aside class="note warn"><strong>主程序中的专用操作也要一起迁移</strong><div>当前水族箱的管理窗口与托盘投喂属于专用适配。按 v1 迁移后，入口由壁纸声明的操作生成；未实现操作接口的旧水族箱包仍可保留页面投喂交互，但主程序中的扩展入口需要更新包后才能提供。这项变化必须写入兼容说明。</div></aside>
+<h3>壁纸作者的更新顺序</h3>
+<ol>
+<li>先保证网页独立运行，再加环境检测与能力降级。</li>
+<li>把控制栏、帮助、全屏等桌面差异放在壁纸自己的 HTML / CSS / JS 中。</li>
+<li>需要主程序操作时，实现可选接口；不需要则省略。</li>
+<li>提升这张壁纸的内容版本，按实际依赖设置最低主程序版本；不覆盖已有发布包。</li>
+<li>按内容库流程生成 ZIP、清单、大小和校验信息。内置快照与官方内容源的对应版本应保持一致。</li>
+</ol>
+<p>用户可能同时使用内置壁纸、已下载版本和本地导入版本。只修改主程序仓库内的快照，不能保证用户正在播放的旧下载包自动获得新代码；也不应未经选择静默替换用户的本地包。</p>
+<details><summary>给主程序维护者：让这份规范成立，需要先改哪些地方？</summary><div class="details-body">
+<ol>
+<li>提供一致的 v1 运行环境与状态接口，桌面和预览按各自能力初始化。</li>
+<li>删除通用样式强制隐藏，以及识别 <code>window.pinewind</code> 后改 DOM、标题、帮助文案的专用分支。</li>
+<li>通用点击回执只报告投递状态，不读取 <code>window.aquarium</code> 或任何业务状态。</li>
+<li>将管理窗口、托盘的专用投喂路径改为“读取操作列表 → 校验 → 调用 → 显示结果”，不再查找某个 <code>#feed</code> 按钮。</li>
+<li>保留鼠标穿透、原生空白区域检查、实例校验和通用暂停支持；不向壁纸开放管理窗口的系统权限。</li>
+<li>先提供正式可下载、可验证的宿主实现，再发布强依赖它的内容包；主程序和内容包分别按各自发布流程管理。</li>
+</ol>
+</div></details>
+</section><section class="section" id="verify"><div class="section-header"><span class="section-number">10</span><h2>交付前，按这张清单检查</h2></div><p class="section-intro">先做浏览器检查，再做真实桌面检查。浏览器模拟通过，不等于 Explorer 桌面已经验收。</p>
+<ul class="check-list">
+<li>断网打开 index.html，场景、脚本、字体和图片仍正常；没有宿主对象时不报错。</li>
+<li>桌面模式不会显示不可用的全屏和键盘操作说明；预览、浏览器保留自身可用入口。</li>
+<li>画面操作有鼠标按钮入口；控制栏隐藏后能唤回，无法确认移动能力时保持可见。</li>
+<li>点击控制栏只执行对应操作，不同时种花、投喂或触发其他背景效果。</li>
+<li>暂停后画面停止推进；定时器、视频、音频、Worker 等持续工作得到合理处理，恢复不快进。</li>
+<li>主程序恢复不会擅自取消用户在页面内设置的暂停。</li>
+<li>横屏、竖屏、窗口缩小和不同缩放下，控制栏与帮助可见、可点，场景点击位置正确。</li>
+<li>可选操作的禁用、成功、失败、重复请求和切换实例都有正确结果，没有“收到请求就成功”。</li>
+<li>版本与最低主程序版本符合实际；内置快照和下载包都检查过，不能只测其中一个。</li>
+</ul>
+<div class="table-wrap"><table><thead><tr><th>检查场景</th><th>建议方式</th><th>通过标准</th></tr></thead><tbody><tr><td>独立浏览器、模式回退、操作接口</td><td>浏览器自动化；v1 未实现前可用明确标注的模拟对象检查页面分支。</td><td>没有 JS 错误；按钮正确；请求去重与暂停规则有效。模拟结果只证明页面逻辑。</td></tr><tr><td>类名不应被宿主干预</td><td>准备普通测试页，故意使用 .hud、.overlay、.toast 等类名。</td><td>符合 v1 的宿主不隐藏这些元素，不改标题、文字或事件处理。</td></tr><tr><td>暂停与资源</td><td>自动化观察场景状态；结合进程资源与媒体状态检查。</td><td>暂停期间状态不推进，恢复不突跳，不持续进行无必要的重计算或播放。</td></tr><tr><td>真实桌面输入</td><td>Windows / Explorer 实机，桌面图标、框选、任务栏、菜单、普通窗口都参与测试。</td><td>桌面空白处交互正常；图标和原始桌面操作不受影响，壁纸不抢焦点。</td></tr><tr><td>多屏与缩放</td><td>至少覆盖负坐标副屏、竖屏、混合 DPI、任务栏工作区变化。</td><td>显示范围和点击映射一致；切屏或换壁纸后的旧请求不作用于新实例。</td></tr><tr><td>版本组合</td><td>当前支持宿主、旧宿主、旧内容包、新内容包分别验证。</td><td>最低版本声明真实；不支持时明确降级，不能把模拟的新接口写成当前宿主已经支持。</td></tr></tbody></table></div></section><section class="section" id="troubleshooting"><div class="section-header"><span class="section-number">11</span><h2>常见问题，先从这里查</h2></div><p class="section-intro">大多数问题来自运行环境、坐标或事件的假设，而不是需要宿主为某张壁纸加特例。</p><div class="table-wrap"><table><thead><tr><th>现象</th><th>先检查</th><th>推荐处理</th></tr></thead><tbody><tr><td>预览有控制栏，桌面没有</td><td>是否被旧宿主强制 CSS 隐藏？页面是否自行进入 idle 或隐藏界面状态？</td><td>先区分宿主版本与页面行为；新版由壁纸自行控制显示，不增加主程序专用白名单。</td></tr><tr><td>移动鼠标没有按钮高亮</td><td>是否只依赖 :hover、pointerenter 或原生 title？</td><td>必要标签直接可见；通过标准 pointermove 在壁纸内实现轻量反馈，不能要求宿主模拟完整浏览器悬停。</td></tr><tr><td>点按钮时背景也响应</td><td>是否在 document 上无差别处理 click，或同时处理了 down 与 click？</td><td>场景监听限定在场景区域；控制栏阻止冒泡；同一业务只处理一次。</td></tr><tr><td>点击位置偏了</td><td>是否混用了物理像素、CSS 像素、固定分辨率或忽略了 cover 裁切？</td><td>以当前画布矩形做转换；存在裁切、变换时逆变换到实际场景坐标。</td></tr><tr><td>暂停后还有声音或后台仍忙</td><td>是否还有定时器、视频、音频、Worker、CSS 动画？</td><td>按暂停状态管理这些资源；不要以为冻结 RAF 就等于停止一切。</td></tr><tr><td>恢复后时间跳了一大截</td><td>是否直接使用恢复后的大帧间隔？</td><td>重置帧时间基准，给 dt 设置合理上限；不要把暂停时长当成模拟时长补跑。</td></tr><tr><td>主程序按钮没有出现</td><td>是否只是实现了草案接口，而当前主程序尚未支持？操作列表是否为空、无效或未就绪？</td><td>确认正式接口版本与能力，再检查协议字段。页面按钮仍应独立可用。</td></tr><tr><td>点一次主程序操作却执行两次</td><td>是否在超时后自动重试，或给重复请求生成了新的 ID？</td><td>串行调用、使用同一个请求的回执缓存；结果未知时不自动重试非幂等动作。</td></tr></tbody></table></div></section><section class="section" id="references"><div class="section-header"><span class="section-number">12</span><h2>版本状态与参考来源</h2></div><p class="section-intro">让开发者知道：哪些行为已经存在，哪些接口还需要主程序实现。</p><div class="table-wrap"><table><thead><tr><th>项目</th><th>核对基线中的状态</th><th>本文如何使用</th></tr></thead><tbody><tr><td>module.json schema 1、相对路径、本地目录</td><td><span class="tag existing">已有</span></td><td>沿用现有包格式，不增加未经实现的清单字段。</td></tr><tr><td>data-screen-garden-wallpaper 模式标识</td><td><span class="tag existing">已有</span></td><td>仅作为旧桌面模式检测，不当作 v1 能力声明。</td></tr><tr><td>桌面空白短点击、移动转发、RAF 暂停包装</td><td><span class="tag existing">已有</span></td><td>保留通用能力，并写清合成事件与暂停范围的限制。</td></tr><tr><td>宿主隐藏 HUD / overlay、松风镇专用 DOM 适配、水族箱专用调用</td><td><span class="tag draft">待移除 / 待迁移</span></td><td>它们仍存在于核对基线，不符合本文提出的通用职责边界。</td></tr><tr><td>wallpaperHost、wallpaperApp、状态事件、通用操作发现</td><td><span class="tag draft">v1 待实现</span></td><td>本文定义的目标接口；尚不能视为当前发行版本的功能。</td></tr></tbody></table></div>
+<ul class="reference-list">
+<li><a href="https://github.com/whoarei/wallpaper-box/blob/66fbf98/wallpaper-host/src-tauri/wallpaper-mode.js">wallpaper-mode.js</a>：核对现有模式标识、输入序列、暂停包装与页面适配。</li>
+<li><a href="https://github.com/whoarei/wallpaper-box/blob/66fbf98/wallpaper-host/src-tauri/src/desktop_input.rs">desktop_input.rs</a>：核对原生输入筛选、坐标与移动采样。</li>
+<li><a href="https://github.com/whoarei/wallpaper-box/blob/66fbf98/wallpaper-host/src-tauri/src/catalog.rs">catalog.rs</a>：核对 module.json 格式、ID、相对路径和元数据读取。</li>
+<li><a href="https://github.com/whoarei/wallpaper-box/blob/66fbf98/wallpaper-host/src-tauri/src/host.rs">host.rs</a>：核对预览、桌面窗口和当前管理操作的边界。</li>
+<li><a href="https://github.com/whoarei/wallpaper-box/blob/66fbf98/docs/guide.md">项目使用与开发指南</a>：核对内置、在线与本地内容的管理方式。</li>
+</ul>
+<p class="caption">核对基线：Wallpaper Box v0.9.0，提交 66fbf98。文档日期：2026 年 11 月 12 日。本文是开发者适配规范评审稿，不代表 v1 协议已经实现或发布；正式落地时应更新实现版本与验收记录。</p>
+</section>
+<footer class="doc-footer"><span>Wallpaper Box · Developer Integration Guide · 评审稿 r1</span><span>单文件 / 离线可读 / 支持打印　<a href="#top">回到顶部 ↑</a></span></footer>
+</main></div>
+<script>
+(() => {
+  const root = document.documentElement;
+  const themeButton = document.getElementById('theme');
+  try { root.dataset.theme = localStorage.getItem('wallpaper-spec-theme') || 'light'; } catch {}
+  function themeLabel() { themeButton.textContent = root.dataset.theme === 'dark' ? '浅色模式' : '深色模式'; }
+  themeLabel();
+  themeButton.addEventListener('click', () => {
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('wallpaper-spec-theme', root.dataset.theme); } catch {}
+    themeLabel();
+  });
+  let openBeforePrint;
+  window.addEventListener('beforeprint', () => {
+    openBeforePrint = [...document.querySelectorAll('main details')].map(el => [el,el.open]);
+    openBeforePrint.forEach(([el]) => el.open = true);
+  });
+  window.addEventListener('afterprint', () => { (openBeforePrint || []).forEach(([el,open]) => el.open = open); });
+  document.getElementById('print').addEventListener('click', () => window.print());
+  document.querySelectorAll('.copy').forEach(button => button.addEventListener('click', async () => {
+    const value = button.closest('.code').querySelector('pre').textContent;
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(value);
+      else {
+        const area = document.createElement('textarea');
+        area.value = value; area.style.position = 'fixed'; area.style.top = '-9999px';
+        document.body.append(area); area.select();
+        const copied = document.execCommand('copy'); area.remove();
+        if (!copied) throw new Error('copy failed');
+      }
+      button.textContent = '已复制';
+    } catch { button.textContent = '请手动选择复制'; }
+    setTimeout(() => button.textContent = '复制代码', 1800);
+  }));
+  const progress = document.querySelector('.progress');
+  function updateProgress() {
+    const max = document.documentElement.scrollHeight - innerHeight;
+    progress.style.width = (max > 0 ? scrollY / max * 100 : 0) + '%';
+  }
+  addEventListener('scroll', updateProgress, {passive:true});
+  addEventListener('resize', updateProgress); updateProgress();
+  const navLinks = [...document.querySelectorAll('.sidebar nav a')];
+  const observer = new IntersectionObserver(entries => {
+    for (const entry of entries) if (entry.isIntersecting) navLinks.forEach(a => a.classList.toggle('active',a.hash === '#' + entry.target.id));
+  }, {rootMargin:'-10% 0px -74% 0px'});
+  document.querySelectorAll('main section').forEach(section => observer.observe(section));
+  const modes = {
+    desktop: {name:'桌面壁纸',full:false,hint:'鼠标点击和移动可用；不依赖键盘、原生悬停或网页全屏。'},
+    preview: {name:'应用内预览',full:true,hint:'普通窗口内可接收鼠标和聚焦后的键盘；全屏仍需浏览器允许。'},
+    browser: {name:'独立浏览器',full:true,hint:'没有宿主接口，场景与页面按钮仍应正常工作。'}
+  };
+  document.querySelectorAll('[data-demo-mode]').forEach(button => button.addEventListener('click', () => {
+    const mode = button.dataset.demoMode, data = modes[mode];
+    document.querySelectorAll('[data-demo-mode]').forEach(b => b.setAttribute('aria-pressed',String(b === button)));
+    document.getElementById('demo-mode-label').textContent = data.name;
+    document.querySelector('.demo-fullscreen').hidden = !data.full;
+    document.getElementById('demo-explanation').textContent = data.hint;
+  }));
+  document.getElementById('demo-weather').addEventListener('click', () => {
+    const rainy = document.querySelector('.demo-stage').classList.toggle('rain');
+    document.getElementById('demo-weather').textContent = rainy ? '☂ 雨天' : '☀ 晴天';
+  });
+  document.querySelector('.demo-fullscreen').addEventListener('click', () => {
+    document.getElementById('demo-explanation').textContent = '这只是文档中的界面对照示意，不会改变当前窗口的全屏状态。';
+  });
+  document.getElementById('download-example').addEventListener('click', () => {
+    const blob = new Blob([document.getElementById('complete-example').textContent], {type:'text/html;charset=utf-8'});
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = 'index.html'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  });
+})();
+</script>
+</body></html>
