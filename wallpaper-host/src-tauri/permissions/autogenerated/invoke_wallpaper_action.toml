@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-invoke-wallpaper-action"
+description = "Enables the invoke_wallpaper_action command without any pre-configured scope."
+commands.allow = ["invoke_wallpaper_action"]
+
+[[permission]]
+identifier = "deny-invoke-wallpaper-action"
+description = "Denies the invoke_wallpaper_action command without any pre-configured scope."
+commands.deny = ["invoke_wallpaper_action"]

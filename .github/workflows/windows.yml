@@ -70,6 +70,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:pinewind
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:protocol
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:modules
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test Rust with release features
         run: cargo test --locked --release --features custom-protocol --manifest-path wallpaper-host/src-tauri/Cargo.toml
       - name: Package installer and sign update artifacts when authorized

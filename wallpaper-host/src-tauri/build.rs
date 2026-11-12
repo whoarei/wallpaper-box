@@ -10,7 +10,7 @@ fn main() {
         "apply_wallpaper",
         "preview_wallpaper",
         "pause_wallpaper",
-        "feed_aquarium",
+        "invoke_wallpaper_action",
         "remove_wallpaper",
         "auto_pause",
         "set_auto_start",

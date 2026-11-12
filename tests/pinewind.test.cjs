@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
+const {bootstrap}=require('./wallpaper-test-support.cjs');
 
 function playwright() {
   for (const candidate of [process.env.PLAYWRIGHT_PATH,
@@ -26,9 +27,10 @@ function playwright() {
   const wrapper = fs.readFileSync(path.resolve(__dirname, '../wallpaper-host/src-tauri/wallpaper-mode.js'), 'utf8');
   const server = http.createServer((request, response) => {
     if (request.url === '/favicon.ico') { response.writeHead(204).end(); return; }
+    if(request.url==='/wallpaper-adapter.js'){response.writeHead(200,{'Content-Type':'text/javascript'});response.end(fs.readFileSync(path.resolve(__dirname,'../wallpapers/pinewind-town/wallpaper-adapter.js')));return;}
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     // Match native initialization before the real page scripts execute.
-    response.end(request.url === '/wallpaper' ? html.replace('<head>', `<head><script>${wrapper}</script>`) : html);
+    response.end(request.url === '/wallpaper' ? html.replace('<head>', '<head><script>'+bootstrap(wrapper)+'</script>') : html.replace('<head>', '<head><script>'+bootstrap(wrapper,'preview')+'</script>'));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = `http://127.0.0.1:${server.address().port}`;

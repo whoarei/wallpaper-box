@@ -18,6 +18,48 @@ function repositoryLabel(url){return String(url||'').replace(/^https:\/\//,'').r
 
 function el(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;}
 function current(){return state?.wallpapers.find(w=>w.display_id===state.selected_monitor);}
+function wallpaperActionDisabled(action,playing=current()){
+ return localBusy||!playing?.instance_id||!state?.displays.some(display=>display.id===playing.display_id)||playing.paused||playing.action_busy||
+  (playing.auto_paused&&!action.allowWhenOccluded)||action.enabled!==true;
+}
+function renderWallpaperActions(){
+ const playing=current(),actions=Array.isArray(playing?.actions)?playing.actions:[];
+ $('wallpaper-actions').hidden=!actions.length;
+ $('wallpaper-actions-error').hidden=!playing?.actions_error;
+ $('wallpaper-actions-error').textContent=playing?.actions_error||'';
+ const primary=$('wallpaper-action');
+ function configure(button,action){
+  button.dataset.wallpaperAction=action.id;button.textContent=action.label;
+  button.disabled=wallpaperActionDisabled(action,playing);
+  button.title=(playing?.paused?'壁纸已暂停，请先继续播放。':action.disabledReason)||action.label;
+  button.onclick=()=>invokeWallpaperAction(action,playing);
+ }
+ if(actions[0])configure(primary,actions[0]);
+ $('wallpaper-actions-menu').hidden=actions.length<2;
+ if(actions.length<2)$('wallpaper-actions-menu').open=false;
+ const scope=playing?.instance_id||'';
+ if($('wallpaper-actions').dataset.instance!==scope){
+  $('wallpaper-actions').dataset.instance=scope;$('wallpaper-actions-menu').open=false;
+  $('wallpaper-extra-actions').replaceChildren();
+ }
+ reconcile($('wallpaper-extra-actions'),actions.slice(1),action=>action.id,action=>action.id,action=>{
+  const button=el('button','');button.type='button';configure(button,action);return button;
+ });
+ for(const button of $('wallpaper-extra-actions').children){
+  const action=actions.find(action=>action.id===button.dataset.cardKey);if(action)configure(button,action);
+ }
+}
+async function invokeWallpaperAction(action,playing){
+ if(wallpaperActionDisabled(action,playing))return;
+ const monitorId=playing.display_id,instanceId=playing.instance_id;
+ localBusy=true;localError='';renderEpoch++;$('wallpaper-actions-menu').open=false;renderBusy();
+ try{
+  const result=await invoke('invoke_wallpaper_action',{monitorId,instanceId,actionId:action.id});
+  if(!result?.ok)throw new Error(result?.message||'未能确认操作结果，请先查看壁纸，避免重复操作。');
+  toast('已完成：'+action.label);
+ }catch(error){localError=String(error.message||error);toast(localError);}
+ finally{localBusy=false;renderEpoch++;if(state)render(state);update();}
+}
 function toast(message,duration=3500){
  const node=$('toast');node.textContent=message;
  // Keep feedback visible above a modal settings/import dialog without taking focus.
@@ -363,7 +405,7 @@ async function run(command,args={},message='',remote=false){
 }
 function renderBusy(){
  const playing=current(),hasMonitor=!!state?.displays.some(d=>d.id===state.selected_monitor);
- $('feed-aquarium').disabled=localBusy||!playing||playing.paused;
+ renderWallpaperActions();
  for(const id of ['pause','remove','preview','reload'])$(id).disabled=localBusy||!playing;
  $('show-desktop').disabled=localBusy||!hasMonitor;
  $('displays').setAttribute('aria-busy',String(localBusy));document.querySelectorAll('.monitor-choice').forEach(button=>button.disabled=localBusy);
@@ -396,7 +438,6 @@ function render(data){
  const currentModule=data.modules.find(m=>m.id===playing?.module_id),artUrl=currentModule?.cover?data.service+currentModule.cover:'';
  const artSig=JSON.stringify([currentModule?.id,artUrl]);
  if(artSig!==lastCurrentArt){$('current-art').replaceChildren();if(artUrl){const img=el('img');img.src=artUrl;img.alt='';img.onerror=()=>img.replaceWith(el('span','','▱'));$('current-art').append(img);}else $('current-art').append(el('span','','▱'));lastCurrentArt=artSig;}
- $('feed-aquarium').hidden=playing?.module_id!=='aquarium';
  $('module-count').textContent=String(data.modules.length).padStart(2,'0');
  renderDisplays(data);
  const moduleSig=JSON.stringify([data.modules,data.selected_monitor,monitor?.name,playing?.module_id,data.service]);
@@ -466,7 +507,6 @@ for(const [id,kind] of [['import-folder','folder'],['import-zip','zip']])$(id).o
 };
 $('pause').onclick=()=>{const selected=current();if(selected)run('pause_wallpaper',{monitorId:state.selected_monitor,paused:!selected.paused});};
 $('remove').onclick=()=>{closePlaybackMenu();run('remove_wallpaper',{monitorId:state.selected_monitor},'已恢复该屏幕的原桌面');};
-$('feed-aquarium').onclick=()=>run('feed_aquarium',{monitorId:state.selected_monitor},'已投喂，回到桌面看看鱼儿吧。');
 $('auto-pause').onchange=()=>run('auto_pause',{enabled:$('auto-pause').checked});
 $('auto-start').onchange=()=>setAutoStart($('auto-start').checked);
 $('preview').onclick=()=>{closePlaybackMenu();direct('capture_desktop',{monitorId:state.selected_monitor},'桌面预览已保存');};
@@ -497,7 +537,8 @@ document.querySelectorAll('dialog').forEach(dialog=>dialog.addEventListener('cli
  if(event.target!==dialog)return;
  const box=dialog.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)dialog.close();
 }));
-document.addEventListener('click',event=>{if(!event.target.closest('#playback-menu'))closePlaybackMenu();if(!event.target.closest('#current-resources'))$('current-resources').open=false;});
+document.addEventListener('click',event=>{if(!event.target.closest('#playback-menu'))closePlaybackMenu();if(!event.target.closest('#current-resources'))$('current-resources').open=false;if(!event.target.closest('#wallpaper-actions-menu'))$('wallpaper-actions-menu').open=false;});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('wallpaper-actions-menu').open){$('wallpaper-actions-menu').open=false;$('wallpaper-actions-menu').querySelector('summary').focus();}});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('playback-menu').open){closePlaybackMenu();$('playback-menu').querySelector('summary').focus();}if(event.key==='Escape'&&$('current-resources').open){$('current-resources').open=false;$('current-resources').querySelector('summary').focus();}});
 $('check-app-update').onclick=()=>runAppUpdate('check_app_update');
 $('download-app-update').onclick=()=>runAppUpdate('download_app_update');

@@ -1,5 +1,6 @@
 mod commands;
 mod download_workers;
+mod wallpaper_actions;
 use crate::{
     catalog::{self, Module},
     desktop::{self, Attachment, Display},
@@ -21,8 +22,6 @@ use tauri::{
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 
-const WALLPAPER_SCRIPT: &str = include_str!("../wallpaper-mode.js");
-const AQUARIUM_FEED_SCRIPT: &str = include_str!("../aquarium-feed.js");
 static NEXT_SURFACE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -70,6 +69,7 @@ struct Running {
     proof: Attachment,
     auto_paused: bool,
     effective_paused: bool,
+    protocol: crate::wallpaper_protocol::Session,
 }
 struct Data {
     settings: Settings,
@@ -114,6 +114,10 @@ pub struct WallpaperView {
     name: String,
     paused: bool,
     auto_paused: bool,
+    instance_id: Option<String>,
+    actions: Vec<crate::wallpaper_protocol::Action>,
+    actions_error: Option<String>,
+    action_busy: bool,
     resources: crate::resource_usage::Usage,
     desktop_clicks: u64,
     z_order_repairs: u64,
@@ -311,6 +315,10 @@ fn snapshot(app: &AppHandle) -> View {
                 name,
                 paused: selection.paused,
                 auto_paused: running.auto_paused,
+                instance_id: running.protocol.instance_id.clone(),
+                actions: running.protocol.actions.clone(),
+                actions_error: running.protocol.error.clone(),
+                action_busy: running.protocol.request_id.is_some(),
                 resources: host.resources.lock().unwrap().usage(running.generation),
                 desktop_clicks: running.desktop_clicks,
                 z_order_repairs: running.z_order_repairs,
@@ -409,6 +417,7 @@ fn preview(app: &AppHandle, module_id: &str) -> Result<(), String> {
         .min_inner_size(640.0, 400.0)
         .center()
         .data_directory(profile)
+        .initialization_script(crate::wallpaper_protocol::initialization_script(false))
         .on_navigation(|url| {
             url.scheme() == "http"
                 && url.host_str() == Some("wallpaper.localhost")
@@ -467,7 +476,15 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
             .resizable(false)
             .visible(false)
             .data_directory(profile)
-            .initialization_script(WALLPAPER_SCRIPT)
+            .initialization_script(crate::wallpaper_protocol::initialization_script(true))
+            .on_page_load(|window, payload| match payload.event() {
+                tauri::webview::PageLoadEvent::Started => {
+                    wallpaper_actions::loading(window.app_handle(), window.label())
+                }
+                tauri::webview::PageLoadEvent::Finished => {
+                    wallpaper_actions::sync_state(window.app_handle(), window.label())
+                }
+            })
             .on_navigation(|url| {
                 url.scheme() == "http"
                     && url.host_str() == Some("wallpaper.localhost")
@@ -487,6 +504,7 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
     let _ = window.set_ignore_cursor_events(true);
     let covered = desktop::covering_window(&display, &[handle]).is_some();
     let effective;
+    let pause_state;
     {
         let mut data = host.data.lock().unwrap();
         let paused = data
@@ -504,6 +522,7 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
         );
         let automatic = data.settings.auto_pause && covered;
         effective = paused || automatic;
+        pause_state = crate::wallpaper_protocol::PauseState::new(paused, automatic, false);
         data.running.insert(
             monitor_id.into(),
             Running {
@@ -515,11 +534,12 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
                 proof: proof.clone(),
                 auto_paused: automatic,
                 effective_paused: effective,
+                protocol: Default::default(),
             },
         );
         data.last_error = None;
     }
-    let _ = window.eval(format!("window.__SCREEN_GARDEN_SET_PAUSED?.({effective});"));
+    let _ = window.eval(pause_state.script());
     // The initial script handles callbacks that are registered before navigation finishes.
     log(
         app,
@@ -687,13 +707,16 @@ fn set_paused(app: &AppHandle, monitor_id: Option<&str>, paused: bool) {
             if let Some(running) = data.running.get_mut(&id) {
                 let value = paused || running.auto_paused;
                 running.effective_paused = value;
-                changes.push((running.label.clone(), value));
+                changes.push((
+                    running.label.clone(),
+                    crate::wallpaper_protocol::PauseState::new(paused, running.auto_paused, false),
+                ));
             }
         }
     }
-    for (label, paused) in changes {
+    for (label, pause) in changes {
         if let Some(window) = app.get_webview_window(&label) {
-            let _ = window.eval(format!("window.__SCREEN_GARDEN_SET_PAUSED?.({paused});"));
+            let _ = window.eval(pause.script());
         }
     }
     save(app);
@@ -722,58 +745,6 @@ fn set_auto(app: &AppHandle, enabled: bool) {
     save(app);
     rebuild_tray(app);
     let _ = app.emit("host-updated", ());
-}
-fn feed_aquarium(app: &AppHandle, monitor_id: &str) -> Result<(), String> {
-    let host = app.state::<Host>();
-    let _operation = host.operations.lock().unwrap();
-    if !desktop::displays()
-        .iter()
-        .any(|display| display.id == monitor_id)
-    {
-        return Err("显示器已断开连接。".into());
-    }
-    let window_label = {
-        let data = host.data.lock().unwrap();
-        let selected = data
-            .settings
-            .assignments
-            .get(monitor_id)
-            .ok_or("该屏幕尚未设置壁纸。")?;
-        if selected.module_id != "aquarium" {
-            return Err("请先将当前屏幕切换到静水之间水族箱。".into());
-        }
-        if selected.paused {
-            return Err("水族箱已暂停，请先继续播放。".into());
-        }
-        data.running
-            .get(monitor_id)
-            .ok_or("当前屏幕的水族箱尚未就绪。")?
-            .label
-            .clone()
-    };
-    let window = app
-        .get_webview_window(&window_label)
-        .ok_or("水族箱窗口尚未就绪。")?;
-    let (send, receive) = std::sync::mpsc::sync_channel(1);
-    window
-        .eval_with_callback(AQUARIUM_FEED_SCRIPT, move |reply| {
-            let _ = send.try_send(reply);
-        })
-        .map_err(|e| format!("投喂未能送达水族箱：{e}"))?;
-    let reply = receive
-        .recv_timeout(Duration::from_secs(3))
-        .map_err(|_| "水族箱暂未响应，请稍后再试。")?;
-    let result: serde_json::Value =
-        serde_json::from_str(&reply).map_err(|_| "水族箱未确认投喂，请稍后再试。")?;
-    if result.get("ok").and_then(|value| value.as_bool()) != Some(true) {
-        return Err(result
-            .get("message")
-            .and_then(|value| value.as_str())
-            .unwrap_or("水族箱未确认投喂，请稍后再试。")
-            .to_string());
-    }
-    log(app, &format!("Fed aquarium on {monitor_id}: {result}"));
-    Ok(())
 }
 fn quit(app: &AppHandle) {
     app.state::<Host>().exiting.store(true, Ordering::SeqCst);
@@ -838,14 +809,23 @@ fn rebuild_tray(app: &AppHandle) {
             )?)?;
         }
         menu.append(&PredefinedMenuItem::separator(app)?)?;
-        if let Some(aquarium) = current.filter(|w| w.module_id == "aquarium") {
-            menu.append(&MenuItem::with_id(
-                app,
-                "feed-aquarium",
-                "投喂鱼儿",
-                !aquarium.paused,
-                None::<&str>,
-            )?)?;
+        if let Some(current) = current {
+            if let Some(instance_id) = &current.instance_id {
+                let pause = crate::wallpaper_protocol::PauseState::new(
+                    current.paused,
+                    current.auto_paused,
+                    false,
+                );
+                for action in &current.actions {
+                    menu.append(&MenuItem::with_id(
+                        app,
+                        format!("action:{instance_id}:{}", action.id),
+                        &action.label,
+                        action.allowed(pause) && !current.action_busy,
+                        None::<&str>,
+                    )?)?;
+                }
+            }
         }
         menu.append(&CheckMenuItem::with_id(
             app,
@@ -950,8 +930,8 @@ fn tray_action(app: &AppHandle, id: &str) {
             select(&app, display)
         } else if let Some(module) = id.strip_prefix("wallpaper:") {
             apply(&app, &view.selected_monitor, module)
-        } else if id == "feed-aquarium" {
-            feed_aquarium(&app, &view.selected_monitor)
+        } else if let Some(action) = id.strip_prefix("action:") {
+            wallpaper_actions::tray_invoke(&app, action)
         } else if id == "check-app-update" {
             show_manager(&app);
             let _ = crate::app_updates::check(&app);
@@ -1181,15 +1161,21 @@ fn maintenance(app: AppHandle, first: bool) {
                                 (auto, effective, auto_changed)
                             })
                         };
-                        if let Some((auto, effective, auto_changed)) = change {
+                        if let Some((auto, _effective, auto_changed)) = change {
                             if auto_changed {
                                 log(
                                     &app,
                                     &format!("Auto pause {id} = {auto}; covering={cover:?}"),
                                 );
                             }
-                            let _ = window
-                                .eval(format!("window.__SCREEN_GARDEN_SET_PAUSED?.({effective});"));
+                            let _ = window.eval(
+                                crate::wallpaper_protocol::PauseState::new(
+                                    selection.paused,
+                                    auto,
+                                    false,
+                                )
+                                .script(),
+                            );
                         }
                     }
                 } else if let Err(message) = apply_inner(&app, &id, &selection.module_id) {
@@ -1255,7 +1241,7 @@ pub fn run() {
             commands::apply_wallpaper,
             commands::preview_wallpaper,
             commands::pause_wallpaper,
-            commands::feed_aquarium,
+            commands::invoke_wallpaper_action,
             commands::remove_wallpaper,
             commands::auto_pause,
             commands::set_auto_start,
@@ -1335,6 +1321,7 @@ pub fn run() {
                 log(&handle, &format!("Autostart: {error}"));
             }
             download_workers::start(&handle);
+            wallpaper_actions::start(&handle);
             TrayIconBuilder::with_id("screen-garden")
                 .icon(tray_image())
                 .tooltip("壁纸盒子 · 右键切换壁纸")
