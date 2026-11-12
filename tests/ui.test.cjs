@@ -1696,7 +1696,7 @@ async function noHorizontalOverflow(page, label) {
       await page.locator('#app-update-notes-wrap summary').click();
       assert.match(await page.locator('#app-update-notes').textContent(), /<script>/);
       assert.equal(await page.evaluate(() => window.badUpdateNotes), undefined);
-      assert.equal(await page.locator('#app-update-confirm').isVisible(), false);
+      assert.equal(await page.locator('#app-update-confirm').count(), 0);
       await screenshot(page, 'app-update-ready');
       await page.waitForTimeout(1150);
       assert.deepEqual(await actions(page), [
@@ -1704,25 +1704,18 @@ async function noHorizontalOverflow(page, label) {
       ], 'Ready notification must never install or request a second download');
     });
 
-    await test('app installation requires a cancelable confirmation and is submitted once', fixture => {
+    await test('restart and upgrade installs directly once without a second confirmation', fixture => {
       appUpdateFixture(fixture, 'ready');
     }, async page => {
       await page.locator('#settings-open').click();await page.locator('#settings-tab-updates').click();
       await visible(page.locator('#install-app-update'));
-      await page.locator('#install-app-update').click();
-      await visible(page.locator('#app-update-confirm'));
-      assert.match(await page.locator('#app-update-confirm-copy').textContent(), /v0\.3\.1/);
-      await screenshot(page, 'app-update-confirm');
-      await page.locator('#cancel-app-update').click();
-      assert.equal(await page.locator('#app-update-confirm').isVisible(), false);
-      assert.deepEqual(await actions(page), [], 'Cancel must leave installation untouched');
-      await page.locator('#install-app-update').click();
       await page.evaluate(() => {
-        document.getElementById('confirm-app-update').click();
-        document.getElementById('confirm-app-update').click();
+        document.getElementById('install-app-update').click();
+        document.getElementById('install-app-update').click();
       });
       await page.waitForFunction(() => document.getElementById('app-update-status').textContent.includes('启动安装'));
-      assert.equal(await page.locator('#app-update-confirm').isVisible(), false);
+      assert.equal(await page.locator('#app-update-confirm').count(), 0);
+      assert.equal(await page.locator('#install-app-update').isVisible(), false);
       assert.deepEqual(await actions(page), [
         { command: 'install_app_update', args: { confirmed: true, version: '0.3.1' } },
       ]);
@@ -1763,7 +1756,6 @@ async function noHorizontalOverflow(page, label) {
       await page.evaluate(() => window.__uiTest.setAppUpdate({ phase: 'ready', received: 1048576 }));
       await visible(page.locator('#install-app-update'));
       await page.locator('#install-app-update').click();
-      await page.locator('#confirm-app-update').click();
       await visible(page.locator('#app-update-error'));
       await page.waitForTimeout(1150);
       assert.match(await page.locator('#app-update-error').textContent(), /安装包验证被拒绝/);
@@ -1776,25 +1768,24 @@ async function noHorizontalOverflow(page, label) {
       ]);
     });
 
-    await test('installation pins the version shown in confirmation when backend state changes before IPC', fixture => {
+    await test('installation pins the displayed version when backend state changes before the upgrade click', fixture => {
       appUpdateFixture(fixture, 'ready');
     }, async page => {
       await page.locator('#settings-open').click();await page.locator('#settings-tab-updates').click();
-      await page.locator('#install-app-update').click();
-      await visible(page.locator('#app-update-confirm'));
-      assert.match(await page.locator('#app-update-confirm-copy').textContent(), /v0\.3\.1/);
+      await visible(page.locator('#install-app-update'));
+      assert.equal(await page.locator('#app-update-latest').textContent(), '0.3.1');
       await page.evaluate(() => {
         // Simulate a backend change just before invoking, before the next poll
-        // can inform the UI. The native contract must receive the confirmed pin.
+        // can inform the UI. The native contract must receive the displayed pin.
         window.__uiTest.setAppUpdate({ version: '0.3.2' });
-        document.getElementById('confirm-app-update').click();
+        document.getElementById('install-app-update').click();
       });
       await visible(page.locator('#app-update-error'));
       assert.match(await page.locator('#app-update-error').textContent(), /版本已变化/);
       assert.equal(await page.evaluate(() => window.__uiTest.state().app_update.phase), 'ready');
       assert.deepEqual(await actions(page), [
         { command: 'install_app_update', args: { confirmed: true, version: '0.3.1' } },
-      ], 'A new backend candidate must not silently replace the user-confirmed installation');
+      ], 'A new backend candidate must not silently replace the version the user clicked');
     });
 
     console.log(`\n${passed} UI contracts passed; viewport 780x600; zero horizontal overflow; zero JavaScript errors.`);

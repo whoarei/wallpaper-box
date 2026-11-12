@@ -2,7 +2,7 @@
 'use strict';
 const invoke=window.__TAURI__.core.invoke,$=id=>document.getElementById(id);
 let state=null,localBusy=false,remoteBusy=false,activeTab='local',lastSelectedDisplay='',lastModules='',toastTimer,localError='',remoteError='';
-let appUpdateBusy=false,appUpdateError='',lastAppPhase='',confirmAppVersion=null,previewBusy=false,renderEpoch=0,lastCurrentArt='',polling=false,refreshRequested=false,taskFilter=false;
+let appUpdateBusy=false,appUpdateError='',lastAppPhase='',previewBusy=false,renderEpoch=0,lastCurrentArt='',polling=false,refreshRequested=false,taskFilter=false;
 const pendingTasks=new Set();
 let settingsTab='general';
 let autoStartBusy=false,autoStartRequested=false,autoStartError='';
@@ -369,7 +369,6 @@ function renderAppUpdate(){
  $('check-app-update').disabled=appUpdateBusy||working;
  $('download-app-update').hidden=phase!=='error'||!update.version;$('download-app-update').disabled=appUpdateBusy||working;
  $('install-app-update').hidden=!ready;$('install-app-update').disabled=appUpdateBusy||!ready;
- $('confirm-app-update').disabled=appUpdateBusy||!ready;
  if(ready&&lastAppPhase!=='ready')toast('新版已就绪，可在设置中重启升级。');
  lastAppPhase=phase;
 }
@@ -542,13 +541,9 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('wallpape
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('playback-menu').open){closePlaybackMenu();$('playback-menu').querySelector('summary').focus();}if(event.key==='Escape'&&$('current-resources').open){$('current-resources').open=false;$('current-resources').querySelector('summary').focus();}});
 $('check-app-update').onclick=()=>runAppUpdate('check_app_update');
 $('download-app-update').onclick=()=>runAppUpdate('download_app_update');
-$('install-app-update').onclick=()=>{if(appUpdateBusy||appUpdate().phase!=='ready')return;confirmAppVersion=appUpdate().version;$('app-update-confirm-copy').textContent=`将退出当前程序并启动 v${confirmAppVersion} 的安装程序。确认现在升级吗？`;$('app-update-confirm').showModal();};
-$('cancel-app-update').onclick=()=>$('app-update-confirm').close();
-$('confirm-app-update').onclick=()=>{
- if(appUpdateBusy||appUpdate().phase!=='ready')return;
- $('app-update-confirm').close();
- if(confirmAppVersion!==appUpdate().version){appUpdateError='更新版本已变化，请重新确认。';renderAppUpdate();return;}
- runAppUpdate('install_app_update',{confirmed:true,version:confirmAppVersion});
+$('install-app-update').onclick=()=>{
+ const update=appUpdate();if(appUpdateBusy||update.phase!=='ready'||!update.version)return;
+ runAppUpdate('install_app_update',{confirmed:true,version:update.version});
 };
 setInterval(update,1000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)update();});window.addEventListener('focus',update);update();
 })();
