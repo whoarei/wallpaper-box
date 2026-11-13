@@ -52,7 +52,7 @@
     "resources": {
       "../../wallpapers/": "wallpapers/",
       "../../display-service/public/docs/architecture.html": "docs/architecture.html",
-      "../../docs/wallpaper-adaptation.html": "docs/wallpaper-adaptation.html",
+      "../../docs/wallpaper-adaptation.md": "docs/wallpaper-adaptation.md",
       "../resources/README.txt": "README.txt"
     },
     "windows": {

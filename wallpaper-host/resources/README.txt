@@ -122,7 +122,7 @@ local/ 保存自定义模块，online/ 保存下载的独立版本及激活记�
 显示器选择、壁纸选择与暂停设置继续保存在 %APPDATA%/local.screen-garden.wallpaper/。
 程序更新缓存位于上述目录的 app-updates/，与用户壁纸目录分开，重启后会重新验签。
 
-壁纸开发规范：docs/wallpaper-adaptation.html，含 v1 接口、兼容说明与完整示例，可离线打开。
+壁纸开发规范：docs/wallpaper-adaptation.md，含 v1 接口、兼容说明与完整示例，可离线阅读。
 历史技术方案：docs/architecture.html，可离线打开。
 程序仓库：https://github.com/whoarei/wallpaper-box
 安装包发布：https://github.com/whoarei/wallpaper-box/releases
