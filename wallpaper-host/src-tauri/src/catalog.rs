@@ -22,10 +22,17 @@ pub struct Module {
     pub version: String,
     pub source: String,
     pub rollback_available: bool,
+    pub settings: Option<SettingsPage>,
+    pub settings_token: String,
     #[serde(skip)]
     pub root: PathBuf,
     #[serde(skip)]
     pub order: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SettingsPage {
+    pub entry: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -45,6 +52,8 @@ pub struct Metadata {
     pub description: String,
     #[serde(default = "default_entry")]
     pub entry: String,
+    #[serde(default)]
+    pub settings: Option<SettingsPage>,
     #[serde(default)]
     pub cover: Option<String>,
     #[serde(default)]
@@ -187,7 +196,14 @@ pub fn metadata(root: &Path) -> Result<Metadata, String> {
     if !meta.entry.to_ascii_lowercase().ends_with(".html") {
         return Err("壁纸入口必须是 HTML。".into());
     }
-    inside_file(root, &meta.entry)?;
+    let playback_entry = inside_file(root, &meta.entry)?;
+    if let Some(page) = &meta.settings {
+        if !page.entry.to_ascii_lowercase().ends_with(".html")
+            || inside_file(root, &page.entry)? == playback_entry
+        {
+            return Err("壁纸设置入口必须是独立的 HTML 页面。".into());
+        }
+    }
     if meta.id.as_deref().is_some_and(|id| !valid_id(id)) {
         return Err("壁纸 ID 无效。".into());
     }
@@ -319,6 +335,21 @@ impl Library {
         let cover = cover
             .filter(|relative| inside_file(folder, relative).is_ok())
             .map(|relative| format!("/{key}/{relative}"));
+        use sha2::{Digest, Sha256};
+        let settings_token = format!(
+            "{:x}",
+            Sha256::digest(
+                format!(
+                    "{}\n{}\n{}",
+                    folder.canonicalize().map_err(|e| e.to_string())?.display(),
+                    meta.version,
+                    meta.settings
+                        .as_ref()
+                        .map_or("", |page| page.entry.as_str())
+                )
+                .as_bytes()
+            )
+        );
         Ok(Some(Module {
             id: key.clone(),
             name: if meta.name.is_empty() {
@@ -329,6 +360,8 @@ impl Library {
             subtitle: meta.subtitle.chars().take(80).collect(),
             description: meta.description.chars().take(300).collect(),
             href: format!("/{key}/{}", meta.entry),
+            settings: meta.settings,
+            settings_token,
             cover,
             tags: meta
                 .tags
@@ -549,6 +582,46 @@ mod tests {
         )
         .unwrap();
         folder
+    }
+
+    #[test]
+    fn optional_settings_pages_are_confined_to_the_package_and_version_bound() {
+        let temporary = tempfile::tempdir().unwrap();
+        let builtin = temporary.path().join("builtin");
+        let folder = scene(&builtin, "scene", "1.0.0");
+        assert!(metadata(&folder).unwrap().settings.is_none());
+        fs::write(folder.join("settings.html"), "<html></html>").unwrap();
+        let library = Library::prepare(builtin, temporary.path().join("user")).unwrap();
+        for entry in [
+            "../settings.html",
+            "index.html",
+            "missing.html",
+            "settings.js",
+            "http://example.com/settings.html",
+        ] {
+            fs::write(
+                folder.join("module.json"),
+                serde_json::json!({"settings":{"entry":entry}}).to_string(),
+            )
+            .unwrap();
+            assert!(metadata(&folder).is_err(), "{entry}");
+        }
+        fs::write(
+            folder.join("module.json"),
+            r#"{"settings":{"entry":"settings.html"}}"#,
+        )
+        .unwrap();
+        let original = library.discover().0.remove(0);
+        assert_eq!(original.settings.unwrap().entry, "settings.html");
+        fs::write(
+            folder.join("module.json"),
+            r#"{"version":"1.0.1","settings":{"entry":"settings.html"}}"#,
+        )
+        .unwrap();
+        assert_ne!(
+            original.settings_token,
+            library.discover().0.remove(0).settings_token
+        );
     }
 
     #[test]

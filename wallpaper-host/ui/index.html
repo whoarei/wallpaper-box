@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>壁纸盒子 · 壁纸管理</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="online.css"><script src="app.js" defer></script><script src="window-controls.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>壁纸盒子 · 壁纸管理</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="online.css"><script src="wallpaper-settings.js" defer></script><script src="app.js" defer></script><script src="window-controls.js" defer></script></head>
 <body>
 <header class="topbar" data-window-drag>
  <div class="brand"><span class="mark" aria-hidden="true">≈</span><strong>壁纸盒子</strong></div>
@@ -32,6 +32,7 @@
  <div class="settings-layout">
   <nav class="settings-nav" role="tablist" aria-label="设置分类" aria-orientation="vertical">
    <button id="settings-tab-general" role="tab" aria-selected="true" aria-controls="settings-general-panel" data-settings-tab="general">常规</button>
+   <button id="settings-tab-wallpaper" role="tab" aria-selected="false" aria-controls="settings-wallpaper-panel" tabindex="-1" data-settings-tab="wallpaper">壁纸设置</button>
    <button id="settings-tab-repositories" role="tab" aria-selected="false" aria-controls="settings-repositories-panel" tabindex="-1" data-settings-tab="repositories">壁纸仓库</button>
    <button id="settings-tab-proxy" role="tab" aria-selected="false" aria-controls="settings-proxy-panel" tabindex="-1" data-settings-tab="proxy">网络代理</button>
    <button id="settings-tab-updates" role="tab" aria-selected="false" aria-controls="app-update-panel" tabindex="-1" data-settings-tab="updates">程序更新</button>
@@ -51,6 +52,14 @@
       <div class="setting-row"><span><strong>壁纸文件夹</strong><small>已下载与导入的壁纸</small></span><div class="import-actions"><button id="open-folder" class="text-button">打开 ↗</button><button id="refresh" class="text-button">重新扫描</button></div></div>
      </div>
     </div>
+   </section>
+   <section id="settings-wallpaper-panel" class="settings-panel wallpaper-settings-panel" role="tabpanel" aria-labelledby="settings-tab-wallpaper" tabindex="0" hidden>
+    <div class="settings-panel-heading"><div><h3>壁纸设置</h3><p>为每张壁纸定制喜欢的效果</p></div><button id="wallpaper-settings-reload" class="text-button">重新加载</button></div>
+    <div class="wallpaper-settings-picker"><label for="wallpaper-settings-select">选择壁纸</label><select id="wallpaper-settings-select" class="settings-select" disabled></select></div>
+    <p id="wallpaper-settings-empty" class="empty">还没有已安装的壁纸。</p>
+    <div id="wallpaper-settings-frame" class="wallpaper-settings-frame"></div>
+    <div class="settings-feedback"><p id="wallpaper-settings-error" class="error" role="alert" hidden></p></div>
+    <div class="settings-panel-actions"><p id="wallpaper-settings-status" class="settings-status" role="status" aria-live="polite"></p></div>
    </section>
    <section id="settings-repositories-panel" class="settings-panel repositories-panel" role="tabpanel" aria-labelledby="settings-tab-repositories" tabindex="0" hidden>
     <div class="settings-panel-heading"><div><h3 id="repositories-title">壁纸仓库</h3><p>管理“发现”中的壁纸来源</p></div><button id="add-repository" class="text-button settings-add">＋ 添加仓库</button></div>

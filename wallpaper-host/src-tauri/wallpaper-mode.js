@@ -7,7 +7,7 @@
   const capabilities = Object.freeze({
     pointer: desktop ? 'relayed' : 'native', pointerMove: true,
     keyboard: !desktop, fullscreen: !desktop && Boolean(document.fullscreenEnabled),
-    pause: desktop, actions: desktop
+    pause: desktop, actions: desktop, settings: true
   });
   // Loading desktop documents remain suspended until native state is confirmed.
   let state = Object.freeze({paused: desktop, pauseReason: desktop ? 'system' : 'none'});
@@ -18,9 +18,25 @@
   const own = (name, value) => Object.defineProperty(window, name, {
     value, writable: false, configurable: false
   });
+  let settingsModule = null, settingsRevision = -1, settings = {};
   own('wallpaperHost', Object.freeze({
-    protocolVersion: 1, mode: config.mode, instanceId, capabilities, getState: () => state
+    protocolVersion: 1, mode: config.mode, instanceId, capabilities, getState: () => state,
+    getSettings: () => JSON.parse(JSON.stringify(settings))
   }));
+  own('__SCREEN_GARDEN_SET_SETTINGS', next => {
+    if (!next || typeof next.moduleId !== 'string' || !next.moduleId ||
+        !Number.isSafeInteger(next.revision) || next.revision < 0 ||
+        !next.settings || Array.isArray(next.settings) || typeof next.settings !== 'object' ||
+        (settingsModule !== null && settingsModule !== next.moduleId) || next.revision <= settingsRevision) return;
+    let serialized;
+    try { serialized = JSON.stringify(next.settings); } catch { return; }
+    if (new TextEncoder().encode(serialized).length > 32768) return;
+    settingsModule = next.moduleId; settingsRevision = next.revision; settings = JSON.parse(serialized);
+    // Configuration delivery is independent of animation and pause state.
+    window.dispatchEvent(new CustomEvent('wallpaperhost:settingschange', {
+      detail: {revision: settingsRevision, settings: JSON.parse(serialized)}
+    }));
+  });
   function attributes() {
     if (!document.documentElement || !desktop) return;
     document.documentElement.dataset.screenGardenWallpaper = 'true';

@@ -58,6 +58,7 @@ pub(super) fn sync_state(app: &AppHandle, label: &str) {
             .map(|(id, _)| state(&data, id))
     };
     if let (Some(pause), Some(window)) = (pause, app.get_webview_window(label)) {
+        super::wallpaper_settings::sync(app, label);
         let _ = window.eval(pause.script());
     }
 }

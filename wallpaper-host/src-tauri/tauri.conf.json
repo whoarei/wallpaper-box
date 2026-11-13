@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' asset: http://asset.localhost; img-src 'self' http://wallpaper.localhost data:; style-src 'self'; script-src 'self'; connect-src ipc: http://ipc.localhost"
+      "csp": "default-src 'self' asset: http://asset.localhost; img-src 'self' http://wallpaper.localhost data:; style-src 'self'; script-src 'self'; connect-src ipc: http://ipc.localhost; frame-src http://wallpaper.localhost"
     }
   },
   "plugins": {

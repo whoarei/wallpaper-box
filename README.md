@@ -36,4 +36,4 @@
 
 [详细使用与开发说明](docs/guide.md) · [默认 Gitee 壁纸库](https://gitee.com/xishuaiya/wallpapers) · [GitHub 壁纸库](https://github.com/whoarei/wallpapers)
 
-网页壁纸开发者请参考 [壁纸适配规范（HTML）](docs/wallpaper-adaptation.html)，包含运行模式、输入、暂停和可选操作接口，以及完整示例。主程序从 **v0.10.0** 起提供 v1 接口；旧内容包的基本播放与页面操作继续可用。
+网页壁纸开发者请参考 [壁纸适配规范（HTML）](docs/wallpaper-adaptation.html)，包含运行模式、输入、暂停、可选操作接口，以及完整示例。主程序从 **v0.10.0** 起提供基础 v1 接口；旧内容包的基本播放与页面操作继续可用。当前开发代码新增的[壁纸设置通信扩展](docs/wallpaper-adaptation.html#wallpaper-settings)也已写入规范，包括配置读取、变更事件与设置页 SDK；正式 v0.10.2 尚不支持该扩展，需单独检测设置能力。

@@ -259,6 +259,15 @@ window.wallpaperApp=wallpaperAdapter.createActions([
  {id:'flow',label:'切换水流',disabledReason:()=>paused?'水族箱已暂停，请先继续画面。':undefined,
   run:()=>{switchFlow();return {ok:true,data:{flow}};}}
 ]);
+function applySettings(settings){
+ lighting=Number.isInteger(settings.lighting)&&settings.lighting>=0&&settings.lighting<3?settings.lighting:0;
+ flow=Number.isInteger(settings.flow)&&settings.flow>=0&&settings.flow<3?settings.flow:0;
+ lightValue=lighting;
+ document.getElementById('light-label').textContent=['晨光','暮色','月光'][lighting];
+ document.getElementById('flow-label').textContent=['缓流','轻涌','静水'][flow];
+}
+window.addEventListener('wallpaperhost:settingschange',event=>applySettings(event.detail.settings));
+applySettings(wallpaperAdapter.context().host?.getSettings?.()||{});
 wallpaperAdapter.ready(configureEnvironment);
 
 render();requestAnimationFrame(tick);

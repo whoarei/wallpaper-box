@@ -11,6 +11,8 @@ fn main() {
         "preview_wallpaper",
         "pause_wallpaper",
         "invoke_wallpaper_action",
+        "get_wallpaper_settings",
+        "set_wallpaper_settings",
         "remove_wallpaper",
         "auto_pause",
         "set_auto_start",

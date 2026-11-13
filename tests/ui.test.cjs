@@ -36,7 +36,7 @@ function serveUi() {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (pathname === '/favicon.ico') { response.writeHead(204).end(); return; }
     const filename = pathname === '/' ? 'index.html' : pathname.slice(1);
-    if (!['index.html', 'app.js', 'app.css', 'settings.css', 'online.css', 'icon.png', 'window-controls.js'].includes(filename)) {
+    if (!['index.html', 'app.js', 'app.css', 'settings.css', 'online.css', 'icon.png', 'window-controls.js', 'wallpaper-settings.js'].includes(filename)) {
       response.writeHead(404).end(); return;
     }
     response.writeHead(200, { 'Content-Type': mime[path.extname(filename)], 'Cache-Control': 'no-store' });
@@ -624,6 +624,8 @@ async function noHorizontalOverflow(page, label) {
       }
       await settingsScreenshot(page,'settings-general');
       await page.locator('#settings-tab-general').focus();await page.keyboard.press('ArrowDown');
+      assert.equal(await page.locator('#settings-tab-wallpaper').getAttribute('aria-selected'),'true');
+      await page.keyboard.press('ArrowDown');
       assert.equal(await page.locator('#settings-tab-repositories').getAttribute('aria-selected'),'true');
       assert.equal(await page.locator('#repository-url-0').isVisible(),true);
       assert.equal(await page.locator('#auto-pause').isVisible(),false);

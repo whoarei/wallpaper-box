@@ -15,5 +15,8 @@
   "type": "web",
   "version": "1.0.1",
   "minAppVersion": "0.2.0",
-  "cover": "cover.jpg"
+  "cover": "cover.jpg",
+  "settings": {
+    "entry": "settings.html"
+  }
 }

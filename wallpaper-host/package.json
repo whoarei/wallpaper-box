@@ -11,6 +11,7 @@
     "test:aquarium": "node ../tests/aquarium.test.cjs",
     "test:pinewind": "node ../tests/pinewind.test.cjs",
     "test:protocol": "node ../tests/wallpaper-protocol.test.cjs",
+    "test:settings": "node ../tests/wallpaper-settings.test.cjs",
     "test:modules": "node ../tests/wallpaper-modules.test.cjs"
   },
   "devDependencies": {

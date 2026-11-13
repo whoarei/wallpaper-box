@@ -1,7 +1,7 @@
 use super::*;
 use tauri::WebviewWindow;
 
-fn manager(window: &WebviewWindow) -> Result<(), String> {
+pub(super) fn manager(window: &WebviewWindow) -> Result<(), String> {
     if window.label() != "manager" {
         return Err("壁纸页面没有程序管理权限。".into());
     }

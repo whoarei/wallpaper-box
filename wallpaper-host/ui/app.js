@@ -325,8 +325,9 @@ function selectSettingsTab(name,focus=false){
  settingsTab=name;
  document.querySelectorAll('[data-settings-tab]').forEach(button=>{const selected=button===target;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;$(button.getAttribute('aria-controls')).hidden=!selected;});
  if(focus)target.focus({preventScroll:true});
+ if(state)window.wallpaperSettingsPanel.render(state,name==='wallpaper'&&$('settings-dialog').open);
 }
-function openSettings(name=settingsTab){selectSettingsTab(name);showDialog('settings-dialog');$('settings-tab-'+name).focus({preventScroll:true});}
+function openSettings(name=settingsTab){selectSettingsTab(name);showDialog('settings-dialog');if(state)window.wallpaperSettingsPanel.render(state,name==='wallpaper');$('settings-tab-'+name).focus({preventScroll:true});}
 function openAppUpdate(){openSettings('updates');}
 function closePlaybackMenu(){$('playback-menu').open=false;}
 async function direct(command,args={},message=''){
@@ -423,6 +424,7 @@ function renderBusy(){
 }
 function render(data){
  state=data;$('version').textContent=data.version;renderAppUpdate();renderAutoStart();renderProxy();renderRepositories();
+ window.wallpaperSettingsPanel.render(data,settingsTab==='wallpaper'&&$('settings-dialog').open);
  const context=JSON.stringify([data.proxy,data.wallpaper_repositories,data.online?.catalog,data.online?.checked_at]);if(context!==historyContext){historyContext=context;resetHistory();}
  for(const [id,notice] of historyDownloads){const module=data.modules.find(module=>module.id===id),task=downloadTask(id);if(!task&&module?.source==='online'&&module.version===notice.version){historyDownloads.delete(id);toast(notice.name+'已替换为 v'+notice.version,3000);}}
  const monitor=data.displays.find(d=>d.id===data.selected_monitor),playing=current();

@@ -275,6 +275,18 @@ window.wallpaperApp=wallpaperAdapter.createActions([
  {id:'train',label:'召唤小火车',disabledReason:()=>paused?'小镇已暂停，请先继续画面。':undefined,
   run:()=>{summon();return {ok:true};}}
 ]);
+function applySettings(settings){
+ phaseMode=Number.isInteger(settings.phase)&&settings.phase>=0&&settings.phase<4?settings.phase:0;
+ raining=settings.raining===true;
+ document.getElementById('phaseLabel').textContent=['流动时光','晴朗白昼','温柔黄昏','星光夜晚'][phaseMode];
+ document.getElementById('weatherIcon').textContent=raining?'☂':'☀';
+ document.getElementById('weatherLabel').textContent=raining?'听雨':'晴天';
+ document.getElementById('weather').setAttribute('aria-pressed',String(raining));
+ document.getElementById('story').textContent=raining?'雨落在屋檐上，今天也不必着急。':'日子很慢，风也很轻。';
+ clock();
+}
+window.addEventListener('wallpaperhost:settingschange',event=>applySettings(event.detail.settings));
+applySettings(wallpaperAdapter.context().host?.getSettings?.()||{});
 wallpaperAdapter.ready(configureEnvironment);
 
 render();requestAnimationFrame(frame);

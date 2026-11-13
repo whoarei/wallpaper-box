@@ -1,6 +1,7 @@
 mod commands;
 mod download_workers;
 mod wallpaper_actions;
+mod wallpaper_settings;
 use crate::{
     catalog::{self, Module},
     desktop::{self, Attachment, Display},
@@ -42,6 +43,8 @@ struct Settings {
     proxy: crate::network::ProxySettings,
     #[serde(default = "crate::repositories::defaults")]
     wallpaper_repositories: Vec<crate::repositories::Repository>,
+    #[serde(default)]
+    wallpaper_settings: BTreeMap<String, crate::wallpaper_settings::Snapshot>,
 }
 fn yes() -> bool {
     true
@@ -55,6 +58,7 @@ impl Default for Settings {
             auto_start: true,
             proxy: crate::network::ProxySettings::default(),
             wallpaper_repositories: crate::repositories::defaults(),
+            wallpaper_settings: BTreeMap::new(),
         }
     }
 }
@@ -422,6 +426,11 @@ fn preview(app: &AppHandle, module_id: &str) -> Result<(), String> {
         .center()
         .data_directory(profile)
         .initialization_script(crate::wallpaper_protocol::initialization_script(false))
+        .on_page_load(|window, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                wallpaper_settings::sync(window.app_handle(), window.label());
+            }
+        })
         .on_navigation(|url| {
             url.scheme() == "http"
                 && url.host_str() == Some("wallpaper.localhost")
@@ -1210,12 +1219,17 @@ pub fn run() {
                     );
                     return;
                 };
-                let (modules, scope) = {
+                let (modules, scope, settings) = {
                     let data = host.data.lock().unwrap();
-                    (
-                        data.modules.clone(),
-                        data.resource_scopes.get(&window_label).cloned(),
-                    )
+                    let scope = data.resource_scopes.get(&window_label).cloned();
+                    let settings = scope.as_ref().map(|id| {
+                        data.settings
+                            .wallpaper_settings
+                            .get(id)
+                            .cloned()
+                            .unwrap_or_default()
+                    });
+                    (data.modules.clone(), scope, settings)
                 };
                 if window_label != "manager" && scope.is_none() {
                     responder.respond(
@@ -1226,7 +1240,12 @@ pub fn run() {
                     );
                     return;
                 }
-                responder.respond(crate::protocol::serve(&modules, scope.as_deref(), request));
+                responder.respond(crate::protocol::serve_with_settings(
+                    &modules,
+                    scope.as_deref(),
+                    request,
+                    settings.as_ref(),
+                ));
             });
         })
         .plugin(tauri_plugin_single_instance::init(|app, arguments, _| {
@@ -1246,6 +1265,8 @@ pub fn run() {
             commands::preview_wallpaper,
             commands::pause_wallpaper,
             commands::invoke_wallpaper_action,
+            wallpaper_settings::get_wallpaper_settings,
+            wallpaper_settings::set_wallpaper_settings,
             commands::remove_wallpaper,
             commands::auto_pause,
             commands::set_auto_start,

@@ -8,6 +8,30 @@ use tauri::http::{Request, Response, StatusCode};
 const MAX_BODY: u64 = 64 * 1024 * 1024;
 const MAX_RANGE_BODY: u64 = 8 * 1024 * 1024;
 const CONTENT_POLICY: &str = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'";
+const SETTINGS_ANCESTORS: &str =
+    "frame-ancestors tauri://localhost http://tauri.localhost https://tauri.localhost";
+
+fn initialize_html(bytes: Vec<u8>, script: &str) -> Vec<u8> {
+    let mut html = String::from_utf8_lossy(&bytes).into_owned();
+    let lower = html.to_ascii_lowercase();
+    let head = lower.match_indices("<head").find_map(|(start, _)| {
+        let next = lower.as_bytes().get(start + 5)?;
+        if *next != b'>' && !next.is_ascii_whitespace() {
+            return None;
+        }
+        lower[start..].find('>').map(|end| start + end + 1)
+    });
+    // Keep a leading doctype so documents without an explicit head retain standards mode.
+    let offset = head
+        .or_else(|| {
+            lower
+                .find("<!doctype")
+                .and_then(|i| lower[i..].find('>').map(|end| i + end + 1))
+        })
+        .unwrap_or(0);
+    html.insert_str(offset, &format!("<script>{script}</script>"));
+    html.into_bytes()
+}
 
 fn unavailable(status: StatusCode) -> Response<Vec<u8>> {
     Response::builder()
@@ -82,6 +106,15 @@ pub fn serve(
     allowed_module: Option<&str>,
     request: Request<Vec<u8>>,
 ) -> Response<Vec<u8>> {
+    serve_with_settings(modules, allowed_module, request, None)
+}
+
+pub fn serve_with_settings(
+    modules: &[Module],
+    allowed_module: Option<&str>,
+    request: Request<Vec<u8>>,
+    settings: Option<&crate::wallpaper_settings::Snapshot>,
+) -> Response<Vec<u8>> {
     if request.method() != "GET" && request.method() != "HEAD" {
         return Response::builder()
             .status(StatusCode::METHOD_NOT_ALLOWED)
@@ -103,6 +136,20 @@ pub fn serve(
         Ok(decoded) => decoded,
         Err(_) => return unavailable(StatusCode::BAD_REQUEST),
     };
+    if decoded == "/__wallpaper_host__/settings.js" {
+        let bytes = include_bytes!("../wallpaper-settings.js");
+        return Response::builder()
+            .header("Content-Type", "application/javascript; charset=utf-8")
+            .header("Cache-Control", "no-store")
+            .header("X-Content-Type-Options", "nosniff")
+            .header("Content-Length", bytes.len().to_string())
+            .body(if request.method() == "HEAD" {
+                Vec::new()
+            } else {
+                bytes.to_vec()
+            })
+            .expect("valid settings SDK response");
+    }
     let Some(path) = decoded.strip_prefix('/') else {
         return unavailable(StatusCode::NOT_FOUND);
     };
@@ -132,12 +179,40 @@ pub fn serve(
         .and_then(|extension| extension.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
+    let settings_page = module
+        .settings
+        .as_ref()
+        .is_some_and(|page| page.entry == relative);
+    let policy = if settings_page {
+        CONTENT_POLICY.replace("frame-ancestors 'none'", SETTINGS_ANCESTORS)
+    } else {
+        CONTENT_POLICY.to_string()
+    };
     let mut builder = Response::builder()
         .header("Content-Type", mime(&extension))
         .header("Cache-Control", "no-store")
         .header("X-Content-Type-Options", "nosniff")
         .header("Accept-Ranges", "bytes")
-        .header("Content-Security-Policy", CONTENT_POLICY);
+        .header("Content-Security-Policy", policy);
+    if let Some(settings) = settings.filter(|_| matches!(extension.as_str(), "html" | "htm")) {
+        if length > MAX_BODY {
+            return unavailable(StatusCode::PAYLOAD_TOO_LARGE);
+        }
+        let mut bytes = Vec::new();
+        if file.take(MAX_BODY + 1).read_to_end(&mut bytes).is_err() || bytes.len() as u64 != length
+        {
+            return unavailable(StatusCode::NOT_FOUND);
+        }
+        let bytes = initialize_html(bytes, &settings.script(id));
+        return builder
+            .header("Content-Length", bytes.len().to_string())
+            .body(if request.method() == "HEAD" {
+                Vec::new()
+            } else {
+                bytes
+            })
+            .expect("valid initialized HTML response");
+    }
     let (start, end) = if let Some(range) = request.headers().get("Range") {
         let Some((start, end)) = range
             .to_str()
@@ -190,6 +265,76 @@ mod tests {
         fs::write(builtin.join("scene/assets/fish 1.png"), b"image").unwrap();
         let library = catalog::Library::prepare(builtin, root.join("user")).unwrap();
         library.discover().0
+    }
+
+    #[test]
+    fn only_declared_settings_pages_can_be_framed_and_initial_config_precedes_scene_scripts() {
+        let temporary = tempfile::tempdir().unwrap();
+        let mut modules = modules(temporary.path());
+        let module = &mut modules[0];
+        fs::write(
+            module.root.join("settings.html"),
+            "<!doctype html><html><HEAD><script>readConfig()</script></HEAD></html>",
+        )
+        .unwrap();
+        module.settings = Some(catalog::SettingsPage {
+            entry: "settings.html".into(),
+        });
+        let snapshot = crate::wallpaper_settings::Snapshot::default()
+            .updated(
+                0,
+                serde_json::json!({"text":"</script><script>bad()</script>"}),
+            )
+            .unwrap();
+        let request = || {
+            Request::builder()
+                .uri("/scene/settings.html")
+                .body(Vec::new())
+                .unwrap()
+        };
+        let response = serve_with_settings(&modules, Some("scene"), request(), Some(&snapshot));
+        let html = String::from_utf8(response.body().clone()).unwrap();
+        assert!(
+            html.find("__SCREEN_GARDEN_SET_SETTINGS").unwrap() < html.find("readConfig()").unwrap()
+        );
+        assert!(!html.contains("<script>bad()"));
+        assert_eq!(
+            response.headers()["Content-Length"],
+            response.body().len().to_string()
+        );
+        let policy = response.headers()["Content-Security-Policy"]
+            .to_str()
+            .unwrap();
+        assert!(policy.contains(SETTINGS_ANCESTORS));
+        assert!(!policy.contains("frame-ancestors *"));
+        assert!(serve(
+            &modules,
+            None,
+            Request::builder()
+                .uri("/scene/index.html")
+                .body(Vec::new())
+                .unwrap()
+        )
+        .headers()["Content-Security-Policy"]
+            .to_str()
+            .unwrap()
+            .contains("frame-ancestors 'none'"));
+        assert_eq!(
+            serve(&modules, Some("other"), request()).status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            serve(
+                &modules,
+                None,
+                Request::builder()
+                    .uri("/__wallpaper_host__/settings.js")
+                    .body(Vec::new())
+                    .unwrap()
+            )
+            .headers()["Content-Type"],
+            "application/javascript; charset=utf-8"
+        );
     }
 
     #[test]

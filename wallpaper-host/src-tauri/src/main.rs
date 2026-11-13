@@ -15,6 +15,7 @@ mod protocol;
 mod repositories;
 mod resource_usage;
 mod wallpaper_protocol;
+mod wallpaper_settings;
 
 fn main() {
     host::run();
