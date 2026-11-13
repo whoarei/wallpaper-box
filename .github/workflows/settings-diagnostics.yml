@@ -1,0 +1,17 @@
+name: Settings first-save diagnostics
+on:
+  push:
+    branches: [diagnostics/settings-first-save]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts --prefix wallpaper-host
+      - run: node tests/settings-first-save-diagnostic.cjs
