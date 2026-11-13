@@ -15,5 +15,12 @@
   "type": "web",
   "version": "1.0.1",
   "minAppVersion": "0.2.0",
-  "cover": "cover.jpg"
+  "cover": "cover.jpg",
+  "locales": {
+    "en": {
+      "name": "Pinewind Town",
+      "subtitle": "PINEWIND",
+      "description": "Forest cottages, changing days and nights, and a little train bound for a slower life."
+    }
+  }
 }

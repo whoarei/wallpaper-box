@@ -15,5 +15,12 @@
   "type": "web",
   "version": "1.0.1",
   "minAppVersion": "0.2.0",
-  "cover": "cover.jpg"
+  "cover": "cover.jpg",
+  "locales": {
+    "en": {
+      "name": "Stillwater Aquarium",
+      "subtitle": "STILLWATER AQUARIUM",
+      "description": "An aquarium of plants and soft light, with fish drifting by. Click the water to feed them."
+    }
+  }
 }

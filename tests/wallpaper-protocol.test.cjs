@@ -16,8 +16,8 @@ window.wallpaperApp={protocolVersion:1,
  invoke:request=>{window.sceneCount++;return {ok:true,requestId:request.requestId,data:{total:window.sceneCount}}}
 };
 </script>`;
-function initialization(mode='desktop',pause={paused:false,pauseReason:'none'}){
- return 'window.originalRAF=window.requestAnimationFrame;('+wrapper+')('+JSON.stringify({mode})+');'+
+function initialization(mode='desktop',pause={paused:false,pauseReason:'none'},locale='zh-CN'){
+ return 'window.originalRAF=window.requestAnimationFrame;('+wrapper+')('+JSON.stringify({mode,locale})+');'+
   'window.initialHostState=wallpaperHost.getState();window.earlyAction=__SCREEN_GARDEN_INVOKE_ACTION('+
   JSON.stringify({protocolVersion:1,instanceId:'replaced-below',requestId:'early',actionId:'burst'}).replace('"replaced-below"','wallpaperHost.instanceId')+
   ').result;document.addEventListener("DOMContentLoaded",()=>__SCREEN_GARDEN_SET_PAUSED('+JSON.stringify(pause)+'),{once:true});';
@@ -27,20 +27,20 @@ function initialization(mode='desktop',pause={paused:false,pauseReason:'none'}){
   if(request.url==='/favicon.ico'){response.writeHead(204).end();return;}
   const mode=new URL(request.url,'http://localhost').searchParams.get('mode')||'desktop';
   response.writeHead(200,{'Content-Type':'text/html;charset=utf-8'});
-  response.end('<!doctype html><html><head>'+(mode==='browser'?'':'<script>'+initialization(mode)+'</script>')+'</head><body>'+scene+'</body></html>');
+  response.end('<!doctype html><html><head>'+(mode==='browser'?'':'<script>'+initialization(mode,undefined,new URL(request.url,'http://localhost').searchParams.get('locale')||'zh-CN')+'</script>')+'</head><body>'+scene+'</body></html>');
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const address='http://127.0.0.1:'+server.address().port;
  const browser=await chromium.launch({headless:true,...(process.env.EDGE_PATH?{executablePath:process.env.EDGE_PATH}:{channel:'msedge'})});
  let passed=0;
- async function test(name,body,mode='desktop'){
+ async function test(name,body,mode='desktop',locale='zh-CN'){
   const context=await browser.newContext({viewport:{width:1000,height:700}}),page=await context.newPage(),errors=[],external=[];
   page.on('pageerror',error=>errors.push(error.message));
   await context.route('**/*',route=>{
    if(new URL(route.request().url()).origin!==address){external.push(route.request().url());return route.abort();}
    return route.continue();
   });
-  await page.clock.install();await page.goto(address+'/?mode='+mode);
+  await page.clock.install();await page.goto(address+'/?mode='+mode+'&locale='+locale);
   await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+100));
   try{await body(page);assert.deepEqual(errors,[]);assert.deepEqual(external,[]);passed++;console.log('PASS '+name);}
   finally{await context.close();}
@@ -57,7 +57,7 @@ function initialization(mode='desktop',pause={paused:false,pauseReason:'none'}){
     frozen:Object.isFrozen(wallpaperHost)&&Object.isFrozen(wallpaperHost.capabilities)&&Object.isFrozen(wallpaperHost.getState()),
     descriptor:Object.getOwnPropertyDescriptor(window,'wallpaperHost'),id:wallpaperHost.instanceId
    }));
-   assert.deepEqual(info.initial,{paused:true,pauseReason:'system'});assert.equal(info.loading.code,'NOT_READY');
+   assert.deepEqual(info.initial,{paused:true,pauseReason:'system',locale:'zh-CN'});assert.equal(info.loading.code,'NOT_READY');
    assert.equal(info.mode,'desktop');assert.equal(info.caps.keyboard,false);assert.equal(info.caps.fullscreen,false);
    assert.equal(info.frozen,true);assert.equal(info.descriptor.writable,false);assert.equal(info.descriptor.configurable,false);
    assert.ok(info.id.length>0&&info.id.length<=128);
@@ -82,11 +82,37 @@ function initialization(mode='desktop',pause={paused:false,pauseReason:'none'}){
     __SCREEN_GARDEN_SET_PAUSED({paused:true,pauseReason:'none'});
    });
    await page.clock.runFor(1000);assert.equal(await page.evaluate(()=>frameCount),before);
-   assert.deepEqual(await page.evaluate(()=>events),[{paused:true,pauseReason:'occluded'},{paused:true,pauseReason:'manual'}]);
-   assert.deepEqual(await page.evaluate(()=>oldSnapshot),{paused:false,pauseReason:'none'});
+   assert.deepEqual(await page.evaluate(()=>events),[{paused:true,pauseReason:'occluded',locale:'zh-CN'},{paused:true,pauseReason:'manual',locale:'zh-CN'}]);
+   assert.deepEqual(await page.evaluate(()=>oldSnapshot),{paused:false,pauseReason:'none',locale:'zh-CN'});
    await page.evaluate(()=>__SCREEN_GARDEN_SET_PAUSED({paused:false,pauseReason:'none'}));
    await page.clock.runFor(100);assert.ok(await page.evaluate(()=>frameCount)>before);
   });
+  for(const mode of ['desktop','preview'])await test('initial English locale is available before scene scripts in '+mode,async page=>{
+   assert.equal(await page.evaluate(()=>initialHostState.locale),'en');
+   assert.equal(await page.evaluate(()=>wallpaperHost.getState().locale),'en');
+  },mode,'en');
+  for(const mode of ['desktop','preview'])await test('locale updates are additive, immutable and independent of pause in '+mode,async page=>{
+   await page.evaluate(()=>{
+    window.localeEvents=[];window.previousState=wallpaperHost.getState();window.previousInstance=wallpaperHost.instanceId;
+    addEventListener('wallpaperhost:statechange',event=>localeEvents.push(event.detail));
+    __SCREEN_GARDEN_SET_LOCALE('en');
+    __SCREEN_GARDEN_SET_LOCALE('en');
+    __SCREEN_GARDEN_SET_LOCALE('invalid');
+    __SCREEN_GARDEN_SET_LOCALE(null);
+   });
+   const info=await page.evaluate(()=>({state:wallpaperHost.getState(),previous:previousState,
+    events:localeEvents,frozen:Object.isFrozen(wallpaperHost.getState()),same:wallpaperHost.instanceId===previousInstance,count:sceneCount}));
+   assert.deepEqual(info.state,{paused:false,pauseReason:'none',locale:'en'});
+   assert.equal(info.previous.locale,'zh-CN');assert.equal(info.events.length,1);
+   assert.equal(info.frozen,true);assert.equal(info.same,true);assert.equal(info.count,0);
+   if(mode==='desktop'){
+    await page.evaluate(()=>__SCREEN_GARDEN_SET_PAUSED({paused:true,pauseReason:'manual'}));
+    assert.equal(await page.evaluate(()=>wallpaperHost.getState().locale),'en');
+    assert.equal((await invoke(page,'english-paused')).message,'The wallpaper is paused. Resume playback first.');
+   }
+   await page.evaluate(()=>__SCREEN_GARDEN_SET_LOCALE('zh-CN'));
+   assert.equal(await page.evaluate(()=>wallpaperHost.getState().locale),'zh-CN');
+  },mode);
   await test('operations execute once and stale documents cannot authorize a new scene',async page=>{
    assert.equal((await invoke(page,'r1')).data.total,1);
    assert.equal((await invoke(page,'r1')).data.total,1);

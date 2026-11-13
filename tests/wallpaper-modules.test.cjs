@@ -14,7 +14,7 @@ const modules=[
   const url=new URL(request.url,'http://localhost');
   if(url.pathname==='/favicon.ico'){response.writeHead(204).end();return;}
   const [,id,file]=url.pathname.split('/');
-  if(!modules.some(module=>module.id===id)||!['index.html','wallpaper-adapter.js','aquarium.js','aquarium.css'].includes(file)){
+  if(!modules.some(module=>module.id===id)||!['index.html','wallpaper-adapter.js','aquarium.js','aquarium.css','i18n.js','translations.js'].includes(file)){
    response.writeHead(404).end();return;
   }
   let body=fs.readFileSync(path.join(root,id,file));
@@ -35,7 +35,7 @@ const modules=[
  let passed=0;
  try{
   for(const module of modules)for(const mode of ['desktop','preview','browser','legacy']){
-   const context=await browser.newContext({viewport:{width:960,height:600}}),page=await context.newPage(),errors=[],external=[];
+   const context=await browser.newContext({locale:'zh-CN',viewport:{width:960,height:600}}),page=await context.newPage(),errors=[],external=[];
    page.on('pageerror',error=>errors.push(error.message));
    await context.route('**/*',route=>{
     if(new URL(route.request().url()).origin!==address){external.push(route.request().url());return route.abort();}
@@ -89,6 +89,22 @@ const modules=[
        await page.screenshot({path:path.join(process.env.ARTIFACTS_DIR,module.id+'-'+viewport.width+'.png')});
       }
      }
+    }
+    if(mode==='desktop'||mode==='preview'){
+     const before=await page.evaluate(id=>(id==='aquarium'?aquarium:pinewind).getState(),module.id);
+     await page.evaluate(()=>__SCREEN_GARDEN_SET_LOCALE('en'));
+     const after=await page.evaluate(id=>(id==='aquarium'?aquarium:pinewind).getState(),module.id);
+     assert.deepEqual(after,before,'Language changes must preserve scene state');
+     assert.equal(await page.locator('html').getAttribute('lang'),'en');
+     const labels=await page.evaluate(()=>wallpaperApp.getActions().map(action=>action.label));
+     assert.deepEqual(labels,mode==='preview'?[]:module.id==='aquarium'?['Feed fish','Change lighting','Change current']:['Change day / night','Change weather','Summon train']);
+     for(const viewport of [{width:320,height:600},{width:780,height:600}]){
+      await page.setViewportSize(viewport);
+      const bounds=await page.locator(module.dock).boundingBox();
+      assert.ok(bounds.x>=-1&&bounds.x+bounds.width<=viewport.width+1,JSON.stringify({module:module.id,mode,viewport,bounds}));
+     }
+     await page.evaluate(()=>__SCREEN_GARDEN_SET_LOCALE('zh-CN'));
+     assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
     }
     if(mode==='legacy'){
      await page.clock.fastForward(10000);

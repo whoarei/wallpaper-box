@@ -76,6 +76,7 @@ pub(super) fn loading(app: &AppHandle, label: &str) {
 }
 
 fn query(app: AppHandle, target: Target) {
+    sync_locale(&app, &target.label);
     sync_state(&app, &target.label);
     let result = evaluate(
         &app,

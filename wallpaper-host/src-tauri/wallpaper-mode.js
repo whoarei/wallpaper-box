@@ -2,6 +2,27 @@
 (config => {
   'use strict';
   const desktop = config.mode === 'desktop';
+  const validLocale = value => value === 'zh-CN' || value === 'en';
+  const initialLocale = validLocale(config.locale) ? config.locale : 'zh-CN';
+  const english = {
+    "暂停": "Pause",
+    "继续": "Resume",
+    "壁纸已暂停，请先继续播放。": "The wallpaper is paused. Resume playback first.",
+    "未能确认操作结果，请先查看壁纸，避免重复操作。": "The result could not be confirmed. Check the wallpaper before trying again.",
+    "已暂停": "Paused",
+    "暂时无法读取这张壁纸的操作。": "Unable to read this wallpaper’s actions right now.",
+    "壁纸操作请求无效。": "Invalid wallpaper action request.",
+    "壁纸已经切换或重新加载。": "The wallpaper has changed or reloaded.",
+    "重复请求的内容不一致。": "The repeated request has different contents.",
+    "当前环境没有主程序操作能力。": "Host actions are unavailable in this environment.",
+    "壁纸正在载入，请稍后再试。": "The wallpaper is loading. Please try again shortly.",
+    "这张壁纸没有提供主程序操作。": "This wallpaper does not provide host actions.",
+    "这张壁纸没有这个操作。": "This wallpaper does not have this action.",
+    "没有这个操作。": "No such action.",
+    "这个操作暂时不可用。": "This action is temporarily unavailable.",
+    "当前操作不支持同步调用。": "This action does not support synchronous calls."
+};
+  const t = key => state.locale === 'en' ? (english[key] ?? key) : key;
   const instanceId = crypto.randomUUID?.() ||
     Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   const capabilities = Object.freeze({
@@ -10,7 +31,7 @@
     pause: desktop, actions: desktop
   });
   // Loading desktop documents remain suspended until native state is confirmed.
-  let state = Object.freeze({paused: desktop, pauseReason: desktop ? 'system' : 'none'});
+  let state = Object.freeze({paused: desktop, pauseReason: desktop ? 'system' : 'none', locale: initialLocale});
   const nativeRaf = window.requestAnimationFrame.bind(window);
   const nativeCancel = window.cancelAnimationFrame.bind(window);
   const pending = new Map(), scheduled = new Map(), replies = new Map();
@@ -53,7 +74,7 @@
         !['none','manual','occluded','system'].includes(next.pauseReason) ||
         next.paused !== (next.pauseReason !== 'none')) return;
     if (state.paused === next.paused && state.pauseReason === next.pauseReason) return;
-    state = Object.freeze({paused: next.paused, pauseReason: next.pauseReason});
+    state = Object.freeze({...state, paused: next.paused, pauseReason: next.pauseReason});
     if (state.paused) {
       for (const handle of scheduled.values()) nativeCancel(handle);
       scheduled.clear();
@@ -61,6 +82,11 @@
     attributes();
     window.dispatchEvent(new CustomEvent('wallpaperhost:statechange', {detail: state}));
     if (!state.paused) for (const id of pending.keys()) schedule(id);
+  });
+  own('__SCREEN_GARDEN_SET_LOCALE', locale => {
+    if (!validLocale(locale) || state.locale === locale) return;
+    state = Object.freeze({...state, locale});
+    window.dispatchEvent(new CustomEvent('wallpaperhost:statechange', {detail: state}));
   });
   function desktopTarget(u, v) {
     if (!desktop || !Number.isFinite(u) || !Number.isFinite(v) ||
@@ -139,33 +165,33 @@
   }
   own('__SCREEN_GARDEN_GET_ACTIONS', () => {
     try { return {instanceId, actions: json(readActions())}; }
-    catch { return {instanceId, actions: [], error: '暂时无法读取这张壁纸的操作。'}; }
+    catch { return {instanceId, actions: [], error: t('暂时无法读取这张壁纸的操作。')}; }
   });
   function failure(requestId, code, message) { return {ok: false, requestId, code, message}; }
   function execute(request) {
     const requestId = typeof request?.requestId === 'string' ? request.requestId : '';
     if (!request || request.protocolVersion !== 1 || !tokenValid(requestId) ||
         !tokenValid(request.instanceId) || !idValid(request.actionId)) {
-      return failure(requestId, 'INVALID_REQUEST', '壁纸操作请求无效。');
+      return failure(requestId, 'INVALID_REQUEST', t('壁纸操作请求无效。'));
     }
-    if (request.instanceId !== instanceId) return failure(requestId, 'STALE_INSTANCE', '壁纸已经切换或重新加载。');
+    if (request.instanceId !== instanceId) return failure(requestId, 'STALE_INSTANCE', t('壁纸已经切换或重新加载。'));
     const old = replies.get(requestId);
     if (old) return old.actionId === request.actionId ? JSON.parse(old.result) :
-      failure(requestId, 'INVALID_REQUEST', '重复请求的内容不一致。');
+      failure(requestId, 'INVALID_REQUEST', t('重复请求的内容不一致。'));
     let result;
     try {
       const app = provider();
-      if (!capabilities.actions) result = failure(requestId, 'UNSUPPORTED', '当前环境没有主程序操作能力。');
-      else if (document.readyState === 'loading') result = failure(requestId, 'NOT_READY', '壁纸正在载入，请稍后再试。');
-      else if (!app) result = failure(requestId, 'UNSUPPORTED', '这张壁纸没有提供主程序操作。');
+      if (!capabilities.actions) result = failure(requestId, 'UNSUPPORTED', t('当前环境没有主程序操作能力。'));
+      else if (document.readyState === 'loading') result = failure(requestId, 'NOT_READY', t('壁纸正在载入，请稍后再试。'));
+      else if (!app) result = failure(requestId, 'UNSUPPORTED', t('这张壁纸没有提供主程序操作。'));
       else {
         const action = readActions().find(action => action.id === request.actionId);
-        if (!action) result = failure(requestId, 'UNKNOWN_ACTION', '这张壁纸没有这个操作。');
+        if (!action) result = failure(requestId, 'UNKNOWN_ACTION', t('这张壁纸没有这个操作。'));
         else if (state.paused && (state.pauseReason !== 'occluded' || !action.allowWhenOccluded)) {
-          result = failure(requestId, 'PAUSED', '壁纸已暂停，请先继续播放。');
-        } else if (!action.enabled) result = failure(requestId, 'DISABLED', action.disabledReason || '这个操作暂时不可用。');
+          result = failure(requestId, 'PAUSED', t('壁纸已暂停，请先继续播放。'));
+        } else if (!action.enabled) result = failure(requestId, 'DISABLED', action.disabledReason || t('这个操作暂时不可用。'));
         else if (Object.prototype.toString.call(app.invoke) === '[object AsyncFunction]') {
-          result = failure(requestId, 'UNSUPPORTED', '当前操作不支持同步调用。');
+          result = failure(requestId, 'UNSUPPORTED', t('当前操作不支持同步调用。'));
         } else {
           const reply = app.invoke(json(request));
           if (reply && typeof reply.then === 'function') {
@@ -183,7 +209,7 @@
         }
       }
     } catch {
-      result = failure(requestId, 'RESULT_UNKNOWN', '未能确认操作结果，请先查看壁纸，避免重复操作。');
+      result = failure(requestId, 'RESULT_UNKNOWN', t('未能确认操作结果，请先查看壁纸，避免重复操作。'));
     }
     const serialized = JSON.stringify(result);
     replies.set(requestId, {actionId: request.actionId, result: serialized});

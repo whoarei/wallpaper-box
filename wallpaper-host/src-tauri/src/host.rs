@@ -32,6 +32,8 @@ struct Selection {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Settings {
+    #[serde(default)]
+    language: crate::language::Language,
     selected_monitor: String,
     assignments: BTreeMap<String, Selection>,
     #[serde(default = "yes")]
@@ -49,6 +51,7 @@ fn yes() -> bool {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            language: crate::language::Language::default(),
             selected_monitor: String::new(),
             assignments: BTreeMap::new(),
             auto_pause: true,
@@ -125,6 +128,8 @@ pub struct WallpaperView {
 }
 #[derive(Serialize)]
 pub struct View {
+    language: crate::language::Language,
+    locale: &'static str,
     version: &'static str,
     desktop_input: Option<crate::desktop_input::DiagnosticSnapshot>,
     app_update: crate::app_updates::View,
@@ -152,6 +157,18 @@ fn display_path(path: &std::path::Path) -> String {
     } else {
         text.strip_prefix(r"\\?\").unwrap_or(&text).to_string()
     }
+}
+
+fn display_name(display: &Display, locale: &str) -> String {
+    format!(
+        "{}{}",
+        display.id.trim_start_matches(r"\\.\"),
+        if display.primary {
+            crate::language::text(locale, " · 主显示器", " · Primary display")
+        } else {
+            ""
+        }
+    )
 }
 
 fn label(id: &str) -> String {
@@ -306,7 +323,10 @@ fn snapshot(app: &AppHandle) -> View {
                 .modules
                 .iter()
                 .find(|m| m.id == selection.module_id)
-                .map(|m| m.name.clone())
+                .map(|m| {
+                    m.localized_name(data.settings.language.locale())
+                        .to_string()
+                })
                 .unwrap_or_else(|| selection.module_id.clone());
             let mut proof = desktop::inspect(running.proof.hwnd as isize);
             proof.method = running.proof.method.clone();
@@ -328,6 +348,8 @@ fn snapshot(app: &AppHandle) -> View {
         })
         .collect();
     View {
+        language: data.settings.language,
+        locale: data.settings.language.locale(),
         version: env!("CARGO_PKG_VERSION"),
         desktop_input: app
             .try_state::<crate::desktop_input::Listener>()
@@ -340,7 +362,13 @@ fn snapshot(app: &AppHandle) -> View {
         warnings: data.warnings.clone(),
         downloads,
         selected_monitor: data.settings.selected_monitor.clone(),
-        displays: desktop::displays(),
+        displays: desktop::displays()
+            .into_iter()
+            .map(|mut display| {
+                display.name = display_name(&display, data.settings.language.locale());
+                display
+            })
+            .collect(),
         modules: data.modules.clone(),
         wallpapers,
         auto_pause: data.settings.auto_pause,
@@ -415,17 +443,29 @@ fn preview(app: &AppHandle, module_id: &str) -> Result<(), String> {
         .unwrap()
         .resource_scopes
         .insert(label.clone(), module_id.into());
+    let locale = host.data.lock().unwrap().settings.language.locale();
     let result = WebviewWindowBuilder::new(app, &label, WebviewUrl::CustomProtocol(url))
-        .title(format!("预览 · {}", module.name))
+        .title(format!(
+            "{} · {}",
+            crate::language::text(locale, "预览", "Preview"),
+            module.localized_name(locale)
+        ))
         .inner_size(960.0, 600.0)
         .min_inner_size(640.0, 400.0)
         .center()
         .data_directory(profile)
-        .initialization_script(crate::wallpaper_protocol::initialization_script(false))
+        .initialization_script(crate::wallpaper_protocol::initialization_script(
+            false, locale,
+        ))
         .on_navigation(|url| {
             url.scheme() == "http"
                 && url.host_str() == Some("wallpaper.localhost")
                 && url.port().is_none()
+        })
+        .on_page_load(|window, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                sync_locale(window.app_handle(), window.label());
+            }
         })
         .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
         .build();
@@ -460,6 +500,7 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
         .unwrap()
         .resource_scopes
         .insert(window_label.clone(), module_id.into());
+    let locale = host.data.lock().unwrap().settings.language.locale();
     let window = if let Some(window) = app.get_webview_window(&window_label) {
         window.navigate(url).map_err(|e| e.to_string())?;
         window
@@ -467,7 +508,12 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
         let profile = host.dir.join("webview").join(&window_label);
         let _ = fs::create_dir_all(&profile);
         WebviewWindowBuilder::new(app, &window_label, WebviewUrl::CustomProtocol(url))
-            .title(format!("壁纸盒子 · {} · {}", module.name, display.name))
+            .title(format!(
+                "{} · {} · {}",
+                crate::language::text(locale, "壁纸盒子", "Wallpaper Box"),
+                module.localized_name(locale),
+                display_name(&display, locale)
+            ))
             .inner_size(
                 display.work_area.width as f64 / display.scale,
                 display.work_area.height as f64 / display.scale,
@@ -480,12 +526,15 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
             .resizable(false)
             .visible(false)
             .data_directory(profile)
-            .initialization_script(crate::wallpaper_protocol::initialization_script(true))
+            .initialization_script(crate::wallpaper_protocol::initialization_script(
+                true, locale,
+            ))
             .on_page_load(|window, payload| match payload.event() {
                 tauri::webview::PageLoadEvent::Started => {
                     wallpaper_actions::loading(window.app_handle(), window.label())
                 }
                 tauri::webview::PageLoadEvent::Finished => {
+                    sync_locale(window.app_handle(), window.label());
                     wallpaper_actions::sync_state(window.app_handle(), window.label())
                 }
             })
@@ -764,19 +813,59 @@ fn quit(app: &AppHandle) {
     app.exit(0);
 }
 
+fn sync_locale(app: &AppHandle, label: &str) {
+    let (locale, preview_title) = {
+        let host = app.state::<Host>();
+        let data = host.data.lock().unwrap();
+        let locale = data.settings.language.locale();
+        let title = if label.starts_with("preview-") {
+            data.resource_scopes
+                .get(label)
+                .and_then(|id| data.modules.iter().find(|module| &module.id == id))
+                .map(|module| {
+                    format!(
+                        "{} · {}",
+                        crate::language::text(locale, "预览", "Preview"),
+                        module.localized_name(locale)
+                    )
+                })
+        } else {
+            None
+        };
+        (locale, title)
+    };
+    if let Some(window) = app.get_webview_window(label) {
+        if let Some(title) = preview_title {
+            let _ = window.set_title(&title);
+        }
+        if let Err(message) = window.eval(crate::language::script(locale)) {
+            log(app, &format!("Set wallpaper locale: {message}"));
+        }
+    }
+}
+
 fn rebuild_tray(app: &AppHandle) {
     let view = snapshot(app);
+    let tr = |zh, en| crate::language::text(view.locale, zh, en);
+    if let Some(window) = app.get_webview_window("manager") {
+        let _ = window.set_title(tr(
+            "壁纸盒子 · 壁纸管理",
+            "Wallpaper Box · Wallpaper Manager",
+        ));
+    }
     let result = (|| -> tauri::Result<()> {
         let menu = Menu::new(app)?;
         let selected = view.displays.iter().find(|d| d.id == view.selected_monitor);
         menu.append(&MenuItem::with_id(
             app,
             "current-display",
-            selected.map(|d| d.name.as_str()).unwrap_or("未选择显示器"),
+            selected
+                .map(|d| d.name.as_str())
+                .unwrap_or(tr("未选择显示器", "No display selected")),
             false,
             None::<&str>,
         )?)?;
-        let screens = Submenu::with_id(app, "displays", "选择显示器", true)?;
+        let screens = Submenu::with_id(app, "displays", tr("选择显示器", "Select display"), true)?;
         for display in &view.displays {
             screens.append(&CheckMenuItem::with_id(
                 app,
@@ -797,7 +886,7 @@ fn rebuild_tray(app: &AppHandle) {
             menu.append(&CheckMenuItem::with_id(
                 app,
                 format!("wallpaper:{}", module.id),
-                &module.name,
+                module.localized_name(view.locale),
                 true,
                 current.map(|w| w.module_id == module.id).unwrap_or(false),
                 None::<&str>,
@@ -807,7 +896,10 @@ fn rebuild_tray(app: &AppHandle) {
             menu.append(&MenuItem::with_id(
                 app,
                 "no-wallpapers",
-                "暂无壁纸，打开管理窗口刷新",
+                tr(
+                    "暂无壁纸，打开管理窗口刷新",
+                    "No wallpapers. Open the manager to refresh",
+                ),
                 false,
                 None::<&str>,
             )?)?;
@@ -834,7 +926,7 @@ fn rebuild_tray(app: &AppHandle) {
         menu.append(&CheckMenuItem::with_id(
             app,
             "pause-current",
-            "暂停当前壁纸",
+            tr("暂停当前壁纸", "Pause current wallpaper"),
             current.is_some(),
             current.map(|w| w.paused).unwrap_or(false),
             None::<&str>,
@@ -844,9 +936,9 @@ fn rebuild_tray(app: &AppHandle) {
             app,
             "pause-all",
             if all_paused {
-                "继续全部壁纸"
+                tr("继续全部壁纸", "Resume all wallpapers")
             } else {
-                "暂停全部壁纸"
+                tr("暂停全部壁纸", "Pause all wallpapers")
             },
             !view.wallpapers.is_empty(),
             None::<&str>,
@@ -854,7 +946,7 @@ fn rebuild_tray(app: &AppHandle) {
         menu.append(&CheckMenuItem::with_id(
             app,
             "auto-pause",
-            "遮挡时自动暂停",
+            tr("遮挡时自动暂停", "Pause when covered"),
             true,
             view.auto_pause,
             None::<&str>,
@@ -862,7 +954,7 @@ fn rebuild_tray(app: &AppHandle) {
         menu.append(&MenuItem::with_id(
             app,
             "remove-current",
-            "关闭当前屏幕壁纸",
+            tr("关闭当前屏幕壁纸", "Remove wallpaper from current display"),
             current.is_some(),
             None::<&str>,
         )?)?;
@@ -870,39 +962,43 @@ fn rebuild_tray(app: &AppHandle) {
         menu.append(&MenuItem::with_id(
             app,
             "show-desktop",
-            "显示 / 还原桌面",
+            tr("显示 / 还原桌面", "Show / restore desktop"),
             true,
             None::<&str>,
         )?)?;
         menu.append(&MenuItem::with_id(
             app,
             "open-manager",
-            "打开壁纸管理",
+            tr("打开壁纸管理", "Open wallpaper manager"),
             true,
             None::<&str>,
         )?)?;
         menu.append(&MenuItem::with_id(
             app,
             "check-app-update",
-            "检查程序更新",
+            tr("检查程序更新", "Check for app updates"),
             true,
             None::<&str>,
         )?)?;
         menu.append(&MenuItem::with_id(
             app,
             "about",
-            "关于壁纸盒子",
+            tr("关于壁纸盒子", "About Wallpaper Box"),
             true,
             None::<&str>,
         )?)?;
         menu.append(&MenuItem::with_id(
             app,
             "quit",
-            "退出壁纸盒子",
+            tr("退出壁纸盒子", "Quit Wallpaper Box"),
             true,
             None::<&str>,
         )?)?;
         if let Some(tray) = app.tray_by_id("screen-garden") {
+            tray.set_tooltip(Some(tr(
+                "壁纸盒子 · 右键切换壁纸",
+                "Wallpaper Box · Right-click to switch wallpaper",
+            )))?;
             tray.set_menu(Some(menu))?;
         }
         Ok(())
@@ -1236,6 +1332,7 @@ pub fn run() {
         }))
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
+            commands::set_language,
             commands::open_about_link,
             commands::check_app_update,
             commands::download_app_update,
@@ -1435,6 +1532,7 @@ mod tests {
         assert!(settings.assignments["display-2"].paused);
         assert!(!settings.auto_pause);
         assert!(settings.auto_start);
+        assert_eq!(settings.language, crate::language::Language::System);
     }
 
     #[test]
@@ -1447,5 +1545,18 @@ mod tests {
         assert_eq!(reloaded.selected_monitor, "display-2");
         assert_eq!(reloaded.assignments["display-2"].module_id, "aquarium");
         assert!(Settings::default().auto_start);
+    }
+
+    #[test]
+    fn language_round_trip_preserves_display_assignments() {
+        let saved = r#"{"language":"en","selected_monitor":"display-2","assignments":{"display-2":{"module_id":"aquarium","paused":true}},"auto_pause":false}"#;
+        let settings: Settings = serde_json::from_str(saved).unwrap();
+        let reloaded: Settings =
+            serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
+        assert_eq!(reloaded.language, crate::language::Language::English);
+        assert_eq!(reloaded.language.locale(), "en");
+        assert_eq!(reloaded.selected_monitor, "display-2");
+        assert!(reloaded.assignments["display-2"].paused);
+        assert!(!reloaded.auto_pause);
     }
 }

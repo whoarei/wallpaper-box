@@ -36,7 +36,7 @@ function serveUi() {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (pathname === '/favicon.ico') { response.writeHead(204).end(); return; }
     const filename = pathname === '/' ? 'index.html' : pathname.slice(1);
-    if (!['index.html', 'app.js', 'app.css', 'settings.css', 'online.css', 'icon.png', 'window-controls.js'].includes(filename)) {
+    if (!['index.html', 'app.js', 'app.css', 'settings.css', 'online.css', 'icon.png', 'window-controls.js', 'translations.js', 'i18n.js'].includes(filename)) {
       response.writeHead(404).end(); return;
     }
     response.writeHead(200, { 'Content-Type': mime[path.extname(filename)], 'Cache-Control': 'no-store' });
@@ -62,7 +62,7 @@ function fixtures() {
       remote('aquarium', '水族箱', '1.1.0'), remote('pinewind-town', '松风镇', '1.0.0'),
       remote('window-to-elsewhere', '通往别处的窗户', '1.0.0'),
     ] },
-    state: { version: '0.2.0', service: 'http://wallpaper.localhost', auto_pause: true, auto_start: true, auto_start_error: null,
+    state: { language: 'system', locale: 'zh-CN', version: '0.2.0', service: 'http://wallpaper.localhost', auto_pause: true, auto_start: true, auto_start_error: null,
       proxy: { mode: 'system', url: '' },
       wallpaper_repositories: [{url:'https://gitee.com/xishuaiya/wallpapers',enabled:true},{url:'https://github.com/whoarei/wallpapers',enabled:false}],
       selected_monitor: 'primary', displays: [
@@ -99,8 +99,12 @@ function wallpaperHistory(fixture) {
 // This fixture owns native state. UI updates only through the production invoke
 // API and its ordinary one-second polling, matching a Tauri manager window.
 function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppCheck, failAppInstall,
-  failPreview, deferApply, deferInstall, deferAction, failAction, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures, deferCancellation, importedModule, failAutoStart, deferAutoStart, persistAutoStart, historyPages, failHistory, deferHistory, coverData, initialWindowState }) {
+  failLanguage, failPreview, deferApply, deferInstall, deferAction, failAction, failProxySave, failProxyTest, deferProxyTest, failCover, persistProxy, persistRepositories, failRepositorySave, sourceCatalogs, sourceFailures, deferCancellation, importedModule, failAutoStart, deferAutoStart, persistAutoStart, historyPages, failHistory, deferHistory, coverData, initialWindowState }) {
   const copy = value => JSON.parse(JSON.stringify(value));
+  if(sessionStorage.getItem('native-language')){
+    state.language=sessionStorage.getItem('native-language');
+    state.locale=state.language==='system'?'zh-CN':state.language;
+  }
   if (persistProxy && sessionStorage.getItem('native-proxy')) {
     state.proxy = JSON.parse(sessionStorage.getItem('native-proxy'));
   }
@@ -210,6 +214,11 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
     calls.push({ command, args: copy(args) });
     switch (command) {
       case 'get_state': return copy(state);
+      case 'set_language':
+        if(failLanguage)throw '语言设置保存失败，请重试。';
+        state.language=args.language;state.locale=args.language==='system'?'zh-CN':args.language;
+        sessionStorage.setItem('native-language',args.language);
+        return copy(state);
       case 'set_auto_start':
         if (deferAutoStart) await new Promise(resolve => { finishOperation = resolve; });
         if (failAutoStart) throw '无法访问 Windows 启动设置（0x80070005）。';
@@ -463,6 +472,91 @@ async function noHorizontalOverflow(page, label) {
         passed += 1;
       } finally { await context.close(); }
     }
+
+    await test('language changes persist and refresh static text, metadata, captions and active downloads', fixture=>{
+      fixture.state.modules[0].locales={en:{name:'Stillwater Aquarium',description:'A quiet aquarium.'}};
+      fixture.state.downloads=[{id:'aquarium',item:fixture.catalog.wallpapers[0],phase:'queued',received:0,total:12344,queue_position:1}];
+    }, async page=>{
+      await page.locator('#settings-open').click();
+      await page.locator('#language').focus();await page.locator('#language').selectOption('en');
+      await page.waitForFunction(()=>document.documentElement.lang==='en');
+      assert.equal(await page.title(),'Wallpaper Box · Wallpaper Manager');
+      assert.equal(await page.locator('#tab-local').textContent(),'My Wallpapers');
+      assert.equal(await page.locator('#collection-title').textContent(),'My Wallpapers');
+      assert.equal(await page.locator('#current-title').textContent(),'Stillwater Aquarium');
+      assert.equal(await page.locator('#window-maximize').getAttribute('aria-label'),'Maximize');
+      assert.equal(await page.locator('#modules .module').first().locator('h3').textContent(),'Stillwater Aquarium');
+      assert.match(await page.locator('#modules .task-label').first().textContent(),/Queued/);
+      assert.equal(await page.locator('#language').evaluate(node=>node===document.activeElement),true);
+      await settingsScreenshot(page,'settings-english');
+      await page.locator('#settings-tab-proxy').click();
+      await page.locator('#proxy-mode').selectOption('manual');
+      await page.locator('#proxy-url').fill('http://127.0.0.1:8899');
+      await page.locator('#settings-tab-general').click();
+      await page.locator('#language').selectOption('zh-CN');
+      await page.waitForFunction(()=>document.documentElement.lang==='zh-CN');
+      assert.equal(await page.locator('#current-title').textContent(),'水族箱');
+      await page.locator('#settings-tab-proxy').click();
+      assert.equal(await page.locator('#proxy-url').inputValue(),'http://127.0.0.1:8899');
+      await page.locator('#settings-tab-general').click();
+      await page.locator('#language').focus();await page.locator('#language').selectOption('en');
+      await page.waitForFunction(()=>document.documentElement.lang==='en');
+      const calls=await page.evaluate(()=>window.__uiTest.calls.map(call=>call.command));
+      assert.ok(!calls.some(command=>['apply_wallpaper','pause_wallpaper','refresh_modules'].includes(command)));
+      await page.reload();await ready(page);
+      assert.equal(await page.locator('html').getAttribute('lang'),'en');
+      await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#language').inputValue(),'en');
+      await page.locator('#language').selectOption('system');
+      await page.waitForFunction(()=>document.documentElement.lang==='zh-CN');
+      assert.equal(await page.locator('#language').inputValue(),'system');
+    });
+
+    await test('saved English preference overrides the browser language and failed saves preserve it', fixture=>{
+      fixture.state.language='en';fixture.state.locale='en';fixture.failLanguage=true;
+    },async page=>{
+      assert.equal(await page.locator('#tab-local').textContent(),'My Wallpapers');
+      await page.locator('#settings-open').click();
+      await page.locator('#language').selectOption('zh-CN');
+      await visible(page.locator('#language-error'));
+      assert.equal(await page.locator('#language-error').textContent(),'Could not save the language setting. Please try again.');
+      assert.equal(await page.locator('html').getAttribute('lang'),'en');
+      assert.equal(await page.locator('#language').inputValue(),'en');
+      for(const name of ['repositories','proxy','updates','general']){
+        await page.locator('#settings-tab-'+name).click();await noHorizontalOverflow(page,'English settings '+name);
+      }
+    });
+
+    await test('English errors retain service details and translate settings feedback', fixture=>{
+      fixture.state.language='en';fixture.state.locale='en';fixture.failProxyTest=true;
+      fixture.state.last_error='壁纸仓库返回 HTTP 503。';
+      fixture.state.auto_start_error='无法访问 Windows 启动设置（0x80070005）。';
+    },async page=>{
+      assert.equal(await page.locator('#error').textContent(),'The wallpaper repository returned HTTP 503.');
+      await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#auto-start-error').textContent(),'Could not access Windows startup settings (0x80070005).');
+      await page.locator('#settings-tab-proxy').click();
+      await page.locator('#test-proxy').click();
+      await visible(page.locator('#proxy-error'));
+      assert.equal(await page.locator('#proxy-error').textContent(),'Could not connect to GitHub. Check your proxy settings and network, then try again.');
+    });
+
+    await test('English title bar keeps captions reachable beside download and update badges', fixture=>{
+      fixture.state.language='en';fixture.state.locale='en';
+      appUpdateFixture(fixture,'ready');
+      fixture.state.downloads=[{id:'aquarium',item:fixture.catalog.wallpapers[0],phase:'downloading',received:2000,total:12344,speed:1024}];
+    },async page=>{
+      for(const viewport of [{width:1080,height:760},{width:780,height:600},{width:540,height:720}]){
+        await page.setViewportSize(viewport);
+        await noHorizontalOverflow(page,'English title bar');
+        const nodes=await page.locator('.caption-button').evaluateAll(buttons=>buttons.map(button=>{
+          const r=button.getBoundingClientRect();const target=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+          return {reachable:button===target||button.contains(target),right:r.right};
+        }));
+        assert.ok(nodes.every(node=>node.reachable&&node.right<=viewport.width));
+      }
+      await page.setViewportSize({width:780,height:600});await screenshot(page,'home-english');
+    });
 
     await test('caption controls invoke native window actions and close only to the tray', null, async page => {
       const config = JSON.parse(fs.readFileSync(path.join(uiRoot, '../src-tauri/tauri.conf.json'), 'utf8'));

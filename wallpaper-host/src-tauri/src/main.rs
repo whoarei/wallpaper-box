@@ -7,6 +7,7 @@ mod desktop;
 mod desktop_input;
 mod download_queue;
 mod host;
+mod language;
 mod network;
 mod online;
 mod packages;

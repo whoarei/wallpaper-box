@@ -112,12 +112,36 @@ window.wallpaperHost = {
     actions: true
   },
   getState() {
-    return { paused: false, pauseReason: &quot;none&quot; };
+    return { paused: false, pauseReason: &quot;none&quot;, locale: &quot;en&quot; };
   }
 };</code></pre></div>
 <p><code>getState()</code> 同步返回当前快照。桌面模式的键盘和全屏能力为 <code>false</code>；暂停和操作能力以实际字段为准。预览中的 <code>pause</code>、<code>actions</code> 为 <code>false</code>，其全屏能力还需结合浏览器权限。能力为 <code>false</code> 时，不以“接口碰巧存在”绕过它。</p>
 <p>只读对象用于防止误改，不能替代宿主的原生实例、来源和权限校验。旧的 <code>data-screen-garden-wallpaper</code> 标识保留作兼容；普通浏览器没有宿主对象，<code>browser</code> 是壁纸自身的回退值。</p>
 </div></details>
+<h3>语言同步（v1 的可选扩展）</h3>
+<p>主程序将已解析的界面语言放入 <code>wallpaperHost.getState().locale</code>，当前值为 <code>zh-CN</code> 或 <code>en</code>。“跟随系统”的偏好不会原样传入壁纸。桌面与应用内预览都提供此字段；加载前注入初始值，切换后通过既有 <code>wallpaperhost:statechange</code> 事件发送包含语言、暂停状态和暂停原因的完整只读快照。语言变化不更换实例、不重载网页、不解除暂停，也不重放互动操作。</p>
+<p>这是新增可选字段，<code>protocolVersion</code> 仍为 <code>1</code>。v1 的旧宿主可能没有 <code>locale</code>，旧壁纸也可以忽略新增字段；不按主程序版本号猜测能力。缺少字段或独立浏览器运行时，可回退到 <code>navigator.language</code>，再选取壁纸支持的语言。没有翻译时保留壁纸原文。此扩展随本次代码变更提供，安装版是否具备该能力以实际发行版本为准。</p>
+<div class="code"><div class="code-head"><span>javascript · 壁纸自行管理文案</span><button class="copy" type="button">复制代码</button></div><pre><code>const host = window.wallpaperHost?.protocolVersion === 1 ? window.wallpaperHost : null;
+const messages = {
+  &quot;zh-CN&quot;: { feed: &quot;投喂鱼儿&quot;, paused: &quot;画面已暂停，请先继续。&quot; },
+  en: { feed: &quot;Feed fish&quot;, paused: &quot;The scene is paused. Resume it first.&quot; }
+};
+let locale;
+function syncLanguage() {
+  const requested = host?.getState().locale ?? navigator.language;
+  const next = /^zh(?:-|$)/i.test(requested) ? &quot;zh-CN&quot; : &quot;en&quot;;
+  if (next === locale) return;
+  locale = next;
+  document.documentElement.lang = locale;
+  document.querySelector(&quot;#feed&quot;).textContent = messages[locale].feed;
+  // 同步刷新 title、aria-label、提示、帮助与日期格式；不执行投喂等场景操作。
+}
+syncLanguage(); // 在 DOM 就绪后执行
+window.addEventListener(&quot;wallpaperhost:statechange&quot;, syncLanguage);
+// getActions() 每次查询时读取 messages[locale]，保持 id 不变。
+// invoke() 返回的禁用原因和失败提示也使用当前语言。</code></pre></div>
+<p>主程序会重新读取操作描述，使管理窗口和托盘使用当前 <code>label</code> / <code>disabledReason</code>。壁纸只需监听公开事件，不调用或覆盖宿主的内部语言设置入口。仅适配语言不要求提供互动操作接口，<code>capabilities.actions === false</code> 的预览同样可以接收语言。</p>
+<p>名称与说明可在 <code>module.json</code> 或在线清单的壁纸条目中增加可选 <code>locales</code>，例如 <code>&quot;locales&quot;: { &quot;en&quot;: { &quot;name&quot;: &quot;Meadow&quot;, &quot;description&quot;: &quot;A quiet meadow.&quot; } }</code>。支持 <code>name</code>、<code>subtitle</code>、<code>description</code>；未提供的字段回退到原值，ID 和包版本不随语言变化，清单 <code>schemaVersion</code> 仍为 1。该元数据只用于管理界面与托盘展示，壁纸内部文案仍由自己的脚本翻译。</p>
 </section><section class="section" id="controls"><div class="section-header"><span class="section-number">04</span><h2>让控制栏在桌面上也好用</h2></div><p class="section-intro">控制栏属于你的页面。宿主不提供按钮选择器，也不要求固定类名。</p>
 <div class="demo" aria-label="运行模式的界面对照示意">
 <div class="demo-head"><span>交互示意 · 切换查看界面差异，不连接真实宿主</span><div class="segments" role="group" aria-label="示意运行模式">

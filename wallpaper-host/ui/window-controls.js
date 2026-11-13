@@ -1,5 +1,6 @@
 (() => {
   'use strict';
+  const t=window.wallpaperI18n.t;
   const currentWindow = window.__TAURI__.window.getCurrentWindow();
   const maximize = document.getElementById('window-maximize');
   const unlisteners = [];
@@ -9,7 +10,7 @@
 
   function report(action, error) {
     if (!disposed) window.dispatchEvent(new CustomEvent('window-control-error', {
-      detail: `${action}失败，请重试。${String(error)}`,
+      detail: t('{action}失败，请重试。{error}',{action,error:String(error)}),
     }));
   }
 
@@ -21,7 +22,7 @@
       currentWindow.isMaximized(), currentWindow.isFocused(),
     ]);
     if (disposed || reading !== revision) return;
-    const label = maximized ? '还原' : '最大化';
+    const label = maximized ? t('还原') : t('最大化');
     maximize.setAttribute('aria-label', label);
     maximize.setAttribute('title', label);
     maximize.setAttribute('aria-pressed', String(maximized));
@@ -32,7 +33,7 @@
   }
 
   function refresh() {
-    return syncState().catch(error => report('读取窗口状态', error));
+    return syncState().catch(error => report(t('读取窗口状态'), error));
   }
 
   async function toggleMaximize() {
@@ -42,7 +43,7 @@
       await currentWindow.toggleMaximize();
       await syncState();
     } catch (error) {
-      report('切换窗口大小', error);
+      report(t('切换窗口大小'), error);
     } finally {
       toggling = false;
     }
@@ -50,17 +51,17 @@
 
   maximize.addEventListener('click', toggleMaximize);
   document.getElementById('window-minimize').addEventListener('click', () => {
-    currentWindow.minimize().catch(error => report('最小化窗口', error));
+    currentWindow.minimize().catch(error => report(t('最小化窗口'), error));
   });
   document.getElementById('window-close').addEventListener('click', () => {
     // Keep the established close-to-tray behavior; do not destroy the WebView.
-    window.__TAURI__.core.invoke('hide_manager').catch(error => report('收起窗口', error));
+    window.__TAURI__.core.invoke('hide_manager').catch(error => report(t('收起窗口'), error));
   });
 
   const titlebar = document.querySelector('[data-window-drag]');
   const interactive = 'button,a,input,select,textarea,summary,[role="button"]';
   function startDragging() {
-    currentWindow.startDragging().catch(error => report('移动窗口', error));
+    currentWindow.startDragging().catch(error => report(t('移动窗口'), error));
   }
   titlebar.addEventListener('mousedown', event => {
     if (event.button !== 0 || event.target.closest(interactive)) return;
@@ -90,10 +91,11 @@
     subscribe(() => currentWindow.onFocusChanged(refresh)),
     subscribe(() => currentWindow.onScaleChanged(refresh)),
   ]).then(refresh).catch(error => {
-    report('监听窗口状态', error);
+    report(t('监听窗口状态'), error);
     refresh();
   });
   window.addEventListener('focus', refresh);
+  window.addEventListener('app:localechange', refresh);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
   window.addEventListener('pagehide', () => {
     disposed = true;
