@@ -32,7 +32,7 @@
 
 支持 **Windows x64**，需要 WebView2，安装程序会在缺少时自动下载。
 
-**v0.10.2** 每次点击“发现”自动刷新在线壁纸清单；点击“重启并升级”直接启动已验证的安装程序，不再弹出二次确认。
+**v0.10.3** 托盘右键菜单精简为 7 项，壁纸列表、壁纸操作与设置帮助分层收纳，常用快捷入口保持易于访问。
 
 [详细使用与开发说明](docs/guide.md) · [默认 Gitee 壁纸库](https://gitee.com/xishuaiya/wallpapers) · [GitHub 壁纸库](https://github.com/whoarei/wallpapers)
 
