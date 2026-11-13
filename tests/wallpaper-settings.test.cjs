@@ -107,6 +107,8 @@ async function test(name,body){await body();passed++;console.log('PASS '+name);}
  }
  async function save(lighting,flow){
   await frame().locator('#lighting').selectOption(String(lighting));await frame().locator('#flow').selectOption(String(flow));
+  // Move the real pointer into the opaque frame before its first submit.
+  await frame().locator('#save').hover();
   await frame().locator('#save').click();
   await frame().locator('#feedback').filter({hasText:'已保存'}).waitFor();
  }
