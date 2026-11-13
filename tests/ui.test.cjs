@@ -816,7 +816,8 @@ async function noHorizontalOverflow(page, label) {
       assert.equal(await body.evaluate(node=>node.scrollHeight>node.clientHeight),true);
       await body.evaluate(node=>node.scrollTop=node.scrollHeight);
       await page.getByRole('switch',{name:'启用仓库 16',exact:true}).uncheck();
-      for(const locator of [page.locator('#save-repositories'),page.locator('#settings-tab-general'),page.locator('#about-open')]) {
+      assert.equal(await page.locator('#about-open').isVisible(),false,'About belongs to General');
+      for(const locator of [page.locator('#save-repositories'),page.locator('#settings-tab-general')]) {
         const box=await locator.boundingBox();assert.ok(box.y>=0&&box.y+box.height<=600,JSON.stringify(box));
       }
       await page.locator('#save-repositories').click();

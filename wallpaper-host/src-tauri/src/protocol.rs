@@ -136,10 +136,20 @@ pub fn serve_with_settings(
         Ok(decoded) => decoded,
         Err(_) => return unavailable(StatusCode::BAD_REQUEST),
     };
-    if decoded == "/__wallpaper_host__/settings.js" {
-        let bytes = include_bytes!("../wallpaper-settings.js");
+    let settings_asset: Option<(&[u8], &str)> = match decoded.as_ref() {
+        "/__wallpaper_host__/settings.js" => Some((
+            include_bytes!("../wallpaper-settings.js"),
+            "application/javascript; charset=utf-8",
+        )),
+        "/__wallpaper_host__/settings.css" => Some((
+            include_bytes!("../wallpaper-settings.css"),
+            "text/css; charset=utf-8",
+        )),
+        _ => None,
+    };
+    if let Some((bytes, content_type)) = settings_asset {
         return Response::builder()
-            .header("Content-Type", "application/javascript; charset=utf-8")
+            .header("Content-Type", content_type)
             .header("Cache-Control", "no-store")
             .header("X-Content-Type-Options", "nosniff")
             .header("Content-Length", bytes.len().to_string())
@@ -148,7 +158,7 @@ pub fn serve_with_settings(
             } else {
                 bytes.to_vec()
             })
-            .expect("valid settings SDK response");
+            .expect("valid settings asset response");
     }
     let Some(path) = decoded.strip_prefix('/') else {
         return unavailable(StatusCode::NOT_FOUND);
@@ -334,6 +344,49 @@ mod tests {
             )
             .headers()["Content-Type"],
             "application/javascript; charset=utf-8"
+        );
+    }
+
+    #[test]
+    fn shared_settings_styles_are_available_without_relaxing_resource_rules() {
+        let request = |uri: &str, method: &str| {
+            Request::builder()
+                .uri(uri)
+                .method(method)
+                .body(Vec::new())
+                .unwrap()
+        };
+        let uri = "/__wallpaper_host__/settings.css";
+        let response = serve(&[], None, request(uri, "GET"));
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers()["Content-Type"],
+            "text/css; charset=utf-8"
+        );
+        assert_eq!(response.headers()["X-Content-Type-Options"], "nosniff");
+        assert_eq!(response.headers()["Cache-Control"], "no-store");
+        assert_eq!(response.body(), include_bytes!("../wallpaper-settings.css"));
+        let head = serve(&[], Some("scene"), request(uri, "HEAD"));
+        assert!(head.body().is_empty());
+        assert_eq!(
+            head.headers()["Content-Length"],
+            response.body().len().to_string()
+        );
+        assert_eq!(
+            serve(&[], None, request(uri, "POST")).status(),
+            StatusCode::METHOD_NOT_ALLOWED
+        );
+        assert_eq!(
+            serve(
+                &[],
+                None,
+                request(
+                    "http://wallpaper.attacker.example/__wallpaper_host__/settings.css",
+                    "GET"
+                )
+            )
+            .status(),
+            StatusCode::NOT_FOUND
         );
     }
 

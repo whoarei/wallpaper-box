@@ -1,0 +1,62 @@
+/* Optional shared styles for sandboxed settings pages. Business fields stay in the wallpaper. */
+:root {
+  color-scheme: light;
+  --settings-bg: #fff;
+  --settings-ink: #354735;
+  --settings-muted: #65735f;
+  --settings-line: #e1e7dc;
+  --settings-control-bg: #fafbf8;
+  --settings-accent: #3e6044;
+  --settings-accent-hover: #30513c;
+  --settings-error: #9a4333;
+  --settings-focus: #52754d;
+  --settings-radius: 7px;
+  --settings-padding: 16px;
+  font: 13px/1.55 "Microsoft YaHei UI", system-ui, sans-serif;
+  color: var(--settings-ink);
+  background: var(--settings-bg);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { overflow: hidden; }
+fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button, select, summary { cursor: pointer; }
+button, select, input[type="text"], input[type="number"], textarea {
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--settings-line);
+  border-radius: var(--settings-radius);
+  background: var(--settings-control-bg);
+}
+select { width: 160px; max-width: 60%; min-width: 0; }
+textarea { width: 100%; min-height: 80px; resize: vertical; }
+input[type="checkbox"], input[type="range"] { accent-color: var(--settings-accent); }
+button { background: var(--settings-bg); font-size: 12px; white-space: nowrap; }
+button:hover:not(:disabled) { background: var(--settings-control-bg); }
+button[type="submit"] { background: var(--settings-accent); border-color: var(--settings-accent); color: #fff; }
+button[type="submit"]:hover:not(:disabled) { background: var(--settings-accent-hover); }
+button:disabled { opacity: .55; cursor: default; }
+fieldset:disabled { opacity: .65; }
+:is(button, select, input, textarea, summary):focus-visible { outline: 2px solid var(--settings-focus); outline-offset: 2px; }
+.settings-form { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; margin: 0; }
+.settings-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 8px var(--settings-padding); scrollbar-width: thin; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; padding: 7px 0; border-bottom: 1px solid var(--settings-line); }
+.settings-row > span { min-width: 0; overflow-wrap: anywhere; }
+.settings-field { display: grid; gap: 6px; margin: 12px 0; }
+.settings-hint, .settings-feedback p, details { font-size: 11px; color: var(--settings-muted); }
+.settings-hint { margin: 6px 0; }
+details { margin: 8px 0; }
+summary { width: fit-content; }
+.settings-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex: none; min-height: 52px; padding: 8px var(--settings-padding); border-top: 1px solid var(--settings-line); background: var(--settings-bg); }
+.settings-feedback { flex: 1; min-width: 0; max-height: min(96px, 30dvh); overflow: auto; }
+.settings-feedback p { margin: 0; overflow-wrap: anywhere; }
+.settings-feedback [role="alert"] { color: var(--settings-error); }
+.settings-feedback:not(:has(p:not(:empty):not([hidden]))) { display: none; }
+.settings-buttons { display: flex; gap: 8px; flex: none; margin-left: auto; }
+@media (max-width: 420px) {
+  :root { --settings-padding: 12px; }
+  .settings-actions { flex-wrap: wrap; gap: 6px; }
+  .settings-feedback { flex-basis: 100%; }
+}

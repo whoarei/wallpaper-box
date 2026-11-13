@@ -6,9 +6,19 @@
   function status(message, error = false) {
     statusKey = message; statusError = error;
     const text = error ? i18n.message(message) : t(message);
-    $('wallpaper-settings-status').textContent = text;
-    $('wallpaper-settings-error').textContent = error ? text : '';
-    $('wallpaper-settings-error').hidden = !error;
+    const feedback = $('wallpaper-settings-status');
+    if (feedback.textContent !== text) feedback.textContent = text;
+    feedback.dataset.error = String(error);
+    feedback.setAttribute('role', error ? 'alert' : 'status');
+    feedback.setAttribute('aria-live', error ? 'assertive' : 'polite');
+  }
+  function expand(value) {
+    $('settings-dialog').classList.toggle('wallpaper-settings-expanded', value);
+    const button = $('wallpaper-settings-expand');
+    button.setAttribute('aria-pressed', String(value));
+    button.dataset.i18n = value ? '收起编辑' : '展开编辑';
+    const label = t(button.dataset.i18n);
+    if (button.textContent !== label) button.textContent = label;
   }
   function close() {
     if (context) clearTimeout(context.timer);
@@ -18,6 +28,7 @@
   function render(data, active) {
     state = data;
     status(statusKey, statusError);
+    expand(active && $('settings-dialog').classList.contains('wallpaper-settings-expanded'));
     const name = module => module.locales?.[i18n.locale]?.name || module.name;
     const modules = data?.modules || [];
     if (!modules.some(module => module.id === selected)) {
@@ -35,10 +46,12 @@
     $('wallpaper-settings-select').disabled = !modules.length;
     const module = modules.find(module => module.id === selected);
     $('wallpaper-settings-reload').disabled = !module?.settings;
+    $('wallpaper-settings-expand').disabled = !module?.settings;
     const key = JSON.stringify([module?.id, module?.settings_token, module?.settings?.entry, data?.service]);
     if (context && context.key !== key) close();
     if (!active) return;
     if (!module?.settings) {
+      expand(false);
       close(); $('wallpaper-settings-empty').hidden = false;
       $('wallpaper-settings-empty').textContent = t(module ? '此壁纸暂无自定义设置。' : '还没有已安装的壁纸。');
       status(''); return;
@@ -87,19 +100,20 @@
       const result = await window.__TAURI__.core.invoke(message.method === 'load' ? 'get_wallpaper_settings' : 'set_wallpaper_settings', args);
       if (context !== current) return;
       current.loaded = true; clearTimeout(current.timer);
-      if (message.method === 'save') status(result.pending ? '已保存，部分窗口将在就绪后同步。' :
-        result.running ? '已保存，已通知正在运行的壁纸。' : '已保存，将在壁纸下次启动时生效。');
-      else status('同一设备上的这张壁纸共用一份配置，保存后生效。');
+      status('同一设备上的所有屏幕共用设置，保存后生效。');
       reply({ok: true, result: {...result, locale: i18n.locale}});
     } catch (error) {
-      if (context === current) status(String(error.message || error), true);
+      if (context === current && !current.loaded) status(String(error.message || error), true);
       reply({ok: false, error: String(error.message || error)});
     } finally { current.busy = false; }
   });
   $('wallpaper-settings-select').addEventListener('change', () => {
     selected = $('wallpaper-settings-select').value; close(); render(state, true);
   });
-  $('settings-dialog').addEventListener('close', close);
+  $('settings-dialog').addEventListener('close', () => { close(); expand(false); });
+  $('wallpaper-settings-expand').addEventListener('click', () => {
+    expand(!$('settings-dialog').classList.contains('wallpaper-settings-expanded'));
+  });
   $('wallpaper-settings-reload').addEventListener('click', () => { close(); render(state, true); });
   window.wallpaperSettingsPanel = Object.freeze({render, close});
 })();

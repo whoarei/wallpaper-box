@@ -53,13 +53,12 @@
       <div class="setting-row"><span><strong data-i18n="壁纸文件夹">壁纸文件夹</strong><small data-i18n="已下载与导入的壁纸">已下载与导入的壁纸</small></span><div class="import-actions"><button id="open-folder" class="text-button" data-i18n="打开 ↗">打开 ↗</button><button id="refresh" class="text-button" data-i18n="重新扫描">重新扫描</button></div></div>
      </div>
     </div>
+    <div class="settings-footer"><button id="about-open" class="text-button" aria-haspopup="dialog" aria-controls="about-dialog" data-i18n="关于壁纸盒子">关于壁纸盒子</button><button id="quit" class="text-button settings-quit" data-i18n="退出程序">退出程序</button></div>
    </section>
    <section id="settings-wallpaper-panel" class="settings-panel wallpaper-settings-panel" role="tabpanel" aria-labelledby="settings-tab-wallpaper" tabindex="0" hidden>
-    <div class="settings-panel-heading"><div><h3 data-i18n="壁纸设置">壁纸设置</h3><p data-i18n="为每张壁纸定制喜欢的效果">为每张壁纸定制喜欢的效果</p></div><button id="wallpaper-settings-reload" class="text-button" data-i18n="重新加载">重新加载</button></div>
-    <div class="wallpaper-settings-picker"><label for="wallpaper-settings-select" data-i18n="选择壁纸">选择壁纸</label><select id="wallpaper-settings-select" class="settings-select" disabled></select></div>
+    <div class="wallpaper-settings-picker"><label for="wallpaper-settings-select" data-i18n="选择壁纸">选择壁纸</label><select id="wallpaper-settings-select" class="settings-select" disabled></select><button id="wallpaper-settings-expand" class="text-button" type="button" aria-pressed="false" data-i18n="展开编辑">展开编辑</button><button id="wallpaper-settings-reload" class="text-button" type="button" title="重新加载会丢弃未保存的更改" data-i18n-title="重新加载会丢弃未保存的更改" data-i18n="重新加载">重新加载</button></div>
     <p id="wallpaper-settings-empty" class="empty" data-i18n="还没有已安装的壁纸。">还没有已安装的壁纸。</p>
     <div id="wallpaper-settings-frame" class="wallpaper-settings-frame"></div>
-    <div class="settings-feedback"><p id="wallpaper-settings-error" class="error" role="alert" hidden></p></div>
     <div class="settings-panel-actions"><p id="wallpaper-settings-status" class="settings-status" role="status" aria-live="polite"></p></div>
    </section>
    <section id="settings-repositories-panel" class="settings-panel repositories-panel" role="tabpanel" aria-labelledby="settings-tab-repositories" tabindex="0" hidden>
@@ -96,7 +95,6 @@
    </section>
   </div>
  </div>
- <div class="settings-footer"><button id="about-open" class="text-button" aria-haspopup="dialog" aria-controls="about-dialog" data-i18n="关于壁纸盒子">关于壁纸盒子</button><button id="quit" class="text-button settings-quit" data-i18n="退出程序">退出程序</button></div>
 </dialog>
 <dialog id="about-dialog" aria-labelledby="about-title" aria-describedby="about-description">
  <div class="dialog-heading"><h2 id="about-title" data-i18n="关于壁纸盒子">关于壁纸盒子</h2><button class="icon-button" data-close aria-label="关闭关于" data-i18n-aria-label="关闭关于">×</button></div>

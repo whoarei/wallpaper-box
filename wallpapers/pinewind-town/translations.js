@@ -116,5 +116,7 @@ window.wallpaperEnglish = Object.freeze({
   "已恢复默认选项，保存后生效。": "Default options restored. Save to apply them.",
   "正在保存…": "Saving…",
   "选择喜欢的光照与水流，保存后同步到所有正在使用这张壁纸的屏幕。": "Choose your lighting and water flow. Save to update every screen using this wallpaper.",
-  "为小镇选择时光与天气；流动时光会自动循环昼夜。": "Choose the town’s time and weather. Flowing Time cycles through day and night."
+  "为小镇选择时光与天气；流动时光会自动循环昼夜。": "Choose the town’s time and weather. Flowing Time cycles through day and night.",
+  "更改尚未保存": "Unsaved changes",
+  "流动时光会自动循环昼夜。": "Flowing Time cycles through day and night."
 });

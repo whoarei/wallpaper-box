@@ -26,6 +26,7 @@
 - [11 常见问题，先从这里查](#11-常见问题先从这里查)
 - [12 版本状态与参考来源](#12-版本状态与参考来源)
 - [壁纸设置接口](#可选壁纸设置通信)
+- [设置页尺寸与风格](#5-设置页尺寸风格与滚动)
 
 ## 01 先记住这三条
 
@@ -474,7 +475,7 @@ v1 只支持**立即完成并同步返回 JSON 结果**的页面操作。不返�
 
 #### 1. 声明设置页与公开接口
 
-在 module.json 中增加可选的 settings.entry，指向壁纸目录内独立且实际存在的 HTML 文件；不接受远程地址、越界路径或主播放入口。旧壁纸省略即可继续播放。设置页的业务字段和布局由壁纸作者决定。
+在 module.json 中增加可选的 settings.entry，指向壁纸目录内独立且实际存在的 HTML 文件；不接受远程地址、越界路径或主播放入口。旧壁纸省略即可继续播放。设置页的业务字段由壁纸作者决定，布局遵循下面的[尺寸与风格要求](#5-设置页尺寸风格与滚动)。宿主不会注入 CSS 改写第三方页面；已有内容包需由作者更新适配。
 
 **module.json · 增加此字段**
 
@@ -494,12 +495,21 @@ v1 只支持**立即完成并同步返回 JSON 结果**的页面操作。不返�
 **settings.html · 最小读写示例**
 
 ```html
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/__wallpaper_host__/settings.css">
 <script src="/__wallpaper_host__/settings.js" defer></script>
-<form id="settings-form">
-  <label>光照 <select id="lighting"><option value="0">晨光</option><option value="1">暮色</option><option value="2">月光</option></select></label>
-  <button id="save" disabled>保存更改</button>
+<form id="settings-form" class="settings-form">
+  <div class="settings-scroll"><fieldset id="fields" disabled>
+    <label class="settings-row">光照 <select id="lighting"><option value="0">晨光</option><option value="1">暮色</option><option value="2">月光</option></select></label>
+  </fieldset></div>
+  <footer class="settings-actions">
+    <div class="settings-feedback"><p id="status" role="status" aria-live="polite"></p></div>
+    <div class="settings-buttons"><button type="submit" id="save" disabled>保存更改</button></div>
+  </footer>
 </form>
-<p id="status" role="status"></p>
 <script>
 window.addEventListener('DOMContentLoaded', async () => {
   const form = document.getElementById('settings-form');
@@ -530,13 +540,17 @@ window.addEventListener('DOMContentLoaded', async () => {
     const value = snapshot.settings.lighting;
     lighting.value = Number.isInteger(value) && value >= 0 && value <= 2 ? String(value) : '0';
     ready = true;
+    document.getElementById('fields').disabled = false;
     save.disabled = false;
   } catch (error) {
     status.textContent = error.message;
   }
 });
 </script>
+</html>
 ```
+
+基础样式和紧凑容器为本分支新增，尚未包含在正式 v0.12.0 中。上面的 `/__wallpaper_host__/settings.css` 由新宿主提供；如需兼容正式 v0.12.0，请把[基础 CSS](../wallpaper-host/src-tauri/wallpaper-settings.css)复制进壁纸包，并改为相对路径 `href="settings.css"`。JavaScript SDK 的 v0.12.0 读写契约保持不变。包含文本编辑、恢复默认、独立错误提示的[完整设置页模板](examples/wallpaper-settings.html)可直接复制为包内的 `settings.html`，再按壁纸业务修改字段。
 
 设置页 SDK 另提供只读 `wallpaperSettings.locale`（zh-CN 或 en），load/save 回执包含当前 locale。主程序语言变化时在设置页 window 上发送 `wallpapersettings:localechange`，detail 为 `{ locale }`。页面可据此更新文案，应保留未保存的表单值；locale 是主程序界面语言，不写入每张壁纸的配置，也不增加配置 revision。
 
@@ -608,6 +622,37 @@ if (supportsSettings) {
 | 普通浏览器、旧宿主或未适配壁纸 | 播放页按默认配置运行；没有声明设置页时，主程序显示暂无自定义设置。SDK 应只在主程序提供的设置页环境中使用。 |
 
 这些失败通过 SDK 的 rejected Promise / Error.message 表达，不套用前面的操作接口错误码。完整页面可参考内置壁纸的 settings.html；主程序不按壁纸名称定义光照、天气等业务字段。
+
+#### 5. 设置页尺寸、风格与滚动
+
+设置页是主程序中的紧凑表单。主程序已经提供分类、壁纸选择、重新加载和展开入口，页面直接从设置项开始，不再添加壁纸大标题、封面、宣传语、整屏背景或另一套导航。少量强调色可以体现壁纸个性，主要视觉沿用主程序。
+
+**尺寸以 iframe 的实际 CSS 像素为准。** 主窗口默认 1080×760，设置弹窗默认 720×540，这两个尺寸都不是页面可用尺寸。当前中文界面参考如下；语言、错误信息和后续容器调整可能改变数值，不能把这些尺寸写成页面固定宽高。
+
+| 场景 | 设置页可用区域 | 验证重点 |
+| --- | --- | --- |
+| 默认紧凑弹窗 | 约 574×410 | 直接显示主要设置，避免大块留白和重复说明。 |
+| 1080×760 窗口中展开编辑 | 约 894×590 | 利用增加的空间，保留正在编辑的内容、选项和滚动位置。 |
+| 正式 v0.12.0 的旧容器 | 约 574×209 | 兼容旧宿主时必须验证，保存入口不能被挤出或遮挡。 |
+| 较窄或较矮的嵌入区域 | 至少验证 320×180 | 无横向溢出；内容可纵向滚动；按钮仍能操作。 |
+
+页面通过自己的 `window.innerWidth` / `innerHeight`、CSS 媒体查询或 `ResizeObserver` 获取实际尺寸，无需新增尺寸通信接口。不得读取 `screen.width`、假设桌面分辨率、访问父页面 DOM，或用整体缩放缩小文字来塞入容器。使用 `width=device-width,initial-scale=1`；尺寸变化时只重排布局，不重新 load 配置、清空草稿或提交保存。
+
+| 项目 | 风格要求 |
+| --- | --- |
+| 颜色 | 当前主程序使用浅色界面，页面默认使用白色背景、深色正文、低对比边框和绿色主操作。不要仅因壁纸画面或系统主题为深色而自行切换整页背景。 |
+| 字体 | 正文建议 13px；辅助文字 11–12px；必要的小分组标题 13–14px。标签、说明允许换行，不用大标题占据首屏。 |
+| 密度 | 水平内边距 16–20px，窄屏可减为 12px；设置行约 40–48px，控件至少 32px 高；相关控件间距 8–12px。复杂编辑区按实际内容增高。 |
+| 控件 | 输入框、选择框、按钮采用一致的高度、边框、圆角和焦点样式。每个字段有明确标签，辅助说明用 aria-describedby 关联。 |
+| 保存 | 保留一个明确的“保存更改”主入口；恢复默认使用次要按钮，先修改页面再由用户保存。简单设置不增加“先存草稿、再保存到主程序”的额外步骤。复杂编辑确有草稿时明确区分草稿与已保存配置。 |
+| 说明与状态 | 必要的字段说明就近显示；长操作教程、容量统计、草稿一致性等放入默认收起的 details。加载、未保存、保存结果和错误按需反馈，避免多个区域反复展示相同信息。 |
+| 错误与键盘 | 正文对比度至少 4.5:1；错误提供文字和 role="alert"，不只变色。保留清晰的键盘焦点；加载或保存时禁用相关控件，失败后保留输入并允许重试。 |
+
+**滚动采用“内容区＋操作区”的布局。** 基础 CSS 中，`.settings-form` 占满 iframe，`.settings-scroll` 负责唯一的内容滚动，`.settings-actions` 作为普通 flex 子项在底部占位。保存按钮因此始终可见，也不会覆盖最后一项输入；错误过长时反馈区域单独限高。不要使用没有预留空间的 fixed / absolute 浮动底栏，也不要同时让 body、表单和列表各自滚动。窄屏时反馈和按钮可换行。
+
+基础 CSS 提供 `--settings-bg`、`--settings-ink`、`--settings-muted`、`--settings-line`、`--settings-control-bg`、`--settings-accent`、`--settings-error` 等变量，以及 `.settings-row`、`.settings-field`、`.settings-hint`、`.settings-feedback`、`.settings-buttons` 等类。作者主动引入即可使用；它不会改变壁纸播放页的样式，也不意味着获得新接口能力。需要调整变量时继续保证对比度与整体风格一致。
+
+交付前用默认、展开、旧版小高度和窄屏尺寸检查中文与英文、长标签、长错误和长列表；滚动到底部后，最后一个字段与保存按钮都必须可操作。可通过实际嵌入或明确标注的 SDK 模拟器测试，不能只在独立大浏览器窗口里验收。
 
 ## 08 完整示例：复制后就能打开
 

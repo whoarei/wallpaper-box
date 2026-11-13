@@ -23,7 +23,7 @@ const state={language:'zh-CN',locale:'zh-CN',version:'0.12.0',service:wallpaper,
  proxy:{mode:'system',url:''},wallpaper_repositories:[],selected_monitor:'primary',
  displays:[{id:'primary',name:'主显示器',width:1920,height:1080,scale:1,primary:true}],
  modules,warnings:[],downloads:[],wallpapers:[],last_error:null,online:{catalog:null,checked_at:0}};
-let saved={},failSave=false,deferLoad=false,releaseLoad=null,passed=0;
+let saved={},failSave=false,deferLoad=false,releaseLoad=null,passed=0,useExample=false;
 const calls=[],scenes=[];
 function snapshot(id){return copy(saved[id]||{revision:0,settings:{}});}
 async function native(command,args={}){
@@ -62,10 +62,12 @@ async function route(context){
    file=path.join(root,'wallpaper-host/ui',relative);
    if(relative==='index.html')headers['Content-Security-Policy']=managerPolicy;
   }else if(url.pathname==='/__wallpaper_host__/settings.js')file=path.join(root,'wallpaper-host/src-tauri/wallpaper-settings.js');
+  else if(url.pathname==='/__wallpaper_host__/settings.css')file=path.join(root,'wallpaper-host/src-tauri/wallpaper-settings.css');
   else{
    const [,id,...parts]=url.pathname.split('/');
    if(!['aquarium','pinewind-town'].includes(id)||parts.some(part=>part==='..'))return request.fulfill({status:404});
    const relative=parts.join('/');file=path.join(root,'wallpapers',id,relative);
+   if(useExample&&id==='aquarium'&&relative==='settings.html')file=path.join(root,'docs/examples/wallpaper-settings.html');
    headers['Content-Security-Policy']=relative==='settings.html'?policy.replace("frame-ancestors 'none'",ancestors):policy;
   }
   if(!fs.existsSync(file))return request.fulfill({status:404});
@@ -118,15 +120,44 @@ async function test(name,body){await body();passed++;console.log('PASS '+name);}
   await page.goto(manager);await page.locator('.module').first().waitFor();
   await test('an installed wallpaper can save while stopped and reload the same durable configuration',async()=>{
    await open();await save(2,1);
-   assert.match(await page.locator('#wallpaper-settings-status').innerText(),/下次启动/);
+   assert.match(await frame().locator('#feedback').innerText(),/下次启动/);
+   assert.doesNotMatch(await page.locator('#wallpaper-settings-status').innerText(),/已保存/,'The host must not repeat page feedback');
    assert.deepEqual(JSON.parse(fs.readFileSync(storage)).aquarium,{revision:1,settings:{lighting:2,flow:1}});
    saved=JSON.parse(fs.readFileSync(storage));await page.reload();await open();
    assert.equal(await frame().locator('#lighting').inputValue(),'2');assert.equal(await frame().locator('#flow').inputValue(),'1');
   });
   await test('wallpapers without a settings page show an empty state',async()=>{
+   await page.locator('#wallpaper-settings-expand').click();
    await page.locator('#wallpaper-settings-select').selectOption('legacy');
    assert.equal(await page.locator('#wallpaper-settings-frame iframe').count(),0);
-   assert.match(await page.locator('#wallpaper-settings-empty').innerText(),/暂无自定义设置/);await open();
+   assert.match(await page.locator('#wallpaper-settings-empty').innerText(),/暂无自定义设置/);
+   assert.equal(await page.locator('#wallpaper-settings-expand').getAttribute('aria-pressed'),'false');
+   assert.equal(await page.locator('#wallpaper-settings-expand').isDisabled(),true);await open();
+  });
+  await test('expanding the editor preserves drafts and returning to general restores its actions',async()=>{
+   await page.setViewportSize({width:1080,height:760});
+   const source=await page.locator('iframe').getAttribute('src');
+   const before=calls.filter(call=>call.command==='set_wallpaper_settings').length;
+   const normal=await page.locator('iframe').boundingBox();
+   assert.ok(normal.height>=400,JSON.stringify(normal));
+   assert.equal(await page.locator('#about-open').isVisible(),false);
+   assert.equal(await page.locator('#quit').isVisible(),false);
+   await frame().locator('#lighting').selectOption('0');
+   await page.locator('#wallpaper-settings-expand').click();
+   const expanded=await page.locator('iframe').boundingBox();
+   assert.ok(expanded.width>normal.width&&expanded.height>normal.height,JSON.stringify(expanded));
+   assert.equal(await page.locator('#wallpaper-settings-expand').getAttribute('aria-pressed'),'true');
+   assert.equal(await frame().locator('#lighting').inputValue(),'0');
+   assert.equal(await page.locator('iframe').getAttribute('src'),source);
+   await page.locator('#settings-tab-general').click();
+   assert.equal(await page.locator('#about-open').isVisible(),true);
+   assert.equal(await page.locator('#quit').isVisible(),true);
+   await page.locator('#settings-tab-wallpaper').click();
+   assert.equal(await page.locator('#wallpaper-settings-expand').getAttribute('aria-pressed'),'false');
+   assert.equal(await page.locator('iframe').getAttribute('src'),source);
+   assert.equal(await frame().locator('#lighting').inputValue(),'0');
+   assert.equal(calls.filter(call=>call.command==='set_wallpaper_settings').length,before);
+   await frame().locator('#lighting').selectOption('2');
   });
   await test('sandboxed pages cannot access the manager or request unrelated native operations',async()=>{
    const child=page.frames().find(f=>f.url().includes('/aquarium/settings.html'));
@@ -157,6 +188,10 @@ async function test(name,body){await body();passed++;console.log('PASS '+name);}
    assert.equal(await frame().locator('#lighting').inputValue(),'0');
    assert.match(await child.locator('body').innerText(),/Lighting/);
    assert.match(await page.locator('#wallpaper-settings-select option:checked').innerText(),/Stillwater/);
+   assert.equal(await page.locator('#wallpaper-settings-expand').innerText(),'Expand');
+   await page.locator('#wallpaper-settings-expand').click();
+   assert.equal(await page.locator('#wallpaper-settings-expand').innerText(),'Collapse');
+   await page.locator('#wallpaper-settings-expand').click();
    assert.equal(await page.locator('#wallpaper-settings-frame iframe').getAttribute('src'),source);
    assert.deepEqual(saved,before);
    await page.locator('#settings-tab-general').click();await page.locator('#language').selectOption('zh-CN');
@@ -180,7 +215,7 @@ async function test(name,body){await body();passed++;console.log('PASS '+name);}
    }
    assert.equal(await first.evaluate(()=>aquarium.getState().time),time);
    assert.deepEqual(await town.evaluate(()=>wallpaperHost.getSettings()),{});
-   assert.match(await page.locator('#wallpaper-settings-status').innerText(),/已通知/);
+   assert.match(await frame().locator('#feedback').innerText(),/已通知/);
   });
   await test('older revisions, other wallpaper updates and mutated event snapshots cannot overwrite current settings',async()=>{
    const result=await first.evaluate(()=>{
@@ -216,14 +251,62 @@ async function test(name,body){await body();passed++;console.log('PASS '+name);}
    assert.equal(await town.evaluate(()=>pinewind.getState().raining),true);
    assert.deepEqual(snapshot('aquarium').settings,{lighting:1,flow:2});
   });
+  await test('the documented editor keeps long content and errors above reachable save controls even at 320x180',async()=>{
+   useExample=true;await open('aquarium');await page.locator('#wallpaper-settings-reload').click();
+   await frame().locator('#text').fill('保留未保存的诗词与注释');
+   const child=page.frames().find(f=>f.url().includes('/aquarium/settings.html'));
+   await child.evaluate(()=>{
+    for(let index=0;index<12;index++){
+     const row=document.createElement('label');row.className='settings-field';
+     const label=document.createElement('span');label.textContent='诗词与注释 '+(index+1);
+     const input=document.createElement('textarea');input.value='Long editable content';
+     row.append(label,input);document.querySelector('fieldset').append(row);
+    }
+   });
+   const style=await child.evaluate(()=>({font:getComputedStyle(document.body).fontSize,background:getComputedStyle(document.documentElement).backgroundColor}));
+   assert.deepEqual(style,{font:'13px',background:'rgb(255, 255, 255)'});
+   const before=JSON.stringify(saved);failSave=true;await frame().locator('#save').click();
+   await frame().locator('#error').filter({hasText:'保存失败'}).waitFor();failSave=false;
+   assert.equal(await frame().locator('#text').inputValue(),'保留未保存的诗词与注释');
+   assert.equal(JSON.stringify(saved),before);
+   // Model a legacy/small embedding area without changing the page's own CSS.
+   await page.locator('#wallpaper-settings-frame').evaluate(node=>{node.style.flex='none';node.style.width='320px';node.style.height='180px';});
+   await child.locator('#error').evaluate(node=>{node.textContent='保存失败，请保留当前输入并重新加载最新配置。'.repeat(20);});
+   await child.locator('.settings-scroll').evaluate(node=>{node.scrollTop=node.scrollHeight;});
+   const geometry=await child.evaluate(()=>{
+    const last=document.querySelector('fieldset label:last-child').getBoundingClientRect();
+    const scroll=document.querySelector('.settings-scroll').getBoundingClientRect();
+    const actions=document.querySelector('.settings-actions').getBoundingClientRect();
+    const save=document.querySelector('#save'),button=save.getBoundingClientRect();
+    return {width:innerWidth,height:innerHeight,contentWidth:document.documentElement.scrollWidth,
+     lastBottom:last.bottom,scrollBottom:scroll.bottom,actionsTop:actions.top,
+     buttonBottom:button.bottom,hit:document.elementFromPoint(button.x+button.width/2,button.y+button.height/2)===save};
+   });
+   assert.equal(geometry.width,320);assert.equal(geometry.height,180);
+   assert.ok(geometry.contentWidth<=geometry.width,JSON.stringify(geometry));
+   assert.ok(geometry.lastBottom<=geometry.scrollBottom&&geometry.scrollBottom<=geometry.actionsTop,JSON.stringify(geometry));
+   assert.ok(geometry.hit&&geometry.buttonBottom<=geometry.height,JSON.stringify(geometry));
+   await frame().locator('#save').click();await frame().locator('#feedback').filter({hasText:'已保存'}).waitFor();
+   assert.equal(snapshot('aquarium').settings.text,'保留未保存的诗词与注释');
+   await page.locator('#wallpaper-settings-frame').evaluate(node=>node.removeAttribute('style'));
+   useExample=false;await open('pinewind-town');
+  });
   await test('settings stay usable across normal and compact layouts and package updates remount the frame',async()=>{
-   for(const [width,height] of [[1080,760],[780,600],[390,844]]){
+   for(const locale of ['zh-CN','en']){
+    await page.locator('#settings-tab-general').click();await page.locator('#language').selectOption(locale);
+    await page.locator('#settings-tab-wallpaper').click();
+    for(const [width,height] of [[1080,760],[780,600],[390,844]]){
     await page.setViewportSize({width,height});
     const bounds=await page.locator('#wallpaper-settings-frame iframe').boundingBox();
     assert.ok(bounds.width>200&&bounds.height>150,JSON.stringify(bounds));
     assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=width&&bounds.y+bounds.height<=height);
     assert.ok(await frame().locator('#save').isVisible());
-    if(process.env.ARTIFACTS_DIR){fs.mkdirSync(process.env.ARTIFACTS_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.ARTIFACTS_DIR,`wallpaper-settings-${width}.png`)});}
+    const child=page.frames().find(f=>f.url().includes('/pinewind-town/settings.html'));
+    assert.ok(await child.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'The settings page must not overflow horizontally');
+    const button=await frame().locator('#save').boundingBox();
+    assert.ok(button.y>=bounds.y&&button.y+button.height<=bounds.y+bounds.height,JSON.stringify({button,bounds}));
+    if(process.env.ARTIFACTS_DIR){fs.mkdirSync(process.env.ARTIFACTS_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.ARTIFACTS_DIR,`wallpaper-settings-${locale}-${width}.png`)});}
+    }
    }
    const old=await page.locator('iframe').getAttribute('src');modules[1].settings_token='pinewind-town-v2';
    await page.waitForFunction(old=>document.querySelector('iframe')?.src!==old,old);

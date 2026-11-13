@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>壁纸设置示例</title>
+  <link rel="stylesheet" href="/__wallpaper_host__/settings.css">
+  <script src="/__wallpaper_host__/settings.js" defer></script>
+</head>
+<body>
+  <form id="settings-form" class="settings-form">
+    <div class="settings-scroll">
+      <fieldset id="fields" disabled>
+        <label class="settings-row" for="lighting"><span>光照</span><select id="lighting"><option value="0">晨光</option><option value="1">暮色</option><option value="2">月光</option></select></label>
+        <label class="settings-field" for="text"><span>悬浮文字</span><textarea id="text" maxlength="2000" rows="5" aria-describedby="text-help"></textarea></label>
+        <p id="text-help" class="settings-hint">留空可隐藏文字。</p>
+      </fieldset>
+    </div>
+    <footer class="settings-actions">
+      <div class="settings-feedback"><p id="feedback" role="status" aria-live="polite"></p><p id="error" role="alert" hidden></p></div>
+      <div class="settings-buttons"><button type="button" id="defaults" disabled>恢复默认</button><button type="submit" id="save" disabled>保存更改</button></div>
+    </footer>
+  </form>
+  <script>
+    window.addEventListener('DOMContentLoaded', async () => {
+      const $ = id => document.getElementById(id);
+      let revision = 0, loaded = false;
+      function busy(value) {
+        $('fields').disabled = value;
+        $('defaults').disabled = value;
+        $('save').disabled = value;
+      }
+      function fill(settings) {
+        $('lighting').value = Number.isInteger(settings.lighting) && settings.lighting >= 0 && settings.lighting <= 2 ? String(settings.lighting) : '0';
+        $('text').value = typeof settings.text === 'string' ? settings.text.slice(0, 2000) : '';
+      }
+      function failure(error) {
+        $('feedback').textContent = '';
+        $('error').textContent = error.message;
+        $('error').hidden = false;
+      }
+      $('fields').addEventListener('input', () => { $('feedback').textContent = '更改尚未保存'; });
+      $('defaults').onclick = () => { fill({}); $('feedback').textContent = '已恢复默认选项，保存后生效。'; };
+      // 禁止原生表单导航。仅保存完整配置，revision 使用最近一次成功回执。
+      $('settings-form').onsubmit = async event => {
+        event.preventDefault();
+        if (!loaded || $('save').disabled) return;
+        busy(true); $('error').hidden = true; $('feedback').textContent = '正在保存…';
+        try {
+          const result = await wallpaperSettings.save({lighting: Number($('lighting').value), text: $('text').value}, revision);
+          revision = result.snapshot.revision;
+          $('feedback').textContent = result.pending ? '已保存，部分窗口将在就绪后同步。' :
+            result.running ? '已保存，已通知正在运行的壁纸。' : '已保存，将在壁纸下次启动时生效。';
+        } catch (error) {
+          failure(error); // 保留输入，版本冲突时不自动覆盖。
+        } finally { busy(false); }
+      };
+      try {
+        if (!window.wallpaperSettings) throw new Error('请在壁纸盒子的“壁纸设置”中打开此页面。');
+        const snapshot = await wallpaperSettings.load();
+        revision = snapshot.revision; fill(snapshot.settings); loaded = true; busy(false);
+      } catch (error) { failure(error); }
+    });
+  </script>
+</body>
+</html>
