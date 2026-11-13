@@ -1,6 +1,6 @@
 {
   "name": "wallpaper-box",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "private": true,
   "description": "壁纸盒子 Windows 动态壁纸程序",
   "scripts": {

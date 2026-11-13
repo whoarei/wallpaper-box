@@ -858,14 +858,19 @@ fn rebuild_tray(app: &AppHandle) {
         let selected = view.displays.iter().find(|d| d.id == view.selected_monitor);
         menu.append(&MenuItem::with_id(
             app,
-            "current-display",
-            selected
-                .map(|d| d.name.as_str())
-                .unwrap_or(tr("未选择显示器", "No display selected")),
-            false,
+            "open-manager",
+            tr("打开壁纸管理", "Open wallpaper manager"),
+            true,
             None::<&str>,
         )?)?;
-        let screens = Submenu::with_id(app, "displays", tr("选择显示器", "Select display"), true)?;
+        let screens = Submenu::with_id(
+            app,
+            "displays",
+            selected
+                .map(|d| format!("{}{}", tr("选择显示器：", "Select display: "), d.name))
+                .unwrap_or_else(|| tr("选择显示器", "Select display").into()),
+            !view.displays.is_empty(),
+        )?;
         for display in &view.displays {
             screens.append(&CheckMenuItem::with_id(
                 app,
@@ -877,13 +882,18 @@ fn rebuild_tray(app: &AppHandle) {
             )?)?;
         }
         menu.append(&screens)?;
-        menu.append(&PredefinedMenuItem::separator(app)?)?;
         let current = view
             .wallpapers
             .iter()
             .find(|w| w.display_id == view.selected_monitor);
+        let wallpapers = Submenu::with_id(
+            app,
+            "wallpapers",
+            tr("壁纸", "Wallpapers"),
+            selected.is_some(),
+        )?;
         for module in &view.modules {
-            menu.append(&CheckMenuItem::with_id(
+            wallpapers.append(&CheckMenuItem::with_id(
                 app,
                 format!("wallpaper:{}", module.id),
                 module.localized_name(view.locale),
@@ -893,7 +903,7 @@ fn rebuild_tray(app: &AppHandle) {
             )?)?;
         }
         if view.modules.is_empty() {
-            menu.append(&MenuItem::with_id(
+            wallpapers.append(&MenuItem::with_id(
                 app,
                 "no-wallpapers",
                 tr(
@@ -904,7 +914,13 @@ fn rebuild_tray(app: &AppHandle) {
                 None::<&str>,
             )?)?;
         }
-        menu.append(&PredefinedMenuItem::separator(app)?)?;
+        wallpapers.append(&PredefinedMenuItem::separator(app)?)?;
+        let actions = Submenu::with_id(
+            app,
+            "wallpaper-actions",
+            tr("壁纸操作", "Wallpaper actions"),
+            current.is_some(),
+        )?;
         if let Some(current) = current {
             if let Some(instance_id) = &current.instance_id {
                 let pause = crate::wallpaper_protocol::PauseState::new(
@@ -913,7 +929,7 @@ fn rebuild_tray(app: &AppHandle) {
                     false,
                 );
                 for action in &current.actions {
-                    menu.append(&MenuItem::with_id(
+                    actions.append(&MenuItem::with_id(
                         app,
                         format!("action:{instance_id}:{}", action.id),
                         &action.label,
@@ -921,9 +937,12 @@ fn rebuild_tray(app: &AppHandle) {
                         None::<&str>,
                     )?)?;
                 }
+                if !current.actions.is_empty() {
+                    actions.append(&PredefinedMenuItem::separator(app)?)?;
+                }
             }
         }
-        menu.append(&CheckMenuItem::with_id(
+        actions.append(&CheckMenuItem::with_id(
             app,
             "pause-current",
             tr("暂停当前壁纸", "Pause current wallpaper"),
@@ -931,6 +950,15 @@ fn rebuild_tray(app: &AppHandle) {
             current.map(|w| w.paused).unwrap_or(false),
             None::<&str>,
         )?)?;
+        actions.append(&MenuItem::with_id(
+            app,
+            "remove-current",
+            tr("关闭当前屏幕壁纸", "Remove wallpaper from current display"),
+            current.is_some(),
+            None::<&str>,
+        )?)?;
+        wallpapers.append(&actions)?;
+        menu.append(&wallpapers)?;
         let all_paused = !view.wallpapers.is_empty() && view.wallpapers.iter().all(|w| w.paused);
         menu.append(&MenuItem::with_id(
             app,
@@ -943,21 +971,6 @@ fn rebuild_tray(app: &AppHandle) {
             !view.wallpapers.is_empty(),
             None::<&str>,
         )?)?;
-        menu.append(&CheckMenuItem::with_id(
-            app,
-            "auto-pause",
-            tr("遮挡时自动暂停", "Pause when covered"),
-            true,
-            view.auto_pause,
-            None::<&str>,
-        )?)?;
-        menu.append(&MenuItem::with_id(
-            app,
-            "remove-current",
-            tr("关闭当前屏幕壁纸", "Remove wallpaper from current display"),
-            current.is_some(),
-            None::<&str>,
-        )?)?;
         menu.append(&PredefinedMenuItem::separator(app)?)?;
         menu.append(&MenuItem::with_id(
             app,
@@ -966,27 +979,37 @@ fn rebuild_tray(app: &AppHandle) {
             true,
             None::<&str>,
         )?)?;
-        menu.append(&MenuItem::with_id(
+        let settings = Submenu::with_id(
             app,
-            "open-manager",
-            tr("打开壁纸管理", "Open wallpaper manager"),
+            "settings-help",
+            tr("设置与帮助", "Settings and help"),
             true,
+        )?;
+        settings.append(&CheckMenuItem::with_id(
+            app,
+            "auto-pause",
+            tr("遮挡时自动暂停", "Pause when covered"),
+            true,
+            view.auto_pause,
             None::<&str>,
         )?)?;
-        menu.append(&MenuItem::with_id(
+        settings.append(&PredefinedMenuItem::separator(app)?)?;
+        settings.append(&MenuItem::with_id(
             app,
             "check-app-update",
             tr("检查程序更新", "Check for app updates"),
             true,
             None::<&str>,
         )?)?;
-        menu.append(&MenuItem::with_id(
+        settings.append(&MenuItem::with_id(
             app,
             "about",
             tr("关于壁纸盒子", "About Wallpaper Box"),
             true,
             None::<&str>,
         )?)?;
+        menu.append(&settings)?;
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
         menu.append(&MenuItem::with_id(
             app,
             "quit",

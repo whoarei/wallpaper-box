@@ -33,7 +33,7 @@
 
 支持 **Windows x64**，需要 WebView2，安装程序会在缺少时自动下载。
 
-**v0.10.2** 每次点击“发现”自动刷新在线壁纸清单；点击“重启并升级”直接启动已验证的安装程序，不再弹出二次确认。
+**v0.11.0** 新增中英双语与语言设置，管理界面、托盘、内置壁纸和预览同步切换；兼容旧壁纸，并保留精简托盘菜单。
 
 [详细使用与开发说明](docs/guide.md) · [默认 Gitee 壁纸库](https://gitee.com/xishuaiya/wallpapers) · [GitHub 壁纸库](https://github.com/whoarei/wallpapers)
 

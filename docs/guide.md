@@ -8,7 +8,7 @@
 
 1. 安装后运行 `wallpaper-box.exe`。运行依赖 WebView2；安装程序在缺少运行时时下载 Microsoft 运行时。
 2. 首次启动在主显示器播放水族箱。右上角以各屏当前壁纸封面显示缩略图，点击选择显示器，再点击“我的壁纸”的封面即可应用；“预览”在独立窗口播放，不改变当前桌面。缩略图会高亮所选屏幕，并保留横竖屏比例；未设置壁纸的屏幕显示占位图。
-3. 左键托盘图标打开管理窗口，右键快速切换、暂停或退出。关闭管理窗口会收起到托盘。
+3. 左键托盘图标打开管理窗口；右键菜单可选择显示器，在“壁纸”子菜单中切换壁纸，通过“壁纸 → 壁纸操作”执行互动、暂停当前壁纸或关闭当前屏幕壁纸。全部暂停 / 继续、显示 / 还原桌面与退出保留在一级菜单；自动暂停、程序更新和关于信息归入“设置与帮助”。关闭管理窗口会收起到托盘。
 4. 每次点击“发现”都会自动刷新已启用仓库的在线壁纸清单，已有缓存时也会刷新；刷新期间重复点击不会重复发起请求，也可点击“刷新壁纸库”手动刷新。再选择某张壁纸的“下载 / 更新”。检查只获取清单和封面，ZIP 按选择下载，不会自动下载全库。最多同时处理 5 项下载，超出的按加入顺序等待。
 
 管理界面以壁纸列表为主，暂停和投喂集中在底部播放栏。“更多播放操作”提供查看桌面、保存预览、重新加载和关闭当前屏幕壁纸。右上角“设置”按“常规、壁纸仓库、网络代理、程序更新”分类，一次显示一组内容。“常规”包含语言、随系统启动、自动暂停、文件夹 / ZIP 导入、壁纸目录和重新扫描；仓库、代理的保存按钮固定在各自页面底部，详细说明默认收起。切换分类会保留尚未保存的输入。新版就绪提示可直接打开“程序更新”，由用户确认重启升级。
@@ -113,7 +113,7 @@ HTML、脚本、样式与图片使用相对路径。文件夹名使用小写字�
 ## 项目目录
 
 - `wallpaper-host/`：Tauri 2 宿主、嵌入式管理界面、原生目录发现、本地协议、在线更新与打包校验。
-- `wallpapers/{aquarium,pinewind-town}/`：0.10.2 随包的两张壁纸快照（内容版本 1.0.1）。
+- `wallpapers/{aquarium,pinewind-town}/`：0.11.0 随包的两张壁纸快照（内容版本 1.0.1）。
 - `display-service/`：保留的 Legacy Docker 浏览器开发示例，桌面程序运行和安装包不依赖它。
 - `.github/workflows/windows.yml`：主程序 CI 与标签发布。
 - [HTML 技术方案](../display-service/public/docs/architecture.html)：单文件离线文档，含架构、模块规范、权限、迁移及发布流程，支持 10 套配色和保存 PDF。
@@ -130,11 +130,11 @@ npm ci --ignore-scripts
 npm run check:version
 npm run bundle
 ./scripts/package-release.ps1 -RequireSigned
-./scripts/verify-release.ps1 -Directory ../release/v0.10.2 -RequireSigned
-node scripts/verify-installer.mjs ../release/v0.10.2
+./scripts/verify-release.ps1 -Directory ../release/v0.11.0 -RequireSigned
+node scripts/verify-installer.mjs ../release/v0.11.0
 ```
 
-产物位于 `release/v0.10.2/`，共五项：`wallpaper-box_0.10.2_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
+产物位于 `release/v0.11.0/`，共五项：`wallpaper-box_0.11.0_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
 
 Rust 行为检查：
 
@@ -164,8 +164,8 @@ CI 固定工具链、依赖锁文件和 Action 提交，检查版本、JavaScrip
 版本与验收完成后：
 
 ```powershell
-git tag v0.10.2
-git push origin v0.10.2
+git tag v0.11.0
+git push origin v0.11.0
 gh run list --repo whoarei/wallpaper-box --workflow windows.yml
 ```
 

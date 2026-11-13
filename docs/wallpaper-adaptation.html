@@ -120,7 +120,7 @@ window.wallpaperHost = {
 </div></details>
 <h3>语言同步（v1 的可选扩展）</h3>
 <p>主程序将已解析的界面语言放入 <code>wallpaperHost.getState().locale</code>，当前值为 <code>zh-CN</code> 或 <code>en</code>。“跟随系统”的偏好不会原样传入壁纸。桌面与应用内预览都提供此字段；加载前注入初始值，切换后通过既有 <code>wallpaperhost:statechange</code> 事件发送包含语言、暂停状态和暂停原因的完整只读快照。语言变化不更换实例、不重载网页、不解除暂停，也不重放互动操作。</p>
-<p>这是新增可选字段，<code>protocolVersion</code> 仍为 <code>1</code>。v1 的旧宿主可能没有 <code>locale</code>，旧壁纸也可以忽略新增字段；不按主程序版本号猜测能力。缺少字段或独立浏览器运行时，可回退到 <code>navigator.language</code>，再选取壁纸支持的语言。没有翻译时保留壁纸原文。此扩展随本次代码变更提供，安装版是否具备该能力以实际发行版本为准。</p>
+<p>这是新增可选字段，<code>protocolVersion</code> 仍为 <code>1</code>。v1 的旧宿主可能没有 <code>locale</code>，旧壁纸也可以忽略新增字段；不按主程序版本号猜测能力。缺少字段或独立浏览器运行时，可回退到 <code>navigator.language</code>，再选取壁纸支持的语言。没有翻译时保留壁纸原文。主程序从 v0.11.0 起提供此可选扩展；旧版 v1 宿主不一定含有该字段。</p>
 <div class="code"><div class="code-head"><span>javascript · 壁纸自行管理文案</span><button class="copy" type="button">复制代码</button></div><pre><code>const host = window.wallpaperHost?.protocolVersion === 1 ? window.wallpaperHost : null;
 const messages = {
   &quot;zh-CN&quot;: { feed: &quot;投喂鱼儿&quot;, paused: &quot;画面已暂停，请先继续。&quot; },
