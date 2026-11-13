@@ -550,7 +550,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 </html>
 ```
 
-基础样式、紧凑容器和展开编辑从 v0.12.1 起提供。上面的 `/__wallpaper_host__/settings.css` 需要 v0.12.1 或更新宿主；如需兼容 v0.12.0，请把[基础 CSS](../wallpaper-host/src-tauri/wallpaper-settings.css)复制进壁纸包，并改为相对路径 `href="settings.css"`。JavaScript SDK 的 v0.12.0 读写契约保持不变。包含文本编辑、恢复默认、独立错误提示的[完整设置页模板](examples/wallpaper-settings.html)可直接复制为包内的 `settings.html`，再按壁纸业务修改字段。
+基础样式、紧凑容器和展开编辑从 v0.12.2 起提供。上面的 `/__wallpaper_host__/settings.css` 需要 v0.12.2 或更新宿主；如需兼容 v0.12.0，请把[基础 CSS](../wallpaper-host/src-tauri/wallpaper-settings.css)复制进壁纸包，并改为相对路径 `href="settings.css"`。JavaScript SDK 的 v0.12.0 读写契约保持不变。包含文本编辑、恢复默认、独立错误提示的[完整设置页模板](examples/wallpaper-settings.html)可直接复制为包内的 `settings.html`，再按壁纸业务修改字段。
 
 设置页 SDK 另提供只读 `wallpaperSettings.locale`（zh-CN 或 en），load/save 回执包含当前 locale。主程序语言变化时在设置页 window 上发送 `wallpapersettings:localechange`，detail 为 `{ locale }`。页面可据此更新文案，应保留未保存的表单值；locale 是主程序界面语言，不写入每张壁纸的配置，也不增加配置 revision。
 
