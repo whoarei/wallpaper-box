@@ -1500,7 +1500,11 @@ async function noHorizontalOverflow(page, label) {
       await noHorizontalOverflow(page, 'online catalog at 780x600');
       await page.locator('#tab-local').click();
       await page.locator('#tab-online').click();
-      assert.equal((await actions(page)).length, 2, 'Cached tab navigation must not recheck or install');
+      assert.deepEqual(await actions(page), Array.from({ length: 3 }, () => ({ command: 'check_online', args: {} })),
+        'Returning to discovery must refresh even with a cached catalog');
+      await page.locator('#tab-online').click();
+      assert.deepEqual(await actions(page), Array.from({ length: 4 }, () => ({ command: 'check_online', args: {} })),
+        'Clicking the selected discovery tab must also refresh once');
     });
 
     await test('one selected download becomes a playable local wallpaper', null, async page => {
@@ -1555,6 +1559,7 @@ async function noHorizontalOverflow(page, label) {
       await page.waitForFunction(() => [...document.querySelectorAll('#modules .module')]
         .find(card => card.querySelector('h3').textContent === '水族箱').textContent.includes('内置 · v1.0.0'));
       assert.deepEqual(await actions(page), [
+        { command: 'check_online', args: {} },
         { command: 'install_online', args: { moduleId: 'aquarium' } },
         { command: 'rollback_wallpaper', args: { moduleId: 'aquarium' } },
       ]);
@@ -1580,7 +1585,8 @@ async function noHorizontalOverflow(page, label) {
       const incompatible = moduleCard(page, '#online-modules', '通往别处的窗户');
       assert.equal(await incompatible.getByRole('button', { name: '需要程序 0.2.0', exact: true }).isDisabled(), true,
         'A prerelease of the app must not satisfy the minimum stable app version');
-      assert.deepEqual(await actions(page), [], 'Version rendering must never download or recheck automatically');
+      assert.deepEqual(await actions(page), [{ command: 'check_online', args: {} }],
+        'Opening discovery must refresh the cached catalog without downloading');
     });
 
     await test('a rejected rollback remains visible on the local tab after rendering and polling', fixture => {

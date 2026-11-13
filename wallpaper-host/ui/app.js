@@ -491,8 +491,8 @@ async function update(){
  catch(error){if(epoch===renderEpoch){localError=String(error);$('error').hidden=false;$('error').textContent=localError;}}
  finally{polling=false;if(refreshRequested){refreshRequested=false;queueMicrotask(update);}}
 }
-function tab(name){if(name==='local')taskFilter=false;activeTab=name;$('collection-title').textContent=name==='local'?'我的壁纸':'发现壁纸';$('collection-description').textContent=name==='local'?'喜欢的风景，随时在身边。':'给桌面，添一点新鲜感。';$('module-count').hidden=name!=='local';for(const value of ['local','online']){$(value+'-panel').hidden=value!==name;$('tab-'+value).classList.toggle('selected',value===name);$('tab-'+value).setAttribute('aria-pressed',String(value===name));}if(state)render(state);if(name==='online'&&enabledRepositories().length&&!taskFilter&&!state?.online?.catalog&&!remoteBusy)run('check_online',{},'',true);}
-$('download-filter').onclick=()=>{taskFilter=!taskFilter;tab('online');};
+function tab(name,refreshOnline=true){if(name==='local')taskFilter=false;activeTab=name;$('collection-title').textContent=name==='local'?'我的壁纸':'发现壁纸';$('collection-description').textContent=name==='local'?'喜欢的风景，随时在身边。':'给桌面，添一点新鲜感。';$('module-count').hidden=name!=='local';for(const value of ['local','online']){$(value+'-panel').hidden=value!==name;$('tab-'+value).classList.toggle('selected',value===name);$('tab-'+value).setAttribute('aria-pressed',String(value===name));}if(state)render(state);if(name==='online'&&refreshOnline&&enabledRepositories().length&&!remoteBusy)run('check_online',{},'',true);}
+$('download-filter').onclick=()=>{taskFilter=!taskFilter;tab('online',false);};
 $('clear-download-filter').onclick=()=>{taskFilter=false;if(state)render(state);};
 $('tab-local').onclick=()=>tab('local');$('tab-online').onclick=()=>tab('online');
 $('check-online').onclick=()=>run('check_online',{},'',true);
