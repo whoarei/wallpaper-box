@@ -273,6 +273,7 @@ async function test(name,body){await body();passed++;console.log('PASS '+name);}
    assert.equal(JSON.stringify(saved),before);
    // Model a legacy/small embedding area without changing the page's own CSS.
    await page.locator('#wallpaper-settings-frame').evaluate(node=>{node.style.flex='none';node.style.width='320px';node.style.height='180px';});
+   await child.waitForFunction(()=>innerWidth===320&&innerHeight===180);
    await child.locator('#error').evaluate(node=>{node.textContent='保存失败，请保留当前输入并重新加载最新配置。'.repeat(20);});
    await child.locator('.settings-scroll').evaluate(node=>{node.scrollTop=node.scrollHeight;});
    const geometry=await child.evaluate(()=>{
@@ -304,6 +305,7 @@ async function test(name,body){await body();passed++;console.log('PASS '+name);}
     assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=width&&bounds.y+bounds.height<=height);
     assert.ok(await frame().locator('#save').isVisible());
     const child=page.frames().find(f=>f.url().includes('/pinewind-town/settings.html'));
+    await child.waitForFunction(size=>Math.abs(innerWidth-size.width)<1&&Math.abs(innerHeight-size.height)<1,bounds);
     assert.ok(await child.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'The settings page must not overflow horizontally');
     const button=await frame().locator('#save').boundingBox();
     assert.ok(button.y>=bounds.y&&button.y+button.height<=bounds.y+bounds.height,JSON.stringify({button,bounds}));
