@@ -1,32 +1,35 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>松风镇 · 壁纸设置</title>
-<style>*{box-sizing:border-box}body{margin:0;padding:10px 28px 24px;font:13px/1.7 system-ui,sans-serif;color:#354735;background:#fff}fieldset{border:0;margin:0;padding:0}label{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 0;border-bottom:1px solid #e8ede4}label span{font-weight:500}select{min-width:140px;padding:9px 12px;border:1px solid #dce3d5;border-radius:8px;background:#fafbf8;color:inherit;font:inherit}p{color:#87927f;font-size:11px;margin:12px 0}#error{color:#a04f3b}footer{display:flex;gap:10px;justify-content:flex-end;margin-top:24px}button{padding:8px 14px;border:1px solid #dce3d5;border-radius:8px;background:#fff;color:inherit;cursor:pointer;font:inherit;font-size:12px}button[type=submit]{background:#3e6044;color:#fff;border-color:#3e6044}button:disabled,fieldset:disabled{opacity:.55}button:focus-visible,select:focus-visible{outline:2px solid #789769;outline-offset:3px}@media(max-width:400px){body{padding:6px 20px 20px}select{min-width:110px}}@media(max-height:300px){body{padding-top:0;padding-bottom:8px}label{padding:6px 0}select{padding:7px 12px}p{margin:6px 0;line-height:1.5}footer{margin-top:8px}#feedback:empty{display:none}}</style><script src="/__wallpaper_host__/settings.js" defer></script></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title data-i18n="松风镇 · 壁纸设置">松风镇 · 壁纸设置</title>
+<style>*{box-sizing:border-box}body{margin:0;padding:10px 28px 24px;font:13px/1.7 system-ui,sans-serif;color:#354735;background:#fff}fieldset{border:0;margin:0;padding:0}label{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 0;border-bottom:1px solid #e8ede4}label span{font-weight:500}select{min-width:140px;padding:9px 12px;border:1px solid #dce3d5;border-radius:8px;background:#fafbf8;color:inherit;font:inherit}p{color:#87927f;font-size:11px;margin:12px 0}#error{color:#a04f3b}footer{display:flex;gap:10px;justify-content:flex-end;margin-top:24px}button{padding:8px 14px;border:1px solid #dce3d5;border-radius:8px;background:#fff;color:inherit;cursor:pointer;font:inherit;font-size:12px}button[type=submit]{background:#3e6044;color:#fff;border-color:#3e6044}button:disabled,fieldset:disabled{opacity:.55}button:focus-visible,select:focus-visible{outline:2px solid #789769;outline-offset:3px}@media(max-width:400px){body{padding:6px 20px 20px}select{min-width:110px}}@media(max-height:300px){body{padding-top:0;padding-bottom:8px}label{padding:6px 0}select{padding:7px 12px}p{margin:6px 0;line-height:1.5}footer{margin-top:8px}#feedback:empty{display:none}}</style><script src="translations.js" defer></script><script src="i18n.js" defer></script><script src="/__wallpaper_host__/settings.js" defer></script></head>
 <body><form id="settings-form"><fieldset id="fields" disabled>
-<label for="phase"><span>时光</span><select id="phase"><option value="0">流动时光</option><option value="1">晴朗白昼</option><option value="2">温柔黄昏</option><option value="3">星光夜晚</option></select></label>
-<label for="raining"><span>天气</span><select id="raining"><option value="0">晴天</option><option value="1">听雨</option></select></label>
-<p>为小镇选择时光与天气；流动时光会自动循环昼夜。</p>
-<footer><button type="button" id="defaults">恢复默认</button><button type="submit" id="save">保存更改</button></footer>
+<label for="phase"><span data-i18n="时光">时光</span><select id="phase"><option value="0" data-i18n="流动时光">流动时光</option><option value="1" data-i18n="晴朗白昼">晴朗白昼</option><option value="2" data-i18n="温柔黄昏">温柔黄昏</option><option value="3" data-i18n="星光夜晚">星光夜晚</option></select></label>
+<label for="raining"><span data-i18n="天气">天气</span><select id="raining"><option value="0" data-i18n="晴天">晴天</option><option value="1" data-i18n="听雨">听雨</option></select></label>
+<p data-i18n="为小镇选择时光与天气；流动时光会自动循环昼夜。">为小镇选择时光与天气；流动时光会自动循环昼夜。</p>
+<footer><button type="button" id="defaults" data-i18n="恢复默认">恢复默认</button><button type="submit" id="save" data-i18n="保存更改">保存更改</button></footer>
 </fieldset></form><p id="feedback" role="status"></p><p id="error" role="alert" hidden></p>
 <script>
 window.addEventListener('DOMContentLoaded',()=>{
  'use strict';
- const $=id=>document.getElementById(id);let revision=0,loaded=false;
+ const $=id=>document.getElementById(id),i18n=window.wallpaperI18n;let revision=0,loaded=false,feedbackKey='',errorKey='';
+ function feedback(key){feedbackKey=key;$('feedback').textContent=i18n.t(key);}
+ function localize(){i18n.setLocale(wallpaperSettings.locale);i18n.apply();feedback(feedbackKey);if(errorKey)$('error').textContent=i18n.message(errorKey);}
+ window.addEventListener('wallpapersettings:localechange',localize);
  function fill(settings){
  $('phase').value=String(Number.isInteger(settings.phase)&&settings.phase>=0&&settings.phase<4?settings.phase:0);
  $('raining').value=String(settings.raining===true?1:0);
  }
- function failure(error){$('error').textContent=String(error.message||error);$('error').hidden=false;}
+ function failure(error){errorKey=String(error.message||error);$('error').textContent=i18n.message(errorKey);$('error').hidden=false;}
  async function load(){
-  try{const snapshot=await wallpaperSettings.load();revision=snapshot.revision;fill(snapshot.settings);loaded=true;$('fields').disabled=false;}
+  try{const snapshot=await wallpaperSettings.load();revision=snapshot.revision;fill(snapshot.settings);localize();loaded=true;$('fields').disabled=false;}
   catch(error){failure(error);}
  }
- $('defaults').onclick=()=>{fill({"phase": 0, "raining": false});$('feedback').textContent='已恢复默认选项，保存后生效。';};
+ $('defaults').onclick=()=>{fill({"phase": 0, "raining": false});feedback('已恢复默认选项，保存后生效。');};
  $('settings-form').onsubmit=async event=>{
   event.preventDefault();if(!loaded||$('fields').disabled)return;
-  $('fields').disabled=true;$('error').hidden=true;$('feedback').textContent='正在保存…';
+  $('fields').disabled=true;$('error').hidden=true;feedback('正在保存…');
   try{const result=await wallpaperSettings.save({phase:Number($('phase').value),raining:$('raining').value==='1'},revision);revision=result.snapshot.revision;
-   $('feedback').textContent=result.pending?'已保存，部分窗口将在就绪后同步。':result.running?'已保存，已通知正在运行的壁纸。':'已保存，将在壁纸下次启动时生效。';}
-  catch(error){$('feedback').textContent='';failure(error);}
+   feedback(result.pending?'已保存，部分窗口将在就绪后同步。':result.running?'已保存，已通知正在运行的壁纸。':'已保存，将在壁纸下次启动时生效。');}
+  catch(error){feedback('');failure(error);}
   finally{$('fields').disabled=false;}
  };
  load();

@@ -19,7 +19,7 @@ const modules=['aquarium','pinewind-town'].map(id=>({
  href:`/${id}/index.html`,source:'builtin',rollback_available:false,cover:null,settings_token:id+'-v1'
 }));
 modules.push({id:'legacy',name:'普通网页',version:'1.0.0',href:'/legacy/index.html',description:'',tags:[],source:'local',settings:null,settings_token:'legacy'});
-const state={version:'0.10.2',service:wallpaper,auto_pause:true,auto_start:true,auto_start_error:null,
+const state={language:'zh-CN',locale:'zh-CN',version:'0.12.0',service:wallpaper,auto_pause:true,auto_start:true,auto_start_error:null,
  proxy:{mode:'system',url:''},wallpaper_repositories:[],selected_monitor:'primary',
  displays:[{id:'primary',name:'主显示器',width:1920,height:1080,scale:1,primary:true}],
  modules,warnings:[],downloads:[],wallpapers:[],last_error:null,online:{catalog:null,checked_at:0}};
@@ -29,6 +29,7 @@ function snapshot(id){return copy(saved[id]||{revision:0,settings:{}});}
 async function native(command,args={}){
  calls.push({command,args:copy(args)});
  if(command==='get_state')return copy(state);
+ if(command==='set_language'){state.language=args.language;state.locale=args.language==='en'?'en':'zh-CN';return copy(state);}
  if(!['get_wallpaper_settings','set_wallpaper_settings'].includes(command))throw new Error('Unexpected native command: '+command);
  const module=modules.find(module=>module.id===args.moduleId);
  if(!module?.settings||module.settings_token!==args.pageToken)throw new Error('壁纸已更新，请重新打开设置页。');
@@ -57,7 +58,7 @@ async function route(context){
   let file,headers={};
   if(url.origin===manager){
    const relative=url.pathname==='/'?'index.html':url.pathname.slice(1);
-   if(!['index.html','app.js','app.css','settings.css','online.css','icon.png','window-controls.js','wallpaper-settings.js'].includes(relative))return request.fulfill({status:404});
+   if(!['index.html','app.js','app.css','settings.css','online.css','icon.png','window-controls.js','wallpaper-settings.js','translations.js','i18n.js'].includes(relative))return request.fulfill({status:404});
    file=path.join(root,'wallpaper-host/ui',relative);
    if(relative==='index.html')headers['Content-Security-Policy']=managerPolicy;
   }else if(url.pathname==='/__wallpaper_host__/settings.js')file=path.join(root,'wallpaper-host/src-tauri/wallpaper-settings.js');
@@ -145,6 +146,22 @@ async function test(name,body){await body();passed++;console.log('PASS '+name);}
    }),true);
    await page.evaluate(()=>window.dispatchEvent(new MessageEvent('message',{source:window,origin:'null',data:{channel:'wallpaper-settings-v1',session:document.querySelector('iframe').src.split('=').pop(),requestId:'1',method:'save',settings:{injected:true},expectedRevision:1}})));
    assert.deepEqual(snapshot('aquarium').settings,{lighting:2,flow:1});
+  });
+  await test('settings follow the manager language without reloading or losing unsaved values',async()=>{
+   const source=await page.locator('#wallpaper-settings-frame iframe').getAttribute('src');
+   const before=copy(saved);await frame().locator('#lighting').selectOption('0');
+   await page.locator('#settings-tab-general').click();await page.locator('#language').selectOption('en');
+   await page.locator('#settings-tab-wallpaper').click();
+   const child=page.frames().find(f=>f.url().includes('/aquarium/settings.html'));
+   await child.waitForFunction(()=>document.documentElement.lang==='en');
+   assert.equal(await frame().locator('#lighting').inputValue(),'0');
+   assert.match(await child.locator('body').innerText(),/Lighting/);
+   assert.match(await page.locator('#wallpaper-settings-select option:checked').innerText(),/Stillwater/);
+   assert.equal(await page.locator('#wallpaper-settings-frame iframe').getAttribute('src'),source);
+   assert.deepEqual(saved,before);
+   await page.locator('#settings-tab-general').click();await page.locator('#language').selectOption('zh-CN');
+   await page.locator('#settings-tab-wallpaper').click();await child.waitForFunction(()=>document.documentElement.lang==='zh-CN');
+   assert.equal(await frame().locator('#lighting').inputValue(),'0');await frame().locator('#lighting').selectOption('2');
   });
   const first=await start('aquarium'),second=await start('aquarium'),town=await start('pinewind-town');
   await test('every new wallpaper window receives saved settings before its first animation frame',async()=>{

@@ -24,6 +24,8 @@ function playwright() {
 async function serveAquarium(wrapper) {
   const root = path.resolve(__dirname, '../wallpapers/aquarium');
   const files = { '/': ['index.html', 'text/html; charset=utf-8'],
+    '/translations.js': ['translations.js','text/javascript; charset=utf-8'],
+    '/i18n.js': ['i18n.js','text/javascript; charset=utf-8'],
     '/aquarium.js': ['aquarium.js', 'text/javascript; charset=utf-8'],
     '/wallpaper-adapter.js': ['wallpaper-adapter.js','text/javascript; charset=utf-8'],
     '/aquarium.css': ['aquarium.css', 'text/css; charset=utf-8'] };

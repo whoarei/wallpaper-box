@@ -8,12 +8,14 @@
 
 1. 安装后运行 `wallpaper-box.exe`。运行依赖 WebView2；安装程序在缺少运行时时下载 Microsoft 运行时。
 2. 首次启动在主显示器播放水族箱。右上角以各屏当前壁纸封面显示缩略图，点击选择显示器，再点击“我的壁纸”的封面即可应用；“预览”在独立窗口播放，不改变当前桌面。缩略图会高亮所选屏幕，并保留横竖屏比例；未设置壁纸的屏幕显示占位图。
-3. 左键托盘图标打开管理窗口，右键快速切换、暂停或退出。关闭管理窗口会收起到托盘。
+3. 左键托盘图标打开管理窗口；右键菜单可选择显示器，在“壁纸”子菜单中切换壁纸，通过“壁纸 → 壁纸操作”执行互动、暂停当前壁纸或关闭当前屏幕壁纸。全部暂停 / 继续、显示 / 还原桌面与退出保留在一级菜单；自动暂停、程序更新和关于信息归入“设置与帮助”。关闭管理窗口会收起到托盘。
 4. 每次点击“发现”都会自动刷新已启用仓库的在线壁纸清单，已有缓存时也会刷新；刷新期间重复点击不会重复发起请求，也可点击“刷新壁纸库”手动刷新。再选择某张壁纸的“下载 / 更新”。检查只获取清单和封面，ZIP 按选择下载，不会自动下载全库。最多同时处理 5 项下载，超出的按加入顺序等待。
 
-管理界面以壁纸列表为主，暂停和投喂集中在底部播放栏。“更多播放操作”提供查看桌面、保存预览、重新加载和关闭当前屏幕壁纸。右上角“设置”按“常规、壁纸仓库、网络代理、程序更新”分类，一次显示一组内容。“常规”包含随系统启动、自动暂停、文件夹 / ZIP 导入、壁纸目录和重新扫描；仓库、代理的保存按钮固定在各自页面底部，详细说明默认收起。切换分类会保留尚未保存的输入。新版就绪提示可直接打开“程序更新”，由用户确认重启升级。
+管理界面以壁纸列表为主，暂停和投喂集中在底部播放栏。“更多播放操作”提供查看桌面、保存预览、重新加载和关闭当前屏幕壁纸。右上角“设置”按“常规、壁纸设置、壁纸仓库、网络代理、程序更新”分类，一次显示一组内容。“常规”包含语言、随系统启动、自动暂停、文件夹 / ZIP 导入、壁纸目录和重新扫描；仓库、代理的保存按钮固定在各自页面底部，详细说明默认收起。切换分类会保留尚未保存的输入。新版就绪提示可直接打开“程序更新”，由用户确认重启升级。
 
 底部播放栏显示当前屏幕壁纸运行进程组的 CPU 和内存占用，每 5 秒采样一次。CPU 按整机总算力计算采样期间的平均比例，内存为专用工作集，不含共享内存和显存；点击读数可查看统计说明。首次采样及壁纸重载后先显示“采样中”，读取失败或进程无法独立统计时显示“暂不可用”。手动或自动暂停后仍显示实际占用，管理窗口收起、最小化后停止采样。
+
+在“设置 → 常规 → 语言”选择“跟随系统语言”、简体中文或 English，默认跟随 Windows 界面语言：中文采用简体中文，其他语言采用英语。选择立即保存，无需重启；管理界面、托盘以及已适配的桌面壁纸和预览随之切换。壁纸保持当前画面和暂停状态。两款内置壁纸已适配英语，未适配的第三方内容及远程更新说明保留原文。
 
 管理窗口采用与导航融合的自绘标题栏。右上角依次为最小化、最大化 / 还原和收起到托盘；可拖动标题栏空白或品牌区域移动窗口，双击切换最大化 / 还原。窗口按钮支持 Tab 聚焦和 Enter / 空格操作，关闭窗口后壁纸继续播放。
 
@@ -55,15 +57,15 @@ v0.9.0 及以前的水族箱专用投喂适配已在 v0.10.0 迁移为通用操�
 
 0.2.x 没有程序升级器，需要先手动安装一次 0.4.0，之后才能使用程序在线升级。后续不再发布便携包，也不提供便携版在线升级。
 
-## 壁纸设置（开发版）
+## 壁纸设置
 
 在“设置 → 壁纸设置”选择一张已安装的壁纸，编辑它提供的设置页后点击“保存更改”。未运行的壁纸也可提前配置；未提供设置页的壁纸会显示提示。
 
 同一设备上的每张壁纸按壁纸 ID 保存一份配置，存放在程序数据目录的 `settings.json` 中，切换壁纸或重启程序后保留。多个屏幕使用同一张壁纸时共用配置，保存后会通知所有正在运行的实例；暂停期间也会接收配置，恢复后显示新效果。未运行的壁纸在下次启动时读取最新值。
 
-内置“静水之间”提供光照、水流选项，“松风镇”提供时光、天气选项。“恢复默认”先修改页面选项，点击“保存更改”后生效。“重新加载”会丢弃页面未保存的更改并读取最新配置。
+内置“静水之间”提供光照、水流选项，“松风镇”提供时光、天气选项。设置页跟随主程序语言切换，保留未保存的选项。“恢复默认”先修改页面选项，点击“保存更改”后生效。“重新加载”会丢弃页面未保存的更改并读取最新配置。
 
-配置保存失败时保留原配置。新设置页与运行时配置接口属于当前开发代码，正式 v0.10.2 尚不提供这些接口；已安装的在线内容包需自行更新适配，程序不会替换它们。壁纸作者的能力检测、配置事件、SDK 消息与错误处理见[壁纸设置通信约定](wallpaper-adaptation.html#wallpaper-settings)。
+配置保存失败时保留原配置。v0.12.0 起提供设置页与运行时配置接口，旧宿主使用默认配置；已安装的在线内容包需自行更新适配，程序不会替换它们。壁纸作者的能力检测、配置事件、SDK 消息与错误处理见[壁纸设置通信约定](wallpaper-adaptation.html#wallpaper-settings)。
 
 ## 壁纸仓库
 
@@ -121,7 +123,7 @@ HTML、脚本、样式与图片使用相对路径。文件夹名使用小写字�
 ## 项目目录
 
 - `wallpaper-host/`：Tauri 2 宿主、嵌入式管理界面、原生目录发现、本地协议、在线更新与打包校验。
-- `wallpapers/{aquarium,pinewind-town}/`：0.10.2 随包的两张壁纸快照（内容版本 1.0.1）。
+- `wallpapers/{aquarium,pinewind-town}/`：0.12.0 随包的两张壁纸快照（内容版本 1.0.1）。
 - `display-service/`：保留的 Legacy Docker 浏览器开发示例，桌面程序运行和安装包不依赖它。
 - `.github/workflows/windows.yml`：主程序 CI 与标签发布。
 - [HTML 技术方案](../display-service/public/docs/architecture.html)：单文件离线文档，含架构、模块规范、权限、迁移及发布流程，支持 10 套配色和保存 PDF。
@@ -138,11 +140,11 @@ npm ci --ignore-scripts
 npm run check:version
 npm run bundle
 ./scripts/package-release.ps1 -RequireSigned
-./scripts/verify-release.ps1 -Directory ../release/v0.10.2 -RequireSigned
-node scripts/verify-installer.mjs ../release/v0.10.2
+./scripts/verify-release.ps1 -Directory ../release/v0.12.0 -RequireSigned
+node scripts/verify-installer.mjs ../release/v0.12.0
 ```
 
-产物位于 `release/v0.10.2/`，共五项：`wallpaper-box_0.10.2_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
+产物位于 `release/v0.12.0/`，共五项：`wallpaper-box_0.12.0_x64-setup.exe`、同名 `.exe.sig`、`latest.json`、`release-manifest.json` 与 `SHA256SUMS.txt`。`release-manifest.json` 使用 schema 3 的 `installerFiles` 记录安装载荷；7-Zip 校验读取 NSIS 载荷核对路径、大小和 SHA-256，并确认没有 `portable.flag`、用户数据或私钥。7-Zip 默认路径为 `C:\Program Files\7-Zip\7z.exe`，可作为 Node 校验脚本的第二个参数指定。生成在线更新产物还需要在构建环境提供更新签名密钥。
 
 Rust 行为检查：
 
@@ -159,6 +161,8 @@ cargo test --locked --release --features custom-protocol --manifest-path wallpap
 
 `npm --prefix wallpaper-host run test:pinewind` 使用真实内置松风镇页面，验证预览与壁纸模式、桌面控制按钮、帮助和鼠标移动唤醒，确认控制操作不会误种花。
 
+`npm --prefix wallpaper-host run test:settings` 验证配置持久化、多屏共享、暂停时同步、设置页隔离、语言切换和旧会话回执。
+
 `npm --prefix wallpaper-host run test:protocol` 检查只读运行环境、暂停原因、操作校验、未知结果、请求去重、旧内容与实例隔离。`npm --prefix wallpaper-host run test:modules` 使用真实页面验证两张壁纸的桌面、预览、浏览器和旧模式降级；设置 `WALLPAPER_ROOT` 可对内容库目录运行同一套检查。
 
 只构建开发用 EXE 可运行 `wallpaper-host/build.ps1`。文档可编辑源为 `display-service/docs/architecture-source.cjs`，生成 spec 后使用 `rtd-html-docs` 的 `render.mjs` 更新 HTML。真实设备验收和云端发布结果应以对应版本的发版记录为准。
@@ -172,8 +176,8 @@ CI 固定工具链、依赖锁文件和 Action 提交，检查版本、JavaScrip
 版本与验收完成后：
 
 ```powershell
-git tag v0.10.2
-git push origin v0.10.2
+git tag v0.12.0
+git push origin v0.12.0
 gh run list --repo whoarei/wallpaper-box --workflow windows.yml
 ```
 

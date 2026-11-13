@@ -10,12 +10,37 @@ use std::{
 pub const ORIGIN: &str = "http://wallpaper.localhost";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct LocalizedMetadata {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub subtitle: String,
+    #[serde(default)]
+    pub description: String,
+}
+
+pub fn valid_locales(locales: &BTreeMap<String, LocalizedMetadata>) -> bool {
+    locales.len() <= 16
+        && locales.iter().all(|(locale, metadata)| {
+            !locale.is_empty()
+                && locale.len() <= 64
+                && locale
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                && metadata.name.chars().count() <= 80
+                && metadata.subtitle.chars().count() <= 80
+                && metadata.description.chars().count() <= 300
+        })
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Module {
     pub id: String,
     pub name: String,
     pub subtitle: String,
     pub description: String,
+    pub locales: BTreeMap<String, LocalizedMetadata>,
     pub href: String,
     pub cover: Option<String>,
     pub tags: Vec<String>,
@@ -35,6 +60,16 @@ pub struct SettingsPage {
     pub entry: String,
 }
 
+impl Module {
+    pub fn localized_name(&self, locale: &str) -> &str {
+        self.locales
+            .get(locale)
+            .map(|metadata| metadata.name.as_str())
+            .filter(|name| !name.is_empty())
+            .unwrap_or(&self.name)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
@@ -50,6 +85,8 @@ pub struct Metadata {
     pub subtitle: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default)]
+    pub locales: BTreeMap<String, LocalizedMetadata>,
     #[serde(default = "default_entry")]
     pub entry: String,
     #[serde(default)]
@@ -192,6 +229,9 @@ pub fn metadata(root: &Path) -> Result<Metadata, String> {
     };
     if meta.schema_version != 1 || meta.kind != "web" {
         return Err("不支持的壁纸类型或规范版本。".into());
+    }
+    if !valid_locales(&meta.locales) {
+        return Err("壁纸翻译元数据无效。".into());
     }
     if !meta.entry.to_ascii_lowercase().ends_with(".html") {
         return Err("壁纸入口必须是 HTML。".into());
@@ -359,6 +399,7 @@ impl Library {
             },
             subtitle: meta.subtitle.chars().take(80).collect(),
             description: meta.description.chars().take(300).collect(),
+            locales: meta.locales,
             href: format!("/{key}/{}", meta.entry),
             settings: meta.settings,
             settings_token,
@@ -571,6 +612,34 @@ pub fn atomic_json(path: &Path, value: &impl Serialize) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn translations_are_optional_bounded_and_fall_back_to_the_original_name() {
+        let temporary = tempfile::tempdir().unwrap();
+        let builtin = temporary.path().join("builtin");
+        let folder = scene(&builtin, "scene", "1.0.0");
+        fs::write(
+            folder.join("module.json"),
+            r#"{"id":"scene","name":"原名","locales":{"en":{"name":"English name"}}}"#,
+        )
+        .unwrap();
+        let library = Library::prepare(builtin, temporary.path().join("user")).unwrap();
+        let (modules, warnings) = library.discover();
+        assert!(warnings.is_empty());
+        assert_eq!(modules[0].localized_name("en"), "English name");
+        assert_eq!(modules[0].localized_name("zh-CN"), "原名");
+        assert_eq!(modules[0].locales["en"].description, "");
+        assert!(Metadata::default().locales.is_empty());
+        fs::write(
+            folder.join("module.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "id":"scene", "locales":{"en":{"name":"x".repeat(81)}}
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(metadata(&folder).is_err());
+    }
 
     fn scene(root: &Path, id: &str, version: &str) -> PathBuf {
         let folder = root.join(id);

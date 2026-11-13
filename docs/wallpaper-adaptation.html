@@ -52,7 +52,7 @@ details{margin:18px 0;border:1px solid var(--line);border-radius:12px;background
   <div class="card"><span class="index">02 / 界面由壁纸负责</span><h3>控件怎么显示，你决定</h3><p>宿主不按壁纸名称、DOM ID 或 CSS 类名隐藏、修改你的界面。</p></div>
   <div class="card"><span class="index">03 / 按能力提供功能</span><h3>桌面不等于浏览器</h3><p>桌面模式保留鼠标穿透，不能依赖键盘焦点、原生悬停和浏览器用户激活。</p></div>
 </div>
-<aside class="note info"><strong>主程序从 v0.10.0 起提供 v1</strong><div>基础规范对应 <strong>v0.10.0 起</strong>的通用宿主接口、状态事件与操作调用实现。v0.9.0 及更早版本尚不提供这些公开接口。<a href="#wallpaper-settings">壁纸设置通信</a>是当前开发代码新增的可选扩展，正式 v0.10.2 尚不支持；不能仅凭 protocolVersion 为 1 就调用设置接口。下面的基础播放示例仍可在普通浏览器中独立运行。</div></aside>
+<aside class="note info"><strong>主程序从 v0.10.0 起提供 v1</strong><div>基础规范对应 <strong>v0.10.0 起</strong>的通用宿主接口、状态事件与操作调用实现。v0.9.0 及更早版本尚不提供这些公开接口。<a href="#wallpaper-settings">壁纸设置通信</a>是 v0.12.0 起提供的可选扩展，v0.11.0 及更早版本尚不支持；不能仅凭 protocolVersion 为 1 就调用设置接口。下面的基础播放示例仍可在普通浏览器中独立运行。</div></aside>
 <p>只想做好页面播放和桌面点击，阅读第 02—06 节即可；希望在主程序或托盘里显示“投喂”“召唤”等按钮，或提供壁纸自己的设置页，再阅读第 07 节。第 08 节提供可直接下载的完整示例。</p>
 <div class="table-wrap"><table><thead><tr><th>谁来做</th><th>负责什么</th><th>不应做什么</th></tr></thead><tbody><tr><td>壁纸盒子（宿主）</td><td>创建窗口、告知运行环境、转发有效输入、暂停与恢复、调用壁纸声明的操作；支持设置扩展时保存、读取与分发配置。</td><td>识别某张壁纸的内部变量，查找它的按钮，替它修改样式和说明。</td></tr><tr><td>你的壁纸</td><td>绘制场景、控制栏、帮助文案、昼夜天气等业务逻辑，以及对运行环境的适配。</td><td>假定自己总能获得键盘焦点，或需要宿主为自己的 DOM 写一段专用代码。</td></tr><tr><td>可选操作接口</td><td>让主程序展示壁纸主动声明的功能，调用统一入口并读取结果。</td><td>根据壁纸 ID 写 <code>if / else</code>，或把操作 ID 当作系统权限。</td></tr></tbody></table></div></section><section class="section" id="package"><div class="section-header"><span class="section-number">02</span><h2>准备一个能离线运行的目录</h2></div><p class="section-intro">HTML、脚本、样式和素材放在一起，使用相对路径。先保证断网后也能打开。</p><div class="code"><div class="code-head"><span>目录结构</span><button class="copy" type="button">复制代码</button></div><pre><code>meadow/
 ├─ index.html        页面入口
@@ -60,7 +60,7 @@ details{margin:18px 0;border:1px solid var(--line);border-radius:12px;background
 ├─ cover.jpg         列表封面
 ├─ scene.js          可选：场景逻辑
 ├─ scene.css         可选：样式
-├─ settings.html     可选：自定义设置页，需支持设置扩展的宿主
+├─ settings.html     可选：自定义设置页，需 v0.12.0+ 宿主
 └─ assets/           可选：图片、字体、音频等素材</code></pre></div>
 <h3>填写 module.json</h3><p>以下沿用现有 <code>schemaVersion: 1</code> 的格式，不为本规范新增未实现的清单字段。自定义本地壁纸可省略清单；准备分发时建议完整填写，官方内容包需满足内容库要求。</p>
 <div class="code"><div class="code-head"><span>JSON · 基础网页示例</span><button class="copy" type="button">复制代码</button></div><pre><code>{
@@ -74,7 +74,7 @@ details{margin:18px 0;border:1px solid var(--line);border-radius:12px;background
   &quot;version&quot;: &quot;1.0.0&quot;,
   &quot;minAppVersion&quot;: &quot;0.2.0&quot;,
   &quot;tags&quot;: [&quot;自然&quot;, &quot;点击互动&quot;]
-}</code></pre></div><div class="table-wrap"><table><thead><tr><th>字段 / 项目</th><th>怎么填写</th></tr></thead><tbody><tr><td>id</td><td>使用小写字母、数字、连字符，长度不超过 64，首字符为字母或数字；避开 Windows 保留名。此处示例为 <code>meadow</code>。本地导入后的运行 ID 可能带 <code>local:</code> 前缀，不要在网页内按运行 ID 分支。</td></tr><tr><td>entry / cover</td><td>相对于壁纸目录的文件路径，例如 <code>index.html</code>、<code>assets/cover.jpg</code>。不使用绝对路径、反斜杠或 <code>../</code>。</td></tr><tr><td>settings.entry</td><td>设置扩展的可选字段，指向包内独立 HTML 页面，例如 <code>settings.html</code>；格式与资源路径规则见<a href="#wallpaper-settings">设置通信约定</a>。普通壁纸可以省略，正式 v0.10.2 尚不读取此字段。</td></tr><tr><td>version</td><td>这张壁纸的内容版本。改动 HTML、脚本或素材后更新版本，不覆盖已发布的同版本包。</td></tr><tr><td>minAppVersion</td><td>能满足该包实际需求的最低主程序版本。上例只表示普通网页，不承诺 v1 接口；强依赖新接口的包必须填写正式提供该接口的主程序版本。</td></tr><tr><td>依赖与资源</td><td>核心素材、脚本和字体随包提供，不依赖 CDN 才能显示；不包含机器本地路径、密钥和可执行后端。网络增强功能失败时仍保留基本场景。</td></tr></tbody></table></div><aside class="note info"><strong>两个版本号不要混淆</strong><div><code>module.json.schemaVersion</code> 是文件清单格式，<code>protocolVersion</code> 是运行时接口格式。本文的 v1 接口不会自动改变清单格式，也不表示某个尚未确定的主程序发行版本已经支持它。</div></aside></section><section class="section" id="environment"><div class="section-header"><span class="section-number">03</span><h2>识别自己运行在哪里</h2></div><p class="section-intro">先识别环境，再决定显示哪些入口；不通过壁纸名称或页面地址猜测。</p><div class="table-wrap"><table><thead><tr><th>运行环境</th><th>页面应如何工作</th><th>能力来源</th></tr></thead><tbody><tr><td>桌面壁纸 desktop</td><td>鼠标穿透、不抢焦点。提供可点击的页面按钮；隐藏不可用的网页全屏及键盘提示。</td><td>v1 使用宿主提供的能力；旧宿主仅有模式标识时采取保守降级。</td></tr><tr><td>应用内预览 preview</td><td>普通窗口内展示壁纸；键盘仅在窗口聚焦时可用。预览不修改当前桌面分配。</td><td>v1 预览提供环境信息，但不接入桌面管理操作或宿主暂停。</td></tr><tr><td>独立浏览器 browser</td><td>没有壁纸盒子接口也能运行。普通鼠标、聚焦后的键盘和浏览器允许的全屏可用。</td><td>壁纸自行使用浏览器能力检测，不能访问宿主专用接口。</td></tr></tbody></table></div>
+}</code></pre></div><div class="table-wrap"><table><thead><tr><th>字段 / 项目</th><th>怎么填写</th></tr></thead><tbody><tr><td>id</td><td>使用小写字母、数字、连字符，长度不超过 64，首字符为字母或数字；避开 Windows 保留名。此处示例为 <code>meadow</code>。本地导入后的运行 ID 可能带 <code>local:</code> 前缀，不要在网页内按运行 ID 分支。</td></tr><tr><td>entry / cover</td><td>相对于壁纸目录的文件路径，例如 <code>index.html</code>、<code>assets/cover.jpg</code>。不使用绝对路径、反斜杠或 <code>../</code>。</td></tr><tr><td>settings.entry</td><td>设置扩展的可选字段，指向包内独立 HTML 页面，例如 <code>settings.html</code>；格式与资源路径规则见<a href="#wallpaper-settings">设置通信约定</a>。普通壁纸可以省略，v0.11.0 及更早版本尚不读取此字段。</td></tr><tr><td>version</td><td>这张壁纸的内容版本。改动 HTML、脚本或素材后更新版本，不覆盖已发布的同版本包。</td></tr><tr><td>minAppVersion</td><td>能满足该包实际需求的最低主程序版本。上例只表示普通网页，不承诺 v1 接口；强依赖新接口的包必须填写正式提供该接口的主程序版本。</td></tr><tr><td>依赖与资源</td><td>核心素材、脚本和字体随包提供，不依赖 CDN 才能显示；不包含机器本地路径、密钥和可执行后端。网络增强功能失败时仍保留基本场景。</td></tr></tbody></table></div><aside class="note info"><strong>两个版本号不要混淆</strong><div><code>module.json.schemaVersion</code> 是文件清单格式，<code>protocolVersion</code> 是运行时接口格式。本文的 v1 接口不会自动改变清单格式，也不表示某个尚未确定的主程序发行版本已经支持它。</div></aside></section><section class="section" id="environment"><div class="section-header"><span class="section-number">03</span><h2>识别自己运行在哪里</h2></div><p class="section-intro">先识别环境，再决定显示哪些入口；不通过壁纸名称或页面地址猜测。</p><div class="table-wrap"><table><thead><tr><th>运行环境</th><th>页面应如何工作</th><th>能力来源</th></tr></thead><tbody><tr><td>桌面壁纸 desktop</td><td>鼠标穿透、不抢焦点。提供可点击的页面按钮；隐藏不可用的网页全屏及键盘提示。</td><td>v1 使用宿主提供的能力；旧宿主仅有模式标识时采取保守降级。</td></tr><tr><td>应用内预览 preview</td><td>普通窗口内展示壁纸；键盘仅在窗口聚焦时可用。预览不修改当前桌面分配。</td><td>v1 预览提供环境信息，但不接入桌面管理操作或宿主暂停。</td></tr><tr><td>独立浏览器 browser</td><td>没有壁纸盒子接口也能运行。普通鼠标、聚焦后的键盘和浏览器允许的全屏可用。</td><td>壁纸自行使用浏览器能力检测，不能访问宿主专用接口。</td></tr></tbody></table></div>
 <h3>推荐的环境检测写法 <span class="tag draft">v1 运行时接口</span></h3>
 <p>把初始化放在 DOM 就绪后执行；兼容旧宿主时，也能避免过早读取尚未设置的模式标识。完整示例已经包含这个等待。</p>
 <div class="code"><div class="code-head"><span>javascript</span><button class="copy" type="button">复制代码</button></div><pre><code>const host = window.wallpaperHost?.protocolVersion === 1
@@ -112,10 +112,10 @@ window.wallpaperHost = {
     fullscreen: false,
     pause: true,
     actions: true,
-    settings: true                 // 开发版可选扩展；旧 v1 宿主可能缺少此字段
+    settings: true                 // v0.12.0 起的可选扩展；旧 v1 宿主可能缺少此字段
   },
   getState() {
-    return { paused: false, pauseReason: &quot;none&quot; };
+    return { paused: false, pauseReason: &quot;none&quot;, locale: &quot;en&quot; };
   },
   getSettings() {                   // 仅支持设置扩展的宿主提供
     return {};                     // 配置对象本身，不含 revision 包装
@@ -124,6 +124,30 @@ window.wallpaperHost = {
 <p><code>getState()</code> 同步返回当前快照。桌面模式的键盘和全屏能力为 <code>false</code>；暂停和操作能力以实际字段为准。预览中的 <code>pause</code>、<code>actions</code> 为 <code>false</code>，其全屏能力还需结合浏览器权限。能力为 <code>false</code> 时，不以“接口碰巧存在”绕过它。设置扩展在桌面和预览中都可用，须同时检查 <code>capabilities.settings === true</code> 与 <code>typeof host.getSettings === &quot;function&quot;</code>；缺少任一条件就按默认配置运行。</p>
 <p>只读对象用于防止误改，不能替代宿主的原生实例、来源和权限校验。旧的 <code>data-screen-garden-wallpaper</code> 标识保留作兼容；普通浏览器没有宿主对象，<code>browser</code> 是壁纸自身的回退值。</p>
 </div></details>
+<h3>语言同步（v1 的可选扩展）</h3>
+<p>主程序将已解析的界面语言放入 <code>wallpaperHost.getState().locale</code>，当前值为 <code>zh-CN</code> 或 <code>en</code>。“跟随系统”的偏好不会原样传入壁纸。桌面与应用内预览都提供此字段；加载前注入初始值，切换后通过既有 <code>wallpaperhost:statechange</code> 事件发送包含语言、暂停状态和暂停原因的完整只读快照。语言变化不更换实例、不重载网页、不解除暂停，也不重放互动操作。</p>
+<p>这是新增可选字段，<code>protocolVersion</code> 仍为 <code>1</code>。v1 的旧宿主可能没有 <code>locale</code>，旧壁纸也可以忽略新增字段；不按主程序版本号猜测能力。缺少字段或独立浏览器运行时，可回退到 <code>navigator.language</code>，再选取壁纸支持的语言。没有翻译时保留壁纸原文。主程序从 v0.11.0 起提供此可选扩展；旧版 v1 宿主不一定含有该字段。</p>
+<div class="code"><div class="code-head"><span>javascript · 壁纸自行管理文案</span><button class="copy" type="button">复制代码</button></div><pre><code>const host = window.wallpaperHost?.protocolVersion === 1 ? window.wallpaperHost : null;
+const messages = {
+  &quot;zh-CN&quot;: { feed: &quot;投喂鱼儿&quot;, paused: &quot;画面已暂停，请先继续。&quot; },
+  en: { feed: &quot;Feed fish&quot;, paused: &quot;The scene is paused. Resume it first.&quot; }
+};
+let locale;
+function syncLanguage() {
+  const requested = host?.getState().locale ?? navigator.language;
+  const next = /^zh(?:-|$)/i.test(requested) ? &quot;zh-CN&quot; : &quot;en&quot;;
+  if (next === locale) return;
+  locale = next;
+  document.documentElement.lang = locale;
+  document.querySelector(&quot;#feed&quot;).textContent = messages[locale].feed;
+  // 同步刷新 title、aria-label、提示、帮助与日期格式；不执行投喂等场景操作。
+}
+syncLanguage(); // 在 DOM 就绪后执行
+window.addEventListener(&quot;wallpaperhost:statechange&quot;, syncLanguage);
+// getActions() 每次查询时读取 messages[locale]，保持 id 不变。
+// invoke() 返回的禁用原因和失败提示也使用当前语言。</code></pre></div>
+<p>主程序会重新读取操作描述，使管理窗口和托盘使用当前 <code>label</code> / <code>disabledReason</code>。壁纸只需监听公开事件，不调用或覆盖宿主的内部语言设置入口。仅适配语言不要求提供互动操作接口，<code>capabilities.actions === false</code> 的预览同样可以接收语言。</p>
+<p>名称与说明可在 <code>module.json</code> 或在线清单的壁纸条目中增加可选 <code>locales</code>，例如 <code>&quot;locales&quot;: { &quot;en&quot;: { &quot;name&quot;: &quot;Meadow&quot;, &quot;description&quot;: &quot;A quiet meadow.&quot; } }</code>。支持 <code>name</code>、<code>subtitle</code>、<code>description</code>；未提供的字段回退到原值，ID 和包版本不随语言变化，清单 <code>schemaVersion</code> 仍为 1。该元数据只用于管理界面与托盘展示，壁纸内部文案仍由自己的脚本翻译。</p>
 </section><section class="section" id="controls"><div class="section-header"><span class="section-number">04</span><h2>让控制栏在桌面上也好用</h2></div><p class="section-intro">控制栏属于你的页面。宿主不提供按钮选择器，也不要求固定类名。</p>
 <div class="demo" aria-label="运行模式的界面对照示意">
 <div class="demo-head"><span>交互示意 · 切换查看界面差异，不连接真实宿主</span><div class="segments" role="group" aria-label="示意运行模式">
@@ -274,8 +298,8 @@ window.wallpaperApp = {
 <details><summary>参考 C：建议使用的错误码</summary><div class="details-body">
 <div class="table-wrap"><table><thead><tr><th>错误码</th><th>含义 / 页面或宿主的处理</th></tr></thead><tbody><tr><td>NOT_READY</td><td>页面或业务数据还未准备好。暂不展示可点的操作，或提示稍后再试。</td></tr><tr><td>UNSUPPORTED</td><td>未接入该协议或不支持该能力。基本播放继续工作。</td></tr><tr><td>UNKNOWN_ACTION</td><td>动作不存在。刷新操作列表，不猜测替代按钮。</td></tr><tr><td>DISABLED</td><td>动作因容量、冷却等业务条件暂不可执行。</td></tr><tr><td>PAUSED</td><td>宿主规则或页面自身暂停不允许当前动作。</td></tr><tr><td>INVALID_REQUEST</td><td>参数、格式、重复请求内容或结果格式不符合约定。</td></tr><tr><td>STALE_INSTANCE</td><td>请求属于已经切换、关闭或重新加载的实例。</td></tr><tr><td>BUSY</td><td>该实例仍在处理上一次调用，不重复提交。</td></tr><tr><td>FAILED</td><td>已知执行失败，给出简短、可理解的原因。</td></tr><tr><td>RESULT_UNKNOWN</td><td>宿主等待超时或丢失回执，不能确认是否执行；不自动重试。</td></tr></tbody></table></div>
 </div></details>
-<h3 id="wallpaper-settings">可选：壁纸设置通信 <span class="tag draft">v1 可选扩展 · 尚未发布</span></h3>
-<aside class="note info"><strong>协议版本与发行状态</strong><div>以下设置接口已加入当前开发代码，正式 v0.10.2 尚不支持。扩展保持 <code>wallpaperHost.protocolVersion: 1</code> 和 <code>module.json.schemaVersion: 1</code>，以新增能力字段 <code>capabilities.settings</code> 区分；旧 v1 宿主不因此自动获得新能力。正式发布后，再按实际依赖版本声明 minAppVersion。</div></aside>
+<h3 id="wallpaper-settings">可选：壁纸设置通信 <span class="tag draft">v1 可选扩展 · v0.12.0 起</span></h3>
+<aside class="note info"><strong>协议版本与发行状态</strong><div>以下设置接口由 v0.12.0 起提供，v0.11.0 及更早版本尚不支持。扩展保持 <code>wallpaperHost.protocolVersion: 1</code> 和 <code>module.json.schemaVersion: 1</code>，以新增能力字段 <code>capabilities.settings</code> 区分；旧 v1 宿主不因此自动获得新能力。强依赖设置扩展的内容包应声明 minAppVersion 为 0.12.0 或更高版本。</div></aside>
 <p>设置页负责编辑，主程序负责保存和分发，播放页负责解释参数并更新画面。设置页写入与播放页读取的是同一份设备配置，按壁纸 ID 保存，多屏共享；不使用显示器 ID 或运行实例 ID 分开保存。</p>
 <h4>1. 声明设置页与公开接口</h4>
 <p>在 module.json 中增加可选的 settings.entry，指向壁纸目录内独立且实际存在的 HTML 文件；不接受远程地址、越界路径或主播放入口。旧壁纸省略即可继续播放。设置页的业务字段和布局由壁纸作者决定。</p>
@@ -283,8 +307,8 @@ window.wallpaperApp = {
 <div class="table-wrap"><table><thead><tr><th>接口</th><th>调用位置 / 契约</th></tr></thead><tbody>
 <tr><td><code>wallpaperHost.getSettings()</code></td><td>播放页同步读取当前完整配置对象；首次为 <code>{}</code>，每次返回独立副本，不返回 revision 包装，也不保存配置。先检查设置能力和方法是否存在。</td></tr>
 <tr><td><code>wallpaperhost:settingschange</code></td><td>播放页 window 上的事件，<code>detail = { revision, settings }</code>；settings 是完整配置。宿主先更新内部快照，再触发事件。修改事件参数不会写回设备配置。</td></tr>
-<tr><td><code>wallpaperSettings.load()</code></td><td>设置页引入宿主 SDK 后异步调用，返回 <code>Promise&lt;{ revision, settings }&gt;</code>；首次为 <code>{ revision: 0, settings: {} }</code>。</td></tr>
-<tr><td><code>wallpaperSettings.save(settings, expectedRevision)</code></td><td>设置页异步保存完整 JSON 对象，返回 <code>Promise&lt;{ snapshot: { revision, settings }, running, pending }&gt;</code>。expectedRevision 必须取自最近一次 load 或成功 save；失败时 Promise 拒绝并给出 Error.message。</td></tr>
+<tr><td><code>wallpaperSettings.load()</code></td><td>设置页引入宿主 SDK 后异步调用，返回 <code>Promise&lt;{ revision, settings, locale }&gt;</code>；首次为 <code>{ revision: 0, settings: {}, locale }</code>。</td></tr>
+<tr><td><code>wallpaperSettings.save(settings, expectedRevision)</code></td><td>设置页异步保存完整 JSON 对象，返回 <code>Promise&lt;{ snapshot: { revision, settings }, running, pending, locale }&gt;</code>。expectedRevision 必须取自最近一次 load 或成功 save；失败时 Promise 拒绝并给出 Error.message。</td></tr>
 </tbody></table></div>
 <p>设置页位于隔离 iframe 中，允许脚本和表单事件，不能访问主程序 DOM、原生 IPC 或浏览器存储。内容安全策略禁止表单默认提交；页面应拦截 submit，再调用 SDK。使用普通 script 引入 <code>/__wallpaper_host__/settings.js</code>；该脚本由宿主提供，无需复制进壁纸包，独立浏览器或旧宿主不提供它。</p>
 <div class="code"><div class="code-head"><span>settings.html · 最小读写示例</span><button class="copy" type="button">复制代码</button></div><pre><code>&lt;script src=&quot;/__wallpaper_host__/settings.js&quot; defer&gt;&lt;/script&gt;
@@ -329,6 +353,7 @@ window.addEventListener(&#x27;DOMContentLoaded&#x27;, async () =&gt; {
   }
 });
 &lt;/script&gt;</code></pre></div>
+<p>设置页 SDK 另提供只读 <code>wallpaperSettings.locale</code>（zh-CN 或 en），load/save 回执包含当前 locale。主程序语言变化时在设置页 window 上发送 <code>wallpapersettings:localechange</code>，detail 为 <code>{ locale }</code>。页面可据此更新文案，应保留未保存的表单值；locale 是主程序界面语言，不写入每张壁纸的配置，也不增加配置 revision。</p>
 <h4>2. 保存、版本与分发规则</h4>
 <ul class="check-list">
 <li>settings 必须是 JSON 对象，序列化后的 UTF-8 大小不超过 32 KiB。save 替换完整配置，不做局部合并；未提供的字段由壁纸采用默认值。</li>
@@ -362,13 +387,14 @@ if (supportsSettings) {
   method: &#x27;save&#x27;, settings: { lighting: 2 }, expectedRevision: 0 }
 // load 成功回执
 { channel: &#x27;wallpaper-settings-v1&#x27;, session: &#x27;opaque-session&#x27;, requestId: &#x27;1&#x27;, ok: true,
-  result: { revision: 0, settings: {} } }
+  result: { revision: 0, settings: {}, locale: &#x27;zh-CN&#x27; } }
 // save 成功回执
 { channel: &#x27;wallpaper-settings-v1&#x27;, session: &#x27;opaque-session&#x27;, requestId: &#x27;2&#x27;, ok: true,
-  result: { snapshot: { revision: 1, settings: { lighting: 2 } }, running: 2, pending: false } }
+  result: { snapshot: { revision: 1, settings: { lighting: 2 } }, running: 2, pending: false, locale: &#x27;zh-CN&#x27; } }
 // 失败回执：SDK 将其转换为 rejected Promise / Error
 { channel: &#x27;wallpaper-settings-v1&#x27;, session: &#x27;opaque-session&#x27;, requestId: &#x27;2&#x27;, ok: false,
   error: &#x27;配置已发生变化，请重新加载设置后再保存。&#x27; }</code></pre></div>
+<p>语言变化通知同样携带 channel 和 session，消息为 <code>{ channel, session, type: &quot;localechange&quot;, locale }</code>；它不对应一次读写请求，因此没有 requestId。SDK 据此更新只读 locale 并触发 wallpapersettings:localechange，作者无需保存或回执。</p>
 <p>宿主同时校验 iframe 的 Window 来源、隔离页面的 null origin 和 session，回执携带同一 requestId。向不透明来源发送消息需要 targetOrigin 为 <code>*</code>，但不能因此省略来源与会话校验。切换壁纸、重新加载设置页或内容包更新后，旧页面的消息和延迟回执失效；这不会撤回已经提交到主程序的保存，重新打开后应 load 确认。</p>
 <h4>4. 错误与恢复</h4>
 <div class="table-wrap"><table><thead><tr><th>情况</th><th>页面处理</th></tr></thead><tbody>
@@ -572,7 +598,7 @@ button[hidden]{display:none}
 <div class="table-wrap"><table><thead><tr><th>检查场景</th><th>建议方式</th><th>通过标准</th></tr></thead><tbody><tr><td>独立浏览器、模式回退、操作接口</td><td>浏览器自动化；接口开发时可用明确标注的模拟对象检查页面分支，交付前仍应测试真实实现。</td><td>没有 JS 错误；按钮正确；请求去重与暂停规则有效。模拟结果只证明页面逻辑。</td></tr><tr><td>类名不应被宿主干预</td><td>准备普通测试页，故意使用 .hud、.overlay、.toast 等类名。</td><td>符合 v1 的宿主不隐藏这些元素，不改标题、文字或事件处理。</td></tr><tr><td>暂停与资源</td><td>自动化观察场景状态；结合进程资源与媒体状态检查。</td><td>暂停期间状态不推进，恢复不突跳，不持续进行无必要的重计算或播放。</td></tr><tr><td>真实桌面输入</td><td>Windows / Explorer 实机，桌面图标、框选、任务栏、菜单、普通窗口都参与测试。</td><td>桌面空白处交互正常；图标和原始桌面操作不受影响，壁纸不抢焦点。</td></tr><tr><td>多屏与缩放</td><td>至少覆盖负坐标副屏、竖屏、混合 DPI、任务栏工作区变化。</td><td>显示范围和点击映射一致；切屏或换壁纸后的旧请求不作用于新实例。</td></tr><tr><td>壁纸设置通信</td><td>检查未运行保存、启动前读取、多屏共享、暂停时更新、保存失败、版本冲突和旧设置页回执。</td><td>读取与保存为同一份配置；失败不覆盖；旧页面不影响新页面；配置变更不恢复暂停。</td></tr><tr><td>版本组合</td><td>当前支持宿主、旧宿主、旧内容包、新内容包分别验证。</td><td>最低版本声明真实；不支持时明确降级，不能把模拟的新接口写成当前宿主已经支持。</td></tr></tbody></table></div></section><section class="section" id="troubleshooting"><div class="section-header"><span class="section-number">11</span><h2>常见问题，先从这里查</h2></div><p class="section-intro">大多数问题来自运行环境、坐标或事件的假设，而不是需要宿主为某张壁纸加特例。</p><div class="table-wrap"><table><thead><tr><th>现象</th><th>先检查</th><th>推荐处理</th></tr></thead><tbody><tr><td>预览有控制栏，桌面没有</td><td>是否被旧宿主强制 CSS 隐藏？页面是否自行进入 idle 或隐藏界面状态？</td><td>先区分宿主版本与页面行为；新版由壁纸自行控制显示，不增加主程序专用白名单。</td></tr><tr><td>移动鼠标没有按钮高亮</td><td>是否只依赖 :hover、pointerenter 或原生 title？</td><td>必要标签直接可见；通过标准 pointermove 在壁纸内实现轻量反馈，不能要求宿主模拟完整浏览器悬停。</td></tr><tr><td>点按钮时背景也响应</td><td>是否在 document 上无差别处理 click，或同时处理了 down 与 click？</td><td>场景监听限定在场景区域；控制栏阻止冒泡；同一业务只处理一次。</td></tr><tr><td>点击位置偏了</td><td>是否混用了物理像素、CSS 像素、固定分辨率或忽略了 cover 裁切？</td><td>以当前画布矩形做转换；存在裁切、变换时逆变换到实际场景坐标。</td></tr><tr><td>暂停后还有声音或后台仍忙</td><td>是否还有定时器、视频、音频、Worker、CSS 动画？</td><td>按暂停状态管理这些资源；不要以为冻结 RAF 就等于停止一切。</td></tr><tr><td>恢复后时间跳了一大截</td><td>是否直接使用恢复后的大帧间隔？</td><td>重置帧时间基准，给 dt 设置合理上限；不要把暂停时长当成模拟时长补跑。</td></tr><tr><td>主程序按钮没有出现</td><td>是否只是添加了接口对象，而正在使用的正式版本尚未支持 v1？操作列表是否为空、无效或未就绪？</td><td>确认正式接口版本与能力，再检查协议字段。页面按钮仍应独立可用。</td></tr><tr><td>点一次主程序操作却执行两次</td><td>是否在超时后自动重试，或给重复请求生成了新的 ID？</td><td>串行调用、使用同一个请求的回执缓存；结果未知时不自动重试非幂等动作。</td></tr></tbody></table></div></section><section class="section" id="references"><div class="section-header"><span class="section-number">12</span><h2>版本状态与参考来源</h2></div><p class="section-intro">对照 v0.9.0 与 v0.10.0，区分旧行为和 v1 接口的支持范围。</p><div class="table-wrap"><table><thead><tr><th>项目</th><th>正式 v0.9.0</th><th>v0.10.0</th></tr></thead><tbody><tr><td>module.json schema 1、相对路径、本地目录</td><td>已有</td><td>沿用现有格式，不增加未经实现的清单字段。</td></tr><tr><td>旧模式标识、通用点击/移动与 RAF 暂停</td><td>已有</td><td>保留兼容；完善暂停原因和加载期间的初始状态。</td></tr><tr><td>宿主隐藏 HUD / overlay、松风镇 DOM 适配、水族箱专用调用</td><td>包含这些专用逻辑</td><td>已移除。两张内置壁纸及内容库源码自行处理显示与业务操作。</td></tr><tr><td>wallpaperHost、wallpaperApp、状态事件与通用操作发现</td><td>尚不支持这些公开接口</td><td>已实现。包含实例绑定、超时、去重、校验、管理窗口与托盘操作。</td></tr><tr><td>正式支持版本与内容发布</td><td>v0.9.0 已发行</td><td>主程序 v0.10.0 提供 v1；两张内置快照为 1.0.1。在线内容库独立发布，不随程序升级替换已有在线包。</td></tr></tbody></table></div>
 <ul class="reference-list">
 <li><a href="https://github.com/whoarei/wallpaper-box/tree/v0.10.0">v0.10.0 宿主源码</a>：通用运行时、原生操作调用、管理界面与内置适配。</li>
-<li><code>wallpaper-host/src-tauri/wallpaper-mode.js</code>：环境、输入、暂停事件、操作传输，以及开发版的配置快照和变更事件。</li>
+<li><code>wallpaper-host/src-tauri/wallpaper-mode.js</code>：环境、输入、暂停事件、操作传输，以及 v0.12.0 起的配置快照和变更事件。</li>
 <li><code>wallpaper-host/src-tauri/wallpaper-settings.js</code>、<code>wallpaper-host/ui/wallpaper-settings.js</code>：设置页 SDK 与隔离消息通道。</li>
 <li><code>wallpaper-host/src-tauri/src/wallpaper_settings.rs</code>、<code>wallpaper-host/src-tauri/src/host/wallpaper_settings.rs</code>：配置版本、持久化与窗口通知。</li>
 <li><code>wallpaper-host/src-tauri/src/wallpaper_protocol.rs</code>：原生协议类型与字段校验。</li>
@@ -580,10 +606,10 @@ button[hidden]{display:none}
 <li><code>tests/wallpaper-protocol.test.cjs</code>、<code>tests/wallpaper-modules.test.cjs</code>：实际运行时与真实壁纸页面验证。<code>tests/wallpaper-settings.test.cjs</code>：设置读写、隔离、保存失败、未运行与多屏同步的集成验证。</li>
 <li><a href="https://github.com/whoarei/wallpaper-box/blob/66fbf98/docs/guide.md">正式版基线 v0.9.0</a>：用于对照旧行为，不代表该版本已支持 v1。</li>
 </ul>
-<div class="table-wrap"><table><thead><tr><th>设置扩展</th><th>正式 v0.10.0—v0.10.2</th><th>当前开发代码</th></tr></thead><tbody><tr><td>protocolVersion / schemaVersion</td><td>均为 1</td><td>仍为 1，扩展通过能力检测启用</td></tr><tr><td>settings.entry、设置页 SDK</td><td>尚不支持</td><td>已实现，允许配置未运行的已安装壁纸</td></tr><tr><td>capabilities.settings、getSettings、settingschange</td><td>尚不支持；采用默认配置</td><td>桌面与预览均提供，按壁纸 ID 共享配置</td></tr></tbody></table></div>
-<p class="caption">基础 v1 支持版本：主程序 v0.10.0 起；设置扩展尚未随正式版本发布。文档日期：2026 年 11 月 13 日。浏览器接口检查不代替 Windows Explorer 实机验收，设备检查范围见对应发行说明。</p>
+<div class="table-wrap"><table><thead><tr><th>设置扩展</th><th>正式 v0.10.0—v0.11.0</th><th>v0.12.0</th></tr></thead><tbody><tr><td>protocolVersion / schemaVersion</td><td>均为 1</td><td>仍为 1，扩展通过能力检测启用</td></tr><tr><td>settings.entry、设置页 SDK</td><td>尚不支持</td><td>已实现，允许配置未运行的已安装壁纸</td></tr><tr><td>capabilities.settings、getSettings、settingschange</td><td>尚不支持；采用默认配置</td><td>桌面与预览均提供，按壁纸 ID 共享配置</td></tr></tbody></table></div>
+<p class="caption">基础 v1 支持版本：主程序 v0.10.0 起；设置扩展从 v0.12.0 起支持。文档日期：2026 年 11 月 13 日。浏览器接口检查不代替 Windows Explorer 实机验收，设备检查范围见对应发行说明。</p>
 </section>
-<footer class="doc-footer"><span>Wallpaper Box · Developer Integration Guide · v1 基础 / 设置扩展开发中</span><span>单文件 / 离线可读 / 支持打印　<a href="#top">回到顶部 ↑</a></span></footer>
+<footer class="doc-footer"><span>Wallpaper Box · Developer Integration Guide · v1 / 基础 v0.10.0+ / 设置 v0.12.0+</span><span>单文件 / 离线可读 / 支持打印　<a href="#top">回到顶部 ↑</a></span></footer>
 </main></div>
 <script>
 (() => {

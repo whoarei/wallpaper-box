@@ -72,6 +72,39 @@ pub fn open_about_link(window: WebviewWindow, link: String) -> Result<(), String
 }
 
 #[tauri::command]
+pub async fn set_language(
+    app: AppHandle,
+    window: WebviewWindow,
+    language: crate::language::Language,
+) -> Result<View, String> {
+    manager(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        // Serialize language changes with surface creation: a new document must
+        // either receive the new locale at initialization or in the broadcast.
+        let _operation = host.operations.lock().unwrap();
+        {
+            let mut data = host.data.lock().unwrap();
+            let mut settings = data.settings.clone();
+            settings.language = language;
+            catalog::atomic_json(&host.dir.join("settings.json"), &settings)
+                .map_err(|_| "语言设置保存失败，请重试。")?;
+            data.settings = settings;
+        }
+        for label in app.webview_windows().keys() {
+            if label.starts_with("wallpaper-") || label.starts_with("preview-") {
+                sync_locale(&app, label);
+            }
+        }
+        rebuild_tray(&app);
+        let _ = app.emit("host-updated", ());
+        Ok(snapshot(&app))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn get_state(app: AppHandle, window: WebviewWindow) -> Result<View, String> {
     manager(&window)?;
     tauri::async_runtime::spawn_blocking(move || {

@@ -1,5 +1,7 @@
 (() => {
 'use strict';
+const i18n=window.wallpaperI18n,t=i18n.t,errorText=i18n.message;
+let languageBusy=false,languageError='';
 const invoke=window.__TAURI__.core.invoke,$=id=>document.getElementById(id);
 let state=null,localBusy=false,remoteBusy=false,activeTab='local',lastSelectedDisplay='',lastModules='',toastTimer,localError='',remoteError='';
 let appUpdateBusy=false,appUpdateError='',lastAppPhase='',previewBusy=false,renderEpoch=0,lastCurrentArt='',polling=false,refreshRequested=false,taskFilter=false;
@@ -17,6 +19,11 @@ function enabledRepositories(){return repositories().filter(repository=>reposito
 function repositoryLabel(url){return String(url||'').replace(/^https:\/\//,'').replace(/\.git\/?$/,'');}
 
 function el(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;}
+function contentText(item,field='name'){
+ if(!item)return '';
+ const metadata=item.module_id?state?.modules.find(module=>module.id===item.module_id)||item:item;
+ return metadata.locales?.[i18n.locale]?.[field]||metadata[field]||item[field]||'';
+}
 function current(){return state?.wallpapers.find(w=>w.display_id===state.selected_monitor);}
 function wallpaperActionDisabled(action,playing=current()){
  return localBusy||!playing?.instance_id||!state?.displays.some(display=>display.id===playing.display_id)||playing.paused||playing.action_busy||
@@ -26,12 +33,12 @@ function renderWallpaperActions(){
  const playing=current(),actions=Array.isArray(playing?.actions)?playing.actions:[];
  $('wallpaper-actions').hidden=!actions.length;
  $('wallpaper-actions-error').hidden=!playing?.actions_error;
- $('wallpaper-actions-error').textContent=playing?.actions_error||'';
+ $('wallpaper-actions-error').textContent=errorText(playing?.actions_error);
  const primary=$('wallpaper-action');
  function configure(button,action){
   button.dataset.wallpaperAction=action.id;button.textContent=action.label;
   button.disabled=wallpaperActionDisabled(action,playing);
-  button.title=(playing?.paused?'壁纸已暂停，请先继续播放。':action.disabledReason)||action.label;
+  button.title=(playing?.paused?t('壁纸已暂停，请先继续播放。'):errorText(action.disabledReason))||action.label;
   button.onclick=()=>invokeWallpaperAction(action,playing);
  }
  if(actions[0])configure(primary,actions[0]);
@@ -55,13 +62,13 @@ async function invokeWallpaperAction(action,playing){
  localBusy=true;localError='';renderEpoch++;$('wallpaper-actions-menu').open=false;renderBusy();
  try{
   const result=await invoke('invoke_wallpaper_action',{monitorId,instanceId,actionId:action.id});
-  if(!result?.ok)throw new Error(result?.message||'未能确认操作结果，请先查看壁纸，避免重复操作。');
-  toast('已完成：'+action.label);
+  if(!result?.ok)throw new Error(result?.message||t('未能确认操作结果，请先查看壁纸，避免重复操作。'));
+  toast(t('已完成：')+action.label);
  }catch(error){localError=String(error.message||error);toast(localError);}
  finally{localBusy=false;renderEpoch++;if(state)render(state);update();}
 }
 function toast(message,duration=3500){
- const node=$('toast');node.textContent=message;
+ const node=$('toast');node.textContent=errorText(message);
  // Keep feedback visible above a modal settings/import dialog without taking focus.
  if(node.showPopover){if(node.matches(':popover-open'))node.hidePopover();node.showPopover();}
  node.classList.add('show');clearTimeout(toastTimer);
@@ -81,11 +88,11 @@ function bytes(n){n=Math.max(0,Number(n)||0);if(!n)return '0 KB';return n>=10485
 function renderResources(playing){
  const panel=$('current-resources'),usage=playing?.resources;
  panel.hidden=!playing;if(!playing)panel.open=false;
- const fallback=usage?.status==='unavailable'?'暂不可用':'采样中';
+ const fallback=usage?.status==='unavailable'?t('暂不可用'):t('采样中');
  $('resource-cpu').textContent=typeof usage?.cpu_percent==='number'&&Number.isFinite(usage.cpu_percent)?usage.cpu_percent.toFixed(1)+'%':fallback;
  $('resource-memory').textContent=typeof usage?.memory_bytes==='number'&&Number.isFinite(usage.memory_bytes)?(usage.memory_bytes/1048576).toFixed(0)+' MB':fallback;
 }
-function image(card,url,name){if(!url){card.append(el('div','cover-fallback',name));return;}const img=el('img','cover');img.src=url;img.alt=name+'封面';img.referrerPolicy='no-referrer';img.onerror=()=>img.replaceWith(el('div','cover-fallback',name));card.append(img);}
+function image(card,url,name){if(!url){card.append(el('div','cover-fallback',name));return;}const img=el('img','cover');img.src=url;img.alt=name+t('封面');img.referrerPolicy='no-referrer';img.onerror=()=>img.replaceWith(el('div','cover-fallback',name));card.append(img);}
 const downloadTasks=()=>state?.downloads||[];
 const downloadTask=id=>downloadTasks().find(task=>task.id===id);
 function reconcile(container,items,key,signature,build){
@@ -103,13 +110,13 @@ function renderDisplays(data){
   const playing=data.wallpapers.find(w=>w.display_id===display.id),module=data.modules.find(m=>m.id===playing?.module_id);
   return {display,index,playing,art:module?.cover?data.service+module.cover:''};
  });
- reconcile(list,items,item=>item.display.id,item=>JSON.stringify([item.display,item.index,item.art,item.playing?.module_id]),({display,index,playing,art})=>{
+ reconcile(list,items,item=>item.display.id,item=>JSON.stringify([i18n.locale,item.display,item.index,item.art,item.playing?.module_id]),({display,index,playing,art})=>{
   const button=el('button','monitor-choice');button.type='button';button.dataset.monitorId=display.id;
   const stand=el('span','monitor-stand'),screen=el('span','monitor-screen');stand.setAttribute('aria-hidden','true');
   const factor=Math.min(60/Math.max(1,display.width),33/Math.max(1,display.height));screen.style.width=Math.round(display.width*factor)+'px';screen.style.height=Math.round(display.height*factor)+'px';
-  const portrait=display.height>display.width,fallback=()=>el('span','monitor-placeholder',playing?.name?.slice(0,portrait?1:2)||(portrait?'—':'未设置'));
+  const portrait=display.height>display.width,fallback=()=>el('span','monitor-placeholder',contentText(playing)?.slice(0,portrait?1:2)||(portrait?'—':t('未设置')));
   if(art){const img=el('img','monitor-art');img.src=art;img.alt='';img.onerror=()=>img.replaceWith(fallback());screen.append(img);}else screen.append(fallback());
-  screen.append(el('span','monitor-check','✓'));stand.append(screen);button.append(stand,el('span','monitor-caption',`${index+1} · ${display.primary?'主屏':'副屏'}`));
+  screen.append(el('span','monitor-check','✓'));stand.append(screen);button.append(stand,el('span','monitor-caption',`${index+1} · ${display.primary?t('主屏'):t('副屏')}`));
   button.onclick=async()=>{
    if(localBusy||state?.selected_monitor===display.id)return;
    const restoreFocus=document.activeElement===button;
@@ -117,12 +124,12 @@ function renderDisplays(data){
    if(restoreFocus&&document.activeElement===document.body){const target=[...$('displays').children].find(node=>node.dataset.monitorId===display.id);if(target&&!target.disabled)target.focus({preventScroll:true});}
   };return button;
  });
- if(!items.length){const empty=el('span','monitor-empty-note','未检测到显示器');list.append(empty);}
+ if(!items.length){const empty=el('span','monitor-empty-note',t('未检测到显示器'));list.append(empty);}
  items.forEach(({display,index,playing})=>{
   const button=[...list.children].find(node=>node.dataset.monitorId===display.id),selected=display.id===data.selected_monitor;
-  const status=playing?(playing.paused?'已暂停':playing.auto_paused?'遮挡，自动暂停':'正在播放'):'未设置壁纸';
-  button.setAttribute('aria-pressed',String(selected));button.setAttribute('aria-label',`选择显示器 ${index+1}：${display.name}，${playing?.name||'未设置壁纸'}`);
-  button.title=`${display.name}\n${display.width} × ${display.height} · 缩放 ${Math.round(display.scale*100)}%\n${playing?playing.name+' · ':''}${status}`;
+  const status=playing?(playing.paused?t('已暂停'):playing.auto_paused?t('遮挡，自动暂停'):t('正在播放')):t('未设置壁纸');
+  button.setAttribute('aria-pressed',String(selected));button.setAttribute('aria-label',t('选择显示器 {index}：{name}，{wallpaper}',{index:index+1,name:display.name,wallpaper:contentText(playing)||t('未设置壁纸')}));
+  button.title=`${display.name}\n${t('{size} · 缩放 {scale}%',{size:display.width+' × '+display.height,scale:Math.round(display.scale*100)})}\n${playing?contentText(playing)+' · ':''}${status}`;
  });
  if(lastSelectedDisplay!==data.selected_monitor){
   const selected=[...list.children].find(node=>node.dataset.monitorId===data.selected_monitor);
@@ -134,28 +141,29 @@ function taskSlot(card,id){const slot=el('div','download-task');slot.dataset.dow
 function renderDownloads(){
  const tasks=downloadTasks(),count=phase=>tasks.filter(t=>t.phase===phase).length;
  const processing=tasks.filter(t=>['verifying','waiting_install','installing','cancelling'].includes(t.phase)).length;
- const parts=[];if(count('downloading'))parts.push('下载中 '+count('downloading'));if(processing)parts.push('处理中 '+processing);if(count('queued'))parts.push('等待 '+count('queued'));if(count('failed'))parts.push('失败 '+count('failed'));
- $('download-filter').hidden=!tasks.length&&!taskFilter;$('download-filter').textContent=parts.join(' · ')||'显示全部壁纸';$('download-filter').title=(parts.join(' · ')||'当前没有任务')+'。最多 5 项并行，点击筛选相关壁纸';$('download-filter').setAttribute('aria-pressed',String(taskFilter));$('download-filter').classList.toggle('has-errors',!!count('failed'));
+ const parts=[];if(count('downloading'))parts.push(t('下载中 ')+count('downloading'));if(processing)parts.push(t('处理中 ')+processing);if(count('queued'))parts.push(t('等待 ')+count('queued'));if(count('failed'))parts.push(t('失败 ')+count('failed'));
+ $('download-filter').hidden=!tasks.length&&!taskFilter;$('download-filter').textContent=parts.join(' · ')||t('显示全部壁纸');$('download-filter').title=(parts.join(' · ')||t('当前没有任务'))+t('。最多 5 项并行，点击筛选相关壁纸');$('download-filter').setAttribute('aria-pressed',String(taskFilter));$('download-filter').classList.toggle('has-errors',!!count('failed'));
  $('clear-download-filter').hidden=!taskFilter;
  for(const slot of document.querySelectorAll('[data-download-id]')){
   const id=slot.dataset.downloadId,task=downloadTask(id);slot.hidden=!task;
   const card=slot.closest('.module'),normal=card.querySelector('.download');if(normal)normal.hidden=!!task;
   if(!task)continue;
-  if(slot.dataset.phase!==task.phase){
+  if(slot.dataset.phase!==task.phase||slot.dataset.locale!==i18n.locale){
+   slot.dataset.locale=i18n.locale;
    slot.dataset.phase=task.phase;slot.className='download-task '+task.phase;slot.replaceChildren();
    const meter=el('div','task-meter'),heading=el('div','task-heading'),label=el('span','task-label'),percentage=el('span','task-percentage');heading.append(label,percentage);
-   const progress=el('progress','task-progress');progress.max=100;progress.setAttribute('aria-label',task.item.name+'下载进度');
+   const progress=el('progress','task-progress');progress.max=100;progress.setAttribute('aria-label',contentText(task.item)+t('下载进度'));
    const meta=el('div','task-meta'),size=el('span','task-size'),speed=el('span','task-speed');meta.append(size,speed);meter.append(heading,progress,meta);
    const tools=el('div','task-tools'),action=el('button','task-action'),dismiss=el('button','task-dismiss','×');
-   const failed=task.phase==='failed';action.textContent=failed?'重试':task.phase==='queued'?'移出':'取消';action.classList.toggle('retry',failed);action.setAttribute('aria-label',(failed?'重试':task.phase==='queued'?'移出队列：':'取消下载：')+task.item.name);action.onclick=()=>changeDownload(id,failed?'retry':'cancel');
-   action.hidden=!['downloading','queued','failed'].includes(task.phase);dismiss.hidden=!failed;dismiss.title='移除失败记录';dismiss.setAttribute('aria-label','移除失败记录：'+task.item.name);dismiss.onclick=()=>changeDownload(id,'cancel');tools.append(action,dismiss);slot.append(meter,tools);
+   const failed=task.phase==='failed';action.textContent=failed?t('重试'):task.phase==='queued'?t('移出'):t('取消');action.classList.toggle('retry',failed);action.setAttribute('aria-label',(failed?t('重试'):task.phase==='queued'?t('移出队列：'):t('取消下载：'))+contentText(task.item));action.onclick=()=>changeDownload(id,failed?'retry':'cancel');
+   action.hidden=!['downloading','queued','failed'].includes(task.phase);dismiss.hidden=!failed;dismiss.title=t('移除失败记录');dismiss.setAttribute('aria-label',t('移除失败记录：')+contentText(task.item));dismiss.onclick=()=>changeDownload(id,'cancel');tools.append(action,dismiss);slot.append(meter,tools);
   }
   const phase=task.phase,p=Math.max(0,Math.min(100,task.total?task.received/task.total*100:0));
-  const labels={queued:'等待中',downloading:'正在下载',cancelling:'正在取消',verifying:'校验中',waiting_install:'等待安装',installing:'安装中',failed:'下载失败'};
-  slot.querySelector('.task-label').textContent=(labels[phase]||'处理中')+' · v'+task.item.version;slot.querySelector('.task-percentage').textContent=phase==='downloading'?Math.floor(p)+'%':'';
-  const progress=slot.querySelector('progress');progress.value=p;progress.hidden=['queued','failed','cancelling'].includes(phase);progress.setAttribute('aria-valuetext',phase==='downloading'?Math.floor(p)+'%':labels[phase]||'处理中');
-  slot.querySelector('.task-size').textContent=phase==='queued'?'空出位置后自动开始':phase==='failed'?task.error||'下载中断，请重试':phase==='cancelling'?'正在停止连接，保留已安装壁纸':phase==='downloading'?bytes(task.received)+' / '+bytes(task.total):phase==='verifying'?'下载完成，正在校验':phase==='waiting_install'?'校验通过，等待保存到本机':'正在保存到本机';
-  slot.querySelector('.task-size').title=task.error||'';slot.querySelector('.task-speed').textContent=phase==='queued'?'第 '+task.queue_position+' 项':phase==='downloading'&&task.speed?bytes(task.speed)+'/s':'';
+  const labels={queued:t('等待中'),downloading:t('正在下载'),cancelling:t('正在取消'),verifying:t('校验中'),waiting_install:t('等待安装'),installing:t('安装中'),failed:t('下载失败')};
+  slot.querySelector('.task-label').textContent=(labels[phase]||t('处理中'))+' · v'+task.item.version;slot.querySelector('.task-percentage').textContent=phase==='downloading'?Math.floor(p)+'%':'';
+  const progress=slot.querySelector('progress');progress.value=p;progress.hidden=['queued','failed','cancelling'].includes(phase);progress.setAttribute('aria-valuetext',phase==='downloading'?Math.floor(p)+'%':labels[phase]||t('处理中'));
+  slot.querySelector('.task-size').textContent=phase==='queued'?t('空出位置后自动开始'):phase==='failed'?errorText(task.error)||t('下载中断，请重试'):phase==='cancelling'?t('正在停止连接，保留已安装壁纸'):phase==='downloading'?bytes(task.received)+' / '+bytes(task.total):phase==='verifying'?t('下载完成，正在校验'):phase==='waiting_install'?t('校验通过，等待保存到本机'):t('正在保存到本机');
+  slot.querySelector('.task-size').title=errorText(task.error);slot.querySelector('.task-speed').textContent=phase==='queued'?t('第 ')+task.queue_position+t(' 项'):phase==='downloading'&&task.speed?bytes(task.speed)+'/s':'';
   slot.querySelectorAll('button').forEach(button=>button.disabled=pendingTasks.has(id));
  }
 }
@@ -166,7 +174,7 @@ async function changeDownload(moduleId,action='enqueue',versionItem=null){
   if(versionItem){args.version=versionItem.version;args.repository=versionItem.repository;historyDownloads.set(moduleId,{version:versionItem.version,name:versionItem.name});}
   const result=await invoke(action==='enqueue'?'install_online':'download_action',args);
   if(action==='cancel')historyDownloads.delete(moduleId);
-  if(versionItem&&result?.downloads?.some(task=>task.id===moduleId))toast('正在下载 v'+versionItem.version+'，完成后替换当前版本',3000);
+  if(versionItem&&result?.downloads?.some(task=>task.id===moduleId))toast(t('正在下载 v')+versionItem.version+t('，完成后替换当前版本'),3000);
   if(result&&epoch===renderEpoch)render(result);
  }
  catch(error){if(versionItem){historyDownloads.delete(moduleId);historyPages.delete(JSON.stringify([versionItem.repository,moduleId]));}toast(String(error));}
@@ -197,17 +205,17 @@ function renderHistory(){
   const current=local?.source==='online'&&compare(item.version,local.version)===0,compatible=item.currentOnly||compare(state.version,item.minAppVersion||item.min_app_version||'0.2.0')>=0;
   const option=el('button','wallpaper-version-option');option.type='button';option.dataset.version=item.version;option.setAttribute('role','option');option.setAttribute('aria-selected',String(current));
   option.append(el('span','','v'+item.version));
-  if(current)option.append(el('span','version-current','✓'));else if(!compatible)option.append(el('small','','需 '+(item.minAppVersion||item.min_app_version)));else if(item.version===session.item.version)option.append(el('small','','最新'));
+  if(current)option.append(el('span','version-current','✓'));else if(!compatible)option.append(el('small','',t('需 ')+(item.minAppVersion||item.min_app_version)));else if(item.version===session.item.version)option.append(el('small','',t('最新')));
   option.disabled=current||!compatible||!!downloadTask(session.item.id)||pendingTasks.has(session.item.id)||!!item.currentOnly;
-  option.title=current?'本机当前版本':!compatible?'需要壁纸盒子 '+(item.minAppVersion||item.min_app_version):'下载并替换为 v'+item.version;
+  option.title=current?t('本机当前版本'):!compatible?t('需要壁纸盒子 ')+(item.minAppVersion||item.min_app_version):t('下载并替换为 v')+item.version;
   option.onclick=()=>{closeHistory();changeDownload(item.id,'enqueue',item);};menu.append(option);
  }
  const status=(text,action)=>{const node=el(action?'button':'div','wallpaper-version-status',text);if(action){node.type='button';node.onclick=()=>{if(historySession)historySession.keyboard=true;action();};}else node.setAttribute('role','status');menu.append(node);};
- if(entry.loading)status('正在加载…');
- else if(entry.error)status('加载未完成，点击重试',()=>loadHistoryPage(entry,entry.retryPage));
- else if(!entry.loaded)status('加载版本',()=>loadHistoryPage(entry,1));
- if(!entry.loading&&entry.loaded&&entry.nextPage)status('更早版本 ↓',()=>loadHistoryPage(entry,entry.nextPage));
- if(entry.loaded&&!entry.items.size&&!entry.nextPage&&!entry.error)status('暂无历史版本');
+ if(entry.loading)status(t('正在加载…'));
+ else if(entry.error)status(t('加载未完成，点击重试'),()=>loadHistoryPage(entry,entry.retryPage));
+ else if(!entry.loaded)status(t('加载版本'),()=>loadHistoryPage(entry,1));
+ if(!entry.loading&&entry.loaded&&entry.nextPage)status(t('更早版本 ↓'),()=>loadHistoryPage(entry,entry.nextPage));
+ if(entry.loaded&&!entry.items.size&&!entry.nextPage&&!entry.error)status(t('暂无历史版本'));
  menu.setAttribute('aria-busy',String(entry.loading));positionHistory();
  if(focused)[...menu.querySelectorAll('[data-version]')].find(option=>option.dataset.version===focused&&!option.disabled)?.focus({preventScroll:true});
  else if(session.keyboard&&!entry.loading&&(entry.loaded||entry.error)&&menu.matches(':popover-open')){menu.querySelector('button:not(:disabled)')?.focus({preventScroll:true});session.keyboard=false;}
@@ -226,8 +234,8 @@ function openHistory(item,anchor,keyboard=false){
  if(historySession?.anchor===anchor){closeHistory();return;}closeHistory();
  const key=JSON.stringify([item.repository,item.id]);let entry=historyPages.get(key);
  if(!entry){entry={id:item.id,repository:item.repository,generation:historyGeneration,items:new Map(),loaded:false,loading:false,nextPage:null,retryPage:1,error:''};historyPages.set(key,entry);if(historyPages.size>32)historyPages.delete(historyPages.keys().next().value);}
- historySession={item,anchor,entry,keyboard};const menu=$('wallpaper-versions');menu.setAttribute('aria-label',item.name+'历史版本');renderHistory();menu.showPopover();anchor.setAttribute('aria-expanded','true');positionHistory();
- if(!historyTutorialShown){historyTutorialShown=true;toast('点击版本号即可下载并替换当前版本',3000);}
+ historySession={item,anchor,entry,keyboard};const menu=$('wallpaper-versions');menu.setAttribute('aria-label',contentText(item)+t('历史版本'));renderHistory();menu.showPopover();anchor.setAttribute('aria-expanded','true');positionHistory();
+ if(!historyTutorialShown){historyTutorialShown=true;toast(t('点击版本号即可下载并替换当前版本'),3000);}
  if(!entry.loaded&&!entry.loading)loadHistoryPage(entry,1);
  else if(keyboard&&!entry.loading){menu.querySelector('button:not(:disabled)')?.focus({preventScroll:true});historySession.keyboard=false;}
 }
@@ -241,8 +249,8 @@ $('wallpaper-versions').addEventListener('keydown',event=>{
 });
 window.addEventListener('resize',positionHistory);window.addEventListener('scroll',positionHistory,true);
 function onlineImage(card,item,data){
- if(!item.coverUrl&&!item.cover_url){image(card,null,item.name);return;}
- const img=el('img','cover');img.alt=item.name+'封面';card.append(img);
+ if(!item.coverUrl&&!item.cover_url){image(card,null,contentText(item));return;}
+ const img=el('img','cover');img.alt=contentText(item)+t('封面');card.append(img);
  const key=JSON.stringify([item.coverUrl||item.cover_url,item.repository,data.proxy]);
  let pending=onlineCovers.get(key);
  if(!pending){
@@ -250,18 +258,18 @@ function onlineImage(card,item,data){
   if(onlineCovers.size>64)onlineCovers.delete(onlineCovers.keys().next().value);
   pending.catch(()=>{if(onlineCovers.get(key)===pending)onlineCovers.delete(key);});
  }
- img.onerror=()=>img.replaceWith(el('div','cover-fallback',item.name));
- pending.then(url=>{if(img.isConnected)img.src=url;}).catch(()=>img.replaceWith(el('div','cover-fallback',item.name)));
+ img.onerror=()=>img.replaceWith(el('div','cover-fallback',contentText(item)));
+ pending.then(url=>{if(img.isConnected)img.src=url;}).catch(()=>img.replaceWith(el('div','cover-fallback',contentText(item))));
 }
-function repositoryName(address){try{const host=new URL(address).hostname;return host==='gitee.com'?'Gitee':host==='github.com'?'GitHub':'自定义仓库';}catch{return address?'自定义仓库':'新仓库';}}
+function repositoryName(address){try{const host=new URL(address).hostname;return host==='gitee.com'?'Gitee':host==='github.com'?'GitHub':t('自定义仓库');}catch{return address?t('自定义仓库'):t('新仓库');}}
 function renderRepositoryRows(){
  $('repositories-list').replaceChildren(...repositoryDrafts.map((repository,index)=>{
   const row=el('div','repository-row'),header=el('div','repository-heading'),id='repository-url-'+index,label=el('label','repository-name',repositoryName(repository.url));label.htmlFor=id;
-  const input=el('input','repository-url');input.id=id;input.type='url';input.value=repository.url;input.setAttribute('aria-label',`仓库地址 ${index+1}`);input.placeholder='https://gitee.com/所有者/仓库名.git';input.spellcheck=false;input.autocomplete='off';input.oninput=()=>{repository.url=input.value;label.textContent=repositoryName(input.value);editRepositories();};
-  const toggle=el('label','switch-label'),check=el('input');check.type='checkbox';check.checked=repository.enabled;check.setAttribute('role','switch');check.setAttribute('aria-label',`启用仓库 ${index+1}`);check.onchange=()=>{repository.enabled=check.checked;editRepositories();};toggle.append(check);header.append(label,toggle);
+  const input=el('input','repository-url');input.id=id;input.type='url';input.value=repository.url;input.setAttribute('aria-label',t('仓库地址 {index}',{index:index+1}));input.placeholder=t('https://gitee.com/所有者/仓库名.git');input.spellcheck=false;input.autocomplete='off';input.oninput=()=>{repository.url=input.value;label.textContent=repositoryName(input.value);editRepositories();};
+  const toggle=el('label','switch-label'),check=el('input');check.type='checkbox';check.checked=repository.enabled;check.setAttribute('role','switch');check.setAttribute('aria-label',t('启用仓库 {index}',{index:index+1}));check.onchange=()=>{repository.enabled=check.checked;editRepositories();};toggle.append(check);header.append(label,toggle);
   const controls=el('div','repository-controls'),status=el('p','repository-source-status');
-  const up=el('button','text-button','上移');up.setAttribute('aria-label',`上移仓库 ${index+1}`);up.dataset.first=String(index===0);up.onclick=()=>{[repositoryDrafts[index-1],repositoryDrafts[index]]=[repositoryDrafts[index],repositoryDrafts[index-1]];renderRepositoryRows();editRepositories();$('repository-url-'+(index-1)).focus();};
-  const remove=el('button','text-button repository-remove','移除');remove.setAttribute('aria-label',`移除仓库 ${index+1}`);remove.onclick=()=>{repositoryDrafts.splice(index,1);renderRepositoryRows();editRepositories();if(repositoryDrafts.length)$('repository-url-'+Math.min(index,repositoryDrafts.length-1)).focus();else $('add-repository').focus();};
+  const up=el('button','text-button',t('上移'));up.setAttribute('aria-label',t('上移仓库 {index}',{index:index+1}));up.dataset.first=String(index===0);up.onclick=()=>{[repositoryDrafts[index-1],repositoryDrafts[index]]=[repositoryDrafts[index],repositoryDrafts[index-1]];renderRepositoryRows();editRepositories();$('repository-url-'+(index-1)).focus();};
+  const remove=el('button','text-button repository-remove',t('移除'));remove.setAttribute('aria-label',t('移除仓库 {index}',{index:index+1}));remove.onclick=()=>{repositoryDrafts.splice(index,1);renderRepositoryRows();editRepositories();if(repositoryDrafts.length)$('repository-url-'+Math.min(index,repositoryDrafts.length-1)).focus();else $('add-repository').focus();};
   controls.append(status,up,remove);row.append(header,input,controls);return row;
  }));
 }
@@ -272,11 +280,11 @@ function renderRepositories(){
  $('repositories-list').querySelectorAll('input,button').forEach(node=>node.disabled=busy||node.dataset.first==='true');
  $('add-repository').disabled=busy||repositoryDrafts.length>=16;
  $('save-repositories').disabled=busy||!repositoriesDirty;
- $('repositories-status').textContent=repositoriesStatus||(repositoriesDirty?'更改尚未保存':'保存后生效');$('repositories-status').dataset.feedback=String(!!repositoriesStatus);
- $('repositories-error').hidden=!repositoriesError;$('repositories-error').textContent=repositoriesError;
+ $('repositories-status').textContent=t(repositoriesStatus)||(repositoriesDirty?t('更改尚未保存'):t('保存后生效'));$('repositories-status').dataset.feedback=String(!!repositoriesStatus);
+ $('repositories-error').hidden=!repositoriesError;$('repositories-error').textContent=errorText(repositoriesError);
  [...$('repositories-list').children].forEach((row,index)=>{
   const draft=repositoryDrafts[index],source=state?.online?.sources?.find(source=>source.repository===draft.url),node=row.querySelector('.repository-source-status');
-  node.textContent=!draft.enabled?'已关闭':source?.last_error?source.last_error:source?.catalog?`${source.cached?'使用缓存 · ':''}${source.catalog.wallpapers.length} 张壁纸`:'已启用';
+  node.textContent=!draft.enabled?t('已关闭'):source?.last_error?errorText(source.last_error):source?.catalog?t('{cached}{count} 张壁纸',{cached:source.cached?t('使用缓存 · '):'',count:source.catalog.wallpapers.length}):t('已启用');
   node.classList.toggle('failed',!!draft.enabled&&!!source?.last_error);
  });
 }
@@ -298,11 +306,11 @@ function renderProxy(){
  if(!proxyDirty&&signature!==lastProxy){$('proxy-mode').value=saved.mode;$('proxy-url').value=saved.url||'';lastProxy=signature;}
  const mode=$('proxy-mode').value;
  $('proxy-manual').hidden=mode!=='manual';
- $('proxy-description').textContent=mode==='system'?'使用系统配置的代理连接网络。':mode==='direct'?'直接连接网络，不使用代理。':'通过指定的代理连接网络。';
+ $('proxy-description').textContent=mode==='system'?t('使用系统配置的代理连接网络。'):mode==='direct'?t('直接连接网络，不使用代理。'):t('通过指定的代理连接网络。');
  for(const id of ['proxy-mode','proxy-url','test-proxy','save-proxy'])$(id).disabled=proxyBusy||!state;
  $('save-proxy').disabled=proxyBusy||!state||!proxyDirty;
- $('proxy-status').textContent=proxyStatus||(proxyDirty?'更改尚未保存':'保存后生效');$('proxy-status').dataset.feedback=String(!!proxyStatus);
- $('proxy-error').hidden=!proxyError;$('proxy-error').textContent=proxyError;
+ $('proxy-status').textContent=t(proxyStatus)||(proxyDirty?t('更改尚未保存'):t('保存后生效'));$('proxy-status').dataset.feedback=String(!!proxyStatus);
+ $('proxy-error').hidden=!proxyError;$('proxy-error').textContent=errorText(proxyError);
 }
 function editProxy(){proxyDirty=true;proxyStatus='';proxyError='';renderProxy();}
 async function runProxy(save){
@@ -343,34 +351,34 @@ async function previewWallpaper(moduleId){
 function applyWallpaper(moduleId){
  if(!state||current()?.module_id===moduleId)return;
  const monitor=state.displays.find(d=>d.id===state.selected_monitor);
- if(monitor)run('apply_wallpaper',{monitorId:monitor.id,moduleId},'已应用到 '+monitor.name);
+ if(monitor)run('apply_wallpaper',{monitorId:monitor.id,moduleId},t('已应用到 ')+monitor.name);
 }
 function moduleDetails(module){
- const details=el('details','module-details');details.append(el('summary','','详情'));
- details.append(el('div','module-meta',`${({builtin:'内置',online:'已下载',local:'本地'})[module.source]||'本地'} · v${module.version}`),el('p','module-description',module.description));
- if(module.rollback_available){const rollback=el('button','rollback text-button','切换到上一版本');rollback.dataset.moduleId=module.id;rollback.onclick=()=>run('rollback_wallpaper',{moduleId:module.id},'已切换版本',true);details.append(rollback);}
+ const details=el('details','module-details');details.append(el('summary','',t('详情')));
+ details.append(el('div','module-meta',`${({builtin:t('内置'),online:t('已下载'),local:t('本地')})[module.source]||t('本地')} · v${module.version}`),el('p','module-description',contentText(module,'description')));
+ if(module.rollback_available){const rollback=el('button','rollback text-button',t('切换到上一版本'));rollback.dataset.moduleId=module.id;rollback.onclick=()=>run('rollback_wallpaper',{moduleId:module.id},t('已切换版本'),true);details.append(rollback);}
  return details;
 }
 function renderAppUpdate(){
  const update=appUpdate(),phase=update.phase||'idle',ready=phase==='ready',working=['checking','downloading','installing'].includes(phase);
  $('version').textContent=update.current_version||state?.version||'';
- $('about-version').textContent=$('version').textContent||'正在读取';
+ $('about-version').textContent=$('version').textContent||t('正在读取');
  $('app-update-latest-wrap').hidden=!update.version;$('app-update-latest').textContent=update.version||'';
  $('app-update-toggle').hidden=!ready;
- const status={idle:'自动检查更新已开启。',checking:'正在检查程序更新…',downloading:'正在后台下载，完成后将验证安装包。',ready:`v${update.version||''} 已下载并验证，可以重启升级。`,up_to_date:'已是最新版本。',installing:'正在启动安装程序…',error:'程序更新暂时未能完成。'};
+ const status={idle:t('自动检查更新已开启。'),checking:t('正在检查程序更新…'),downloading:t('正在后台下载，完成后将验证安装包。'),ready:t('v{version} 已下载并验证，可以重启升级。',{version:update.version||''}),up_to_date:t('已是最新版本。'),installing:t('正在启动安装程序…'),error:t('程序更新暂时未能完成。')};
  let description=status[phase]||status.idle;
- $('app-update-last-checked').hidden=!update.last_checked_at;$('app-update-last-checked').textContent=update.last_checked_at?'上次检查 '+new Date(update.last_checked_at*1000).toLocaleString('zh-CN'):'';
+ $('app-update-last-checked').hidden=!update.last_checked_at;$('app-update-last-checked').textContent=update.last_checked_at?t('上次检查 ')+new Date(update.last_checked_at*1000).toLocaleString(i18n.locale):'';
  $('app-update-status').textContent=description;
  $('app-update-progress-wrap').hidden=phase!=='downloading';
  const received=Math.max(0,Number(update.received)||0),total=Number(update.total)||0;
  if(total>0)$('app-update-progress').value=Math.min(100,received/total*100);else $('app-update-progress').removeAttribute('value');
- $('app-update-size').textContent=(received?bytes(received):'0 KB')+' / '+(total>0?bytes(total):'正在获取大小');
- const error=appUpdateError||update.error||'';$('app-update-error').hidden=!error;$('app-update-error').textContent=error;
+ $('app-update-size').textContent=(received?bytes(received):'0 KB')+' / '+(total>0?bytes(total):t('正在获取大小'));
+ const error=appUpdateError||update.error||'';$('app-update-error').hidden=!error;$('app-update-error').textContent=errorText(error);
  $('app-update-notes-wrap').hidden=!update.notes;$('app-update-notes').textContent=update.notes||'';
  $('check-app-update').disabled=appUpdateBusy||working;
  $('download-app-update').hidden=phase!=='error'||!update.version;$('download-app-update').disabled=appUpdateBusy||working;
  $('install-app-update').hidden=!ready;$('install-app-update').disabled=appUpdateBusy||!ready;
- if(ready&&lastAppPhase!=='ready')toast('新版已就绪，可在设置中重启升级。');
+ if(ready&&lastAppPhase!=='ready')toast(t('新版已就绪，可在设置中重启升级。'));
  lastAppPhase=phase;
 }
 async function runAppUpdate(command,args={}){
@@ -380,11 +388,24 @@ async function runAppUpdate(command,args={}){
  catch(error){appUpdateError=String(error);}
  finally{renderEpoch++;appUpdateBusy=false;renderAppUpdate();}
 }
+function renderLanguage(){
+ $('language').value=state?.language||'system';$('language').disabled=languageBusy||!state;
+ $('language-error').hidden=!languageError;$('language-error').textContent=errorText(languageError);
+}
+async function setLanguage(language){
+ if(languageBusy||!state)return;
+ languageBusy=true;languageError='';renderLanguage();
+ // Invalidate an in-flight poll before applying the saved locale.
+ renderEpoch++;
+ try{const result=await invoke('set_language',{language});renderEpoch++;render(result);}
+ catch(error){languageError=String(error);}
+ finally{languageBusy=false;renderLanguage();update();}
+}
 function renderAutoStart(){
  $('auto-start').checked=autoStartBusy?autoStartRequested:(state?.auto_start??true);
  $('auto-start').disabled=autoStartBusy||!state;
  const error=autoStartError||state?.auto_start_error||'';
- $('auto-start-error').hidden=!error;$('auto-start-error').textContent=error;
+ $('auto-start-error').hidden=!error;$('auto-start-error').textContent=errorText(error);
 }
 async function setAutoStart(enabled){
  if(autoStartBusy||!state)return;
@@ -412,7 +433,7 @@ function renderBusy(){
  $('auto-pause').disabled=localBusy||!state;
  $('refresh').disabled=localBusy;
  $('check-online').disabled=remoteBusy||!enabledRepositories().length;
- $('check-online').textContent=remoteBusy?'正在刷新…':'刷新壁纸库';
+ $('check-online').textContent=remoteBusy?t('正在刷新…'):t('刷新壁纸库');
  for(const id of ['import-folder','import-zip'])$(id).disabled=localBusy;
  document.querySelectorAll('.apply,.apply-cover').forEach(button=>button.disabled=localBusy||button.dataset.available==='false');
  document.querySelectorAll('.rollback').forEach(button=>{const task=downloadTask(button.dataset.moduleId);button.disabled=remoteBusy||pendingTasks.has(button.dataset.moduleId)||(!!task&&task.phase!=='failed')||button.dataset.available==='false';});
@@ -423,64 +444,66 @@ function renderBusy(){
  positionHistory();
 }
 function render(data){
- state=data;$('version').textContent=data.version;renderAppUpdate();renderAutoStart();renderProxy();renderRepositories();
+ const changed=i18n.setLocale(data.locale||navigator.language);
+ if(changed){lastModules='';lastRepositories='';renderRepositoryRows();closeHistory();tabText();}
+ state=data;renderLanguage();$('version').textContent=data.version;renderAppUpdate();renderAutoStart();renderProxy();renderRepositories();
  window.wallpaperSettingsPanel.render(data,settingsTab==='wallpaper'&&$('settings-dialog').open);
  const context=JSON.stringify([data.proxy,data.wallpaper_repositories,data.online?.catalog,data.online?.checked_at]);if(context!==historyContext){historyContext=context;resetHistory();}
- for(const [id,notice] of historyDownloads){const module=data.modules.find(module=>module.id===id),task=downloadTask(id);if(!task&&module?.source==='online'&&module.version===notice.version){historyDownloads.delete(id);toast(notice.name+'已替换为 v'+notice.version,3000);}}
+ for(const [id,notice] of historyDownloads){const module=data.modules.find(module=>module.id===id),task=downloadTask(id);if(!task&&module?.source==='online'&&module.version===notice.version){historyDownloads.delete(id);toast(notice.name+t('已替换为 v')+notice.version,3000);}}
  const monitor=data.displays.find(d=>d.id===data.selected_monitor),playing=current();
- const visibleError=localError||data.last_error||(activeTab==='local'?remoteError:'');$('error').hidden=!visibleError;$('error').textContent=visibleError;
+ const visibleError=localError||data.last_error||(activeTab==='local'?remoteError:'');$('error').hidden=!visibleError;$('error').textContent=errorText(visibleError);
  $('auto-pause').checked=data.auto_pause;
- $('current-title').textContent=playing?playing.name:'该屏幕尚未设置动态壁纸';
- $('current-status').textContent=playing?(playing.paused?'已暂停':playing.auto_paused?'遮挡，自动暂停':'正在播放'):'';
+ $('current-title').textContent=playing?contentText(playing):t('该屏幕尚未设置动态壁纸');
+ $('current-status').textContent=playing?(playing.paused?t('已暂停'):playing.auto_paused?t('遮挡，自动暂停'):t('正在播放')):'';
  renderResources(playing);
  $('status-dot').classList.toggle('playing',!!playing&&!playing.paused&&!playing.auto_paused);
- $('pause').hidden=!playing;$('pause').textContent=playing?.paused?'继续':'暂停';$('pause').dataset.paused=String(!!playing?.paused);
- $('current-monitor').textContent=monitor?.name||'没有可用的显示器';
+ $('pause').hidden=!playing;$('pause').textContent=playing?.paused?t('继续'):t('暂停');$('pause').dataset.paused=String(!!playing?.paused);
+ $('current-monitor').textContent=monitor?.name||t('没有可用的显示器');
  const currentModule=data.modules.find(m=>m.id===playing?.module_id),artUrl=currentModule?.cover?data.service+currentModule.cover:'';
  const artSig=JSON.stringify([currentModule?.id,artUrl]);
  if(artSig!==lastCurrentArt){$('current-art').replaceChildren();if(artUrl){const img=el('img');img.src=artUrl;img.alt='';img.onerror=()=>img.replaceWith(el('span','','▱'));$('current-art').append(img);}else $('current-art').append(el('span','','▱'));lastCurrentArt=artSig;}
  $('module-count').textContent=String(data.modules.length).padStart(2,'0');
  renderDisplays(data);
- const moduleSig=JSON.stringify([data.modules,data.selected_monitor,monitor?.name,playing?.module_id,data.service]);
- if(moduleSig!==lastModules){reconcile($('modules'),data.modules,m=>m.id,m=>JSON.stringify([m,data.service,data.selected_monitor,monitor?.name,playing?.module_id]),module=>{
+ const moduleSig=JSON.stringify([i18n.locale,data.modules,data.selected_monitor,monitor?.name,playing?.module_id,data.service]);
+ if(moduleSig!==lastModules){reconcile($('modules'),data.modules,m=>m.id,m=>JSON.stringify([i18n.locale,m,data.service,data.selected_monitor,monitor?.name,playing?.module_id]),module=>{
   const used=playing?.module_id===module.id,card=el('article','module'+(used?' active':'')),art=el('div','module-art');
-  const cover=el('button','cover-button apply-cover');cover.dataset.available=String(!!monitor&&!used);cover.setAttribute('aria-label',`将${module.name}应用到${monitor?.name||'当前屏幕'}`);cover.onclick=()=>applyWallpaper(module.id);image(cover,module.cover?data.service+module.cover:null,module.name);art.append(cover);
-  if(used)art.append(el('span','used','✓ 使用中'));
-  const preview=el('button','wallpaper-preview','▶ 预览');preview.setAttribute('aria-label','预览'+module.name);preview.onclick=()=>previewWallpaper(module.id);art.append(preview);card.append(art);
-  const copy=el('div','module-copy'),main=el('div','module-main'),text=el('div','module-text');text.append(el('h3','',module.name));const description=el('p','',module.description);description.title=module.description;text.append(description);main.append(text);
-  if(!used){const apply=el('button','apply','应用壁纸');apply.dataset.available=String(!!monitor);apply.title='应用到 '+(monitor?.name||'当前屏幕');apply.onclick=()=>applyWallpaper(module.id);main.append(apply);}
+  const cover=el('button','cover-button apply-cover');cover.dataset.available=String(!!monitor&&!used);cover.setAttribute('aria-label',t('将{name}应用到{monitor}',{name:contentText(module),monitor:monitor?.name||t('当前屏幕')}));cover.onclick=()=>applyWallpaper(module.id);image(cover,module.cover?data.service+module.cover:null,contentText(module));art.append(cover);
+  if(used)art.append(el('span','used',t('✓ 使用中')));
+  const preview=el('button','wallpaper-preview',t('▶ 预览'));preview.setAttribute('aria-label',t('预览')+contentText(module));preview.onclick=()=>previewWallpaper(module.id);art.append(preview);card.append(art);
+  const copy=el('div','module-copy'),main=el('div','module-main'),text=el('div','module-text');text.append(el('h3','',contentText(module)));const description=el('p','',contentText(module,'description'));description.title=contentText(module,'description');text.append(description);main.append(text);
+  if(!used){const apply=el('button','apply',t('应用壁纸'));apply.dataset.available=String(!!monitor);apply.title=t('应用到 ')+(monitor?.name||t('当前屏幕'));apply.onclick=()=>applyWallpaper(module.id);main.append(apply);}
   copy.append(main);taskSlot(copy,module.id);copy.append(moduleDetails(module));card.append(copy);return card;
  });$('empty').hidden=data.modules.length>0;lastModules=moduleSig;}
- const warnings=data.warnings||[];$('warnings-box').hidden=!warnings.length;$('warnings').replaceChildren(...warnings.map(message=>el('li','',message)));
+ const warnings=data.warnings||[];$('warnings-box').hidden=!warnings.length;$('warnings').replaceChildren(...warnings.map(message=>el('li','',errorText(message))));
  const online=data.online||{},catalog=online.catalog,items=catalog?.wallpapers||[];
  const updates=items.filter(item=>{const local=data.modules.find(m=>m.id===item.id);return local&&compare(item.version,local.version)>0;}).length;
- $('update-count').textContent=updates?`${updates} 可更新`:items.length?String(items.length):'';
- const onlineError=remoteError||online.last_error||online.lastError||'';$('online-error').hidden=!onlineError;$('online-error').textContent=onlineError;
+ $('update-count').textContent=updates?t('{count} 可更新',{count:updates}):items.length?String(items.length):'';
+ const onlineError=remoteError||online.last_error||online.lastError||'';$('online-error').hidden=!onlineError;$('online-error').textContent=errorText(onlineError);
  const checked=online.checked_at??online.checkedAt??0,enabled=enabledRepositories();
- $('online-status').textContent=!enabled.length?'尚未启用壁纸仓库，可在设置中开启。':checked?`${items.length} 张壁纸 · 按需下载${online.cached?' · 缓存清单':''}`:`已启用 ${enabled.length} 个仓库，下载后可离线播放。`;$('online-status').title=checked?'上次检查 '+new Date(checked*1000).toLocaleString('zh-CN'):'刷新只获取清单，不会自动下载壁纸';
+ $('online-status').textContent=!enabled.length?t('尚未启用壁纸仓库，可在设置中开启。'):checked?t('{count} 张壁纸 · 按需下载{cached}',{count:items.length,cached:online.cached?t(' · 缓存清单'):''}):t('已启用 {count} 个仓库，下载后可离线播放。',{count:enabled.length});$('online-status').title=checked?t('上次检查 ')+new Date(checked*1000).toLocaleString(i18n.locale):t('刷新只获取清单，不会自动下载壁纸');
  const taskItems=new Map(downloadTasks().map(t=>[t.id,t.item]));
  const listed=new Map(items.map(item=>[item.id,item]));taskItems.forEach((item,id)=>listed.set(id,item));
  const visibleItems=[...listed.values()].filter(item=>!taskFilter||taskItems.has(item.id));
- reconcile($('online-modules'),visibleItems,item=>item.id,item=>JSON.stringify([item,data.modules.find(m=>m.id===item.id),data.version,data.service,data.selected_monitor,playing?.module_id,data.proxy]),item=>{
+ reconcile($('online-modules'),visibleItems,item=>item.id,item=>JSON.stringify([i18n.locale,item,data.modules.find(m=>m.id===item.id),data.version,data.service,data.selected_monitor,playing?.module_id,data.proxy]),item=>{
   const local=data.modules.find(m=>m.id===item.id),compatible=compare(data.version,item.minAppVersion||item.min_app_version||'0.2.0')>=0;
   const newer=local&&compare(item.version,local.version)>0,current=local?.source==='online'&&compare(item.version,local.version)===0;
-  const card=el('article','module online-card');card.title=item.description+(item.repository?'\n来源：'+repositoryLabel(item.repository):'');if(local?.cover)image(card,data.service+local.cover,item.name);else onlineImage(card,item,data);
-  const copy=el('div','module-copy'),heading=el('div','module-heading');heading.append(el('h3','',item.name));copy.append(heading);
+  const card=el('article','module online-card');card.title=contentText(item,'description')+(item.repository?t('\n来源：')+repositoryLabel(item.repository):'');if(local?.cover)image(card,data.service+local.cover,contentText(item));else onlineImage(card,item,data);
+  const copy=el('div','module-copy'),heading=el('div','module-heading');heading.append(el('h3','',contentText(item)));copy.append(heading);
   const used=current&&playing?.module_id===item.id;
-  const text=!compatible?'需要程序 '+(item.minAppVersion||item.min_app_version):used?'正在使用':current?'应用壁纸':newer?'更新到 v'+item.version:local?.source==='builtin'?'下载独立副本':'下载壁纸';
+  const text=!compatible?t('需要程序 ')+(item.minAppVersion||item.min_app_version):used?t('正在使用'):current?t('应用壁纸'):newer?t('更新到 v')+item.version:local?.source==='builtin'?t('下载独立副本'):t('下载壁纸');
   const download=el('button','apply download');download.setAttribute('aria-label',text);download.title=text;
-  const icon=el('span','online-action-icon',current?'✓':'↓');icon.setAttribute('aria-hidden','true');download.append(icon,el('span','',!compatible?'需升级':used?'使用中':current?'应用':newer?'更新':'下载'));
+  const icon=el('span','online-action-icon',current?'✓':'↓');icon.setAttribute('aria-hidden','true');download.append(icon,el('span','',!compatible?t('需升级'):used?t('使用中'):current?t('应用'):newer?t('更新'):t('下载')));
   download.dataset.available=String(compatible&&(!current||!!monitor&&!used));download.dataset.actionApply=String(current);download.dataset.moduleId=item.id;download.onclick=()=>current?applyWallpaper(item.id):changeDownload(item.id);heading.append(download);
   const meta=el('div','module-meta online-meta'),shown=taskItems.has(item.id)?item.version:local?.source==='online'?local.version:item.version;
-  const version=el('button','version-trigger');version.append(el('span','','v'+shown),el('span','version-chevron','⌄'));version.dataset.moduleId=item.id;version.setAttribute('aria-label',item.name+'版本，当前 v'+shown);version.setAttribute('aria-haspopup','listbox');version.setAttribute('aria-controls','wallpaper-versions');version.setAttribute('aria-expanded','false');
+  const version=el('button','version-trigger');version.append(el('span','','v'+shown),el('span','version-chevron','⌄'));version.dataset.moduleId=item.id;version.setAttribute('aria-label',contentText(item)+t('版本，当前 v')+shown);version.setAttribute('aria-haspopup','listbox');version.setAttribute('aria-controls','wallpaper-versions');version.setAttribute('aria-expanded','false');
   version.onclick=()=>openHistory(items.find(latest=>latest.id===item.id)||item,version);version.onkeydown=event=>{if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();openHistory(items.find(latest=>latest.id===item.id)||item,version,true);}};
   const remembered=historyPages.get(JSON.stringify([item.repository,item.id]))?.items.get(shown),size=remembered?.size||(shown===item.version?item.size:0);
   meta.append(version);if(size)meta.append(el('span','meta-dot','·'),el('span','',bytes(size)));
-  if(item.repository){const source=el('span','online-source',repositoryName(item.repository));source.title='来源：'+repositoryLabel(item.repository);meta.append(el('span','meta-dot','·'),source);}
-  if(local)meta.append(el('span','online-local',local.source==='builtin'?'内置':'已下载'));
+  if(item.repository){const source=el('span','online-source',repositoryName(item.repository));source.title=t('来源：')+repositoryLabel(item.repository);meta.append(el('span','meta-dot','·'),source);}
+  if(local)meta.append(el('span','online-local',local.source==='builtin'?t('内置'):t('已下载')));
   copy.append(meta);taskSlot(copy,item.id);card.append(copy);return card;
  });
- $('online-empty').hidden=visibleItems.length>0;$('online-empty').textContent=!enabled.length&&!taskFilter?'请在设置中添加或启用壁纸仓库。':taskFilter?'当前任务已完成，可以显示全部壁纸。':'暂时没有可浏览的壁纸，请刷新壁纸库。';
+ $('online-empty').hidden=visibleItems.length>0;$('online-empty').textContent=!enabled.length&&!taskFilter?t('请在设置中添加或启用壁纸仓库。'):taskFilter?t('当前任务已完成，可以显示全部壁纸。'):t('暂时没有可浏览的壁纸，请刷新壁纸库。');
  renderDownloads();
  renderBusy();
 }
@@ -490,28 +513,30 @@ async function update(){
  polling=true;
  const epoch=renderEpoch;
  try{const data=await invoke('get_state');if(epoch===renderEpoch)render(data);}
- catch(error){if(epoch===renderEpoch){localError=String(error);$('error').hidden=false;$('error').textContent=localError;}}
+ catch(error){if(epoch===renderEpoch){localError=String(error);$('error').hidden=false;$('error').textContent=errorText(localError);}}
  finally{polling=false;if(refreshRequested){refreshRequested=false;queueMicrotask(update);}}
 }
-function tab(name,refreshOnline=true){if(name==='local')taskFilter=false;activeTab=name;$('collection-title').textContent=name==='local'?'我的壁纸':'发现壁纸';$('collection-description').textContent=name==='local'?'喜欢的风景，随时在身边。':'给桌面，添一点新鲜感。';$('module-count').hidden=name!=='local';for(const value of ['local','online']){$(value+'-panel').hidden=value!==name;$('tab-'+value).classList.toggle('selected',value===name);$('tab-'+value).setAttribute('aria-pressed',String(value===name));}if(state)render(state);if(name==='online'&&refreshOnline&&enabledRepositories().length&&!remoteBusy)run('check_online',{},'',true);}
+function tabText(){$('collection-title').textContent=activeTab==='local'?t('我的壁纸'):t('发现壁纸');$('collection-description').textContent=activeTab==='local'?t('喜欢的风景，随时在身边。'):t('给桌面，添一点新鲜感。');}
+function tab(name,refreshOnline=true){if(name==='local')taskFilter=false;activeTab=name;tabText();$('module-count').hidden=name!=='local';for(const value of ['local','online']){$(value+'-panel').hidden=value!==name;$('tab-'+value).classList.toggle('selected',value===name);$('tab-'+value).setAttribute('aria-pressed',String(value===name));}if(state)render(state);if(name==='online'&&refreshOnline&&enabledRepositories().length&&!remoteBusy)run('check_online',{},'',true);}
 $('download-filter').onclick=()=>{taskFilter=!taskFilter;tab('online',false);};
 $('clear-download-filter').onclick=()=>{taskFilter=false;if(state)render(state);};
 $('tab-local').onclick=()=>tab('local');$('tab-online').onclick=()=>tab('online');
 $('check-online').onclick=()=>run('check_online',{},'',true);
-$('refresh').onclick=()=>run('refresh_modules',{},'本地壁纸列表已更新');
+$('refresh').onclick=()=>run('refresh_modules',{},t('本地壁纸列表已更新'));
 $('open-folder').onclick=()=>invoke('open_wallpaper_folder').catch(error=>toast(String(error)));
 for(const [id,kind] of [['import-folder','folder'],['import-zip','zip']])$(id).onclick=async()=>{
  if(localBusy)return;$('import-error').hidden=true;
- const result=await run('import_wallpaper',{kind},'壁纸已导入');
+ const result=await run('import_wallpaper',{kind},t('壁纸已导入'));
  if(result){$('settings-dialog').close();tab('local');}
- else if(localError){$('import-error').textContent=localError;$('import-error').hidden=false;}
+ else if(localError){$('import-error').textContent=errorText(localError);$('import-error').hidden=false;}
 };
 $('pause').onclick=()=>{const selected=current();if(selected)run('pause_wallpaper',{monitorId:state.selected_monitor,paused:!selected.paused});};
-$('remove').onclick=()=>{closePlaybackMenu();run('remove_wallpaper',{monitorId:state.selected_monitor},'已恢复该屏幕的原桌面');};
+$('remove').onclick=()=>{closePlaybackMenu();run('remove_wallpaper',{monitorId:state.selected_monitor},t('已恢复该屏幕的原桌面'));};
 $('auto-pause').onchange=()=>run('auto_pause',{enabled:$('auto-pause').checked});
+$('language').onchange=()=>setLanguage($('language').value);
 $('auto-start').onchange=()=>setAutoStart($('auto-start').checked);
-$('preview').onclick=()=>{closePlaybackMenu();direct('capture_desktop',{monitorId:state.selected_monitor},'桌面预览已保存');};
-$('reload').onclick=()=>{closePlaybackMenu();const playing=current();if(playing)run('apply_wallpaper',{monitorId:state.selected_monitor,moduleId:playing.module_id},'壁纸已重新加载');};
+$('preview').onclick=()=>{closePlaybackMenu();direct('capture_desktop',{monitorId:state.selected_monitor},t('桌面预览已保存'));};
+$('reload').onclick=()=>{closePlaybackMenu();const playing=current();if(playing)run('apply_wallpaper',{monitorId:state.selected_monitor,moduleId:playing.module_id},t('壁纸已重新加载'));};
 $('show-desktop').onclick=()=>{closePlaybackMenu();direct('show_desktop',{monitorId:state.selected_monitor});};
 $('hide').onclick=()=>{closePlaybackMenu();direct('hide_manager');};$('quit').onclick=()=>direct('quit_app');
 $('add-repository').onclick=()=>{repositoryDrafts.push({url:'',enabled:true});renderRepositoryRows();editRepositories();$('repository-url-'+(repositoryDrafts.length-1)).focus();};
@@ -531,7 +556,7 @@ settingsNav.addEventListener('keydown',event=>{
 });
 $('about-open').onclick=openAbout;
 document.querySelectorAll('[data-about-link]').forEach(link=>link.onclick=event=>{event.preventDefault();direct('open_about_link',{link:link.dataset.aboutLink});});
-window.__TAURI__.event.listen('show-about',openAbout).catch(error=>toast('关于入口暂时不可用：'+String(error)));
+window.__TAURI__.event.listen('show-about',openAbout).catch(error=>toast(t('关于入口暂时不可用：')+String(error)));
 $('app-update-toggle').onclick=openAppUpdate;
 document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>button.closest('dialog').close());
 document.querySelectorAll('dialog').forEach(dialog=>dialog.addEventListener('click',event=>{

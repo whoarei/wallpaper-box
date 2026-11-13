@@ -29,6 +29,8 @@ pub struct RemoteWallpaper {
     pub subtitle: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default)]
+    pub locales: std::collections::BTreeMap<String, catalog::LocalizedMetadata>,
     pub version: String,
     pub min_app_version: String,
     pub entry: String,
@@ -105,6 +107,7 @@ pub fn validate_wallpaper(item: &RemoteWallpaper) -> Result<(), String> {
         || item.name.chars().count() > 80
         || item.subtitle.chars().count() > 80
         || item.description.chars().count() > 300
+        || !catalog::valid_locales(&item.locales)
         || item.tags.len() > 8
         || item.tags.iter().any(|tag| tag.chars().count() > 30)
         || item.version.len() > 64
@@ -740,7 +743,7 @@ mod tests {
             writer.write_all(data).unwrap();
         }
         let bytes = writer.finish().unwrap().into_inner();
-        let item = RemoteWallpaper { id:"scene".into(), name:"Scene".into(), subtitle:String::new(), description:String::new(), version:version.into(), min_app_version:"0.2.0".into(), entry:"index.html".into(), tags:vec![], download_url:format!("https://github.com/whoarei/wallpapers/releases/download/library-v1.0.0/scene-{version}.zip"), sha256:packages::digest(&bytes), size:bytes.len() as u64, unpacked_size:(metadata.len()+content.len()) as u64, cover_url:None, repository:repositories::GITHUB.into() };
+        let item = RemoteWallpaper { id:"scene".into(), name:"Scene".into(), subtitle:String::new(), description:String::new(), locales:Default::default(), version:version.into(), min_app_version:"0.2.0".into(), entry:"index.html".into(), tags:vec![], download_url:format!("https://github.com/whoarei/wallpapers/releases/download/library-v1.0.0/scene-{version}.zip"), sha256:packages::digest(&bytes), size:bytes.len() as u64, unpacked_size:(metadata.len()+content.len()) as u64, cover_url:None, repository:repositories::GITHUB.into() };
         (item, bytes)
     }
 

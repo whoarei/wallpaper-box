@@ -5,7 +5,7 @@
   "windows": ["manager"],
   "permissions": [
     "core:default", "core:window:allow-minimize", "core:window:allow-toggle-maximize", "core:window:allow-start-dragging",
-    "allow-get-state", "allow-open-about-link", "allow-check-app-update", "allow-download-app-update", "allow-install-app-update", "allow-refresh-modules", "allow-select-monitor",
+    "allow-get-state", "allow-set-language", "allow-open-about-link", "allow-check-app-update", "allow-download-app-update", "allow-install-app-update", "allow-refresh-modules", "allow-select-monitor",
     "allow-apply-wallpaper", "allow-preview-wallpaper", "allow-pause-wallpaper", "allow-invoke-wallpaper-action", "allow-remove-wallpaper", "allow-auto-pause",
     "allow-set-proxy", "allow-test-proxy", "allow-load-online-cover",
     "allow-set-auto-start", "allow-load-wallpaper-history", "allow-get-wallpaper-settings", "allow-set-wallpaper-settings",

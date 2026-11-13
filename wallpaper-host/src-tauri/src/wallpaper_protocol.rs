@@ -6,11 +6,11 @@ pub const TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_BYTES: usize = 8192;
 const MAX_ENVELOPE_BYTES: usize = MAX_BYTES + 512;
 
-pub fn initialization_script(desktop: bool) -> String {
+pub fn initialization_script(desktop: bool, locale: &str) -> String {
     format!(
         "({})({});",
         include_str!("../wallpaper-mode.js"),
-        serde_json::json!({"mode": if desktop { "desktop" } else { "preview" }})
+        serde_json::json!({"mode": if desktop { "desktop" } else { "preview" }, "locale": locale})
     )
 }
 

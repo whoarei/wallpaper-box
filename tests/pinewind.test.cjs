@@ -27,7 +27,7 @@ function playwright() {
   const wrapper = fs.readFileSync(path.resolve(__dirname, '../wallpaper-host/src-tauri/wallpaper-mode.js'), 'utf8');
   const server = http.createServer((request, response) => {
     if (request.url === '/favicon.ico') { response.writeHead(204).end(); return; }
-    if(request.url==='/wallpaper-adapter.js'){response.writeHead(200,{'Content-Type':'text/javascript'});response.end(fs.readFileSync(path.resolve(__dirname,'../wallpapers/pinewind-town/wallpaper-adapter.js')));return;}
+    if(['/wallpaper-adapter.js','/translations.js','/i18n.js'].includes(request.url)){response.writeHead(200,{'Content-Type':'text/javascript'});response.end(fs.readFileSync(path.resolve(__dirname,'../wallpapers/pinewind-town'+request.url)));return;}
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     // Match native initialization before the real page scripts execute.
     response.end(request.url === '/wallpaper' ? html.replace('<head>', '<head><script>'+bootstrap(wrapper)+'</script>') : html.replace('<head>', '<head><script>'+bootstrap(wrapper,'preview')+'</script>'));
