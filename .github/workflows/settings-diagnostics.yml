@@ -15,3 +15,4 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts --prefix wallpaper-host
       - run: node tests/settings-first-save-diagnostic.cjs
+      - run: npm --prefix wallpaper-host run test:settings
