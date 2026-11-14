@@ -261,8 +261,7 @@ function injectNativeFixture({ state, catalog, failCheck, failRollback, failAppC
       case 'hide_manager':
         if (failWindowHide) { failWindowHide = false; throw '托盘暂时不可用'; }
         return null;
-      case 'capture_desktop':
-      case 'show_desktop': return 'preview.png';
+      case 'capture_desktop': return 'preview.png';
       case 'remove_wallpaper':
         state.wallpapers = state.wallpapers.filter(wallpaper => wallpaper.display_id !== args.monitorId);
         return copy(state);
@@ -858,6 +857,19 @@ async function noHorizontalOverflow(page, label) {
       assert.equal(await about.isVisible(), false);
       assert.equal(await page.locator('#settings-dialog').isVisible(), true);
       assert.equal(await page.locator('#about-open').evaluate(button => button === document.activeElement), true);
+    });
+
+    await test('tray settings and update events open their destination without changing playback', null, async page => {
+      await page.evaluate(() => window.__uiTest.emit('show-settings'));
+      await visible(page.locator('#settings-dialog'));
+      assert.equal(await page.locator('#settings-tab-general').getAttribute('aria-selected'), 'true');
+      await page.evaluate(() => window.__uiTest.emit('show-app-update'));
+      assert.equal(await page.locator('#settings-tab-updates').getAttribute('aria-selected'), 'true');
+      await page.evaluate(() => window.__uiTest.emit('show-settings'));
+      assert.equal(await page.locator('#settings-tab-general').getAttribute('aria-selected'), 'true');
+      assert.equal(await page.locator('#current-title').textContent(), '水族箱');
+      assert.equal(await page.locator('#show-desktop').count(), 0);
+      assert.deepEqual(await actions(page), []);
     });
 
     await test('tray about events reuse the same panel without changing playback', null, async page => {

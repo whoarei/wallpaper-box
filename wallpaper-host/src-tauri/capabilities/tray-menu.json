@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "tray-menu",
+  "description": "Local tray popup with only menu-scoped commands",
+  "windows": ["tray-menu"],
+  "permissions": [
+    "core:event:allow-listen", "core:event:allow-unlisten",
+    "allow-tray-menu-state", "allow-tray-menu-ready",
+    "allow-tray-menu-hide", "allow-tray-menu-action"
+  ]
+}

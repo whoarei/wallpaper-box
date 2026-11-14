@@ -428,7 +428,6 @@ function renderBusy(){
  const playing=current(),hasMonitor=!!state?.displays.some(d=>d.id===state.selected_monitor);
  renderWallpaperActions();
  for(const id of ['pause','remove','preview','reload'])$(id).disabled=localBusy||!playing;
- $('show-desktop').disabled=localBusy||!hasMonitor;
  $('displays').setAttribute('aria-busy',String(localBusy));document.querySelectorAll('.monitor-choice').forEach(button=>button.disabled=localBusy);
  $('auto-pause').disabled=localBusy||!state;
  $('refresh').disabled=localBusy;
@@ -537,7 +536,6 @@ $('language').onchange=()=>setLanguage($('language').value);
 $('auto-start').onchange=()=>setAutoStart($('auto-start').checked);
 $('preview').onclick=()=>{closePlaybackMenu();direct('capture_desktop',{monitorId:state.selected_monitor},t('桌面预览已保存'));};
 $('reload').onclick=()=>{closePlaybackMenu();const playing=current();if(playing)run('apply_wallpaper',{monitorId:state.selected_monitor,moduleId:playing.module_id},t('壁纸已重新加载'));};
-$('show-desktop').onclick=()=>{closePlaybackMenu();direct('show_desktop',{monitorId:state.selected_monitor});};
 $('hide').onclick=()=>{closePlaybackMenu();direct('hide_manager');};$('quit').onclick=()=>direct('quit_app');
 $('add-repository').onclick=()=>{repositoryDrafts.push({url:'',enabled:true});renderRepositoryRows();editRepositories();$('repository-url-'+(repositoryDrafts.length-1)).focus();};
 $('save-repositories').onclick=saveRepositories;
@@ -556,6 +554,8 @@ settingsNav.addEventListener('keydown',event=>{
 });
 $('about-open').onclick=openAbout;
 document.querySelectorAll('[data-about-link]').forEach(link=>link.onclick=event=>{event.preventDefault();direct('open_about_link',{link:link.dataset.aboutLink});});
+window.__TAURI__.event.listen('show-settings',()=>openSettings('general')).catch(error=>toast(String(error)));
+window.__TAURI__.event.listen('show-app-update',openAppUpdate).catch(error=>toast(String(error)));
 window.__TAURI__.event.listen('show-about',openAbout).catch(error=>toast(t('关于入口暂时不可用：')+String(error)));
 $('app-update-toggle').onclick=openAppUpdate;
 document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>button.closest('dialog').close());

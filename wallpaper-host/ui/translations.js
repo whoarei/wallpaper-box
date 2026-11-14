@@ -32,7 +32,6 @@ window.wallpaperEnglish = Object.freeze({
   "更多播放操作": "More playback options",
   "暂停": "Pause",
   "继续": "Resume",
-  "查看桌面": "Show desktop",
   "保存桌面预览": "Save desktop preview",
   "重新加载壁纸": "Reload wallpaper",
   "关闭此屏幕壁纸": "Remove wallpaper from this display",

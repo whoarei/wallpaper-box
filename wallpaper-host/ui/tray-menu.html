@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>壁纸盒子</title><link rel="stylesheet" href="tray-menu.css"><script src="tray-menu.js" defer></script></head>
+<body>
+ <section class="tray-card" aria-label="壁纸盒子">
+  <header class="tray-heading"><img src="icon.png" width="32" height="32" alt=""><div><strong id="brand">壁纸盒子</strong><span id="version"></span></div><span id="status" class="status"></span></header>
+  <div class="now-playing"><span class="wallpaper-symbol" aria-hidden="true"></span><div><strong id="wallpaper">…</strong><span id="display"></span></div></div>
+  <div id="submenu-nav" class="submenu-nav" hidden><button id="back" type="button"><span aria-hidden="true">‹</span><span id="back-label">返回</span></button><strong id="submenu-title"></strong></div>
+  <div id="menu" role="menu" aria-label="快捷操作" tabindex="-1"></div>
+  <p id="menu-error" role="alert" hidden></p>
+  <footer><span id="footer-label">让喜欢的风景常在</span><span><kbd>Esc</kbd> <span id="dismiss-label">关闭</span></span></footer>
+ </section>
+</body>
+</html>

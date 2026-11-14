@@ -1,6 +1,6 @@
 {
   "name": "wallpaper-box",
-  "version": "0.12.2",
+  "version": "0.13.0",
   "private": true,
   "description": "壁纸盒子 Windows 动态壁纸程序",
   "scripts": {
@@ -8,6 +8,7 @@
     "bundle": "tauri build --ci --bundles nsis -- --locked",
     "check:version": "node scripts/check-version.mjs",
     "test:ui": "node ../tests/ui.test.cjs",
+    "test:tray": "node ../tests/tray-menu.test.cjs",
     "test:aquarium": "node ../tests/aquarium.test.cjs",
     "test:pinewind": "node ../tests/pinewind.test.cjs",
     "test:protocol": "node ../tests/wallpaper-protocol.test.cjs",

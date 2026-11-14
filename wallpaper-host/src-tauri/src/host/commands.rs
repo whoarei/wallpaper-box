@@ -436,30 +436,6 @@ pub async fn capture_desktop(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-pub async fn show_desktop(
-    app: AppHandle,
-    window: WebviewWindow,
-    monitor_id: String,
-) -> Result<String, String> {
-    manager(&window)?;
-    tauri::async_runtime::spawn_blocking(move || {
-        desktop::show_desktop()?;
-        std::thread::sleep(Duration::from_secs(3));
-        let display = desktop::displays()
-            .into_iter()
-            .find(|d| d.id == monitor_id)
-            .ok_or("显示器已断开连接。")?;
-        let output = app
-            .state::<Host>()
-            .dir
-            .join(format!("preview-{}.png", label(&monitor_id)));
-        desktop::capture(&display, &output)?;
-        Ok(output.to_string_lossy().into_owned())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
 pub async fn check_online(app: AppHandle, window: WebviewWindow) -> Result<View, String> {
     manager(&window)?;
     tauri::async_runtime::spawn_blocking(move || {

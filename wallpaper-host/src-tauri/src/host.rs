@@ -1,5 +1,6 @@
 mod commands;
 mod download_workers;
+mod tray_menu;
 mod wallpaper_actions;
 mod wallpaper_settings;
 use crate::{
@@ -18,7 +19,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{
-    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
@@ -862,191 +862,35 @@ fn rebuild_tray(app: &AppHandle) {
             "Wallpaper Box · Wallpaper Manager",
         ));
     }
-    let result = (|| -> tauri::Result<()> {
-        let menu = Menu::new(app)?;
-        let selected = view.displays.iter().find(|d| d.id == view.selected_monitor);
-        menu.append(&MenuItem::with_id(
-            app,
-            "open-manager",
-            tr("打开壁纸管理", "Open wallpaper manager"),
-            true,
-            None::<&str>,
-        )?)?;
-        let screens = Submenu::with_id(
-            app,
-            "displays",
-            selected
-                .map(|d| format!("{}{}", tr("选择显示器：", "Select display: "), d.name))
-                .unwrap_or_else(|| tr("选择显示器", "Select display").into()),
-            !view.displays.is_empty(),
-        )?;
-        for display in &view.displays {
-            screens.append(&CheckMenuItem::with_id(
-                app,
-                format!("display:{}", display.id),
-                &display.name,
-                true,
-                display.id == view.selected_monitor,
-                None::<&str>,
-            )?)?;
-        }
-        menu.append(&screens)?;
-        let current = view
-            .wallpapers
-            .iter()
-            .find(|w| w.display_id == view.selected_monitor);
-        let wallpapers = Submenu::with_id(
-            app,
-            "wallpapers",
-            tr("壁纸", "Wallpapers"),
-            selected.is_some(),
-        )?;
-        for module in &view.modules {
-            wallpapers.append(&CheckMenuItem::with_id(
-                app,
-                format!("wallpaper:{}", module.id),
-                module.localized_name(view.locale),
-                true,
-                current.map(|w| w.module_id == module.id).unwrap_or(false),
-                None::<&str>,
-            )?)?;
-        }
-        if view.modules.is_empty() {
-            wallpapers.append(&MenuItem::with_id(
-                app,
-                "no-wallpapers",
-                tr(
-                    "暂无壁纸，打开管理窗口刷新",
-                    "No wallpapers. Open the manager to refresh",
-                ),
-                false,
-                None::<&str>,
-            )?)?;
-        }
-        wallpapers.append(&PredefinedMenuItem::separator(app)?)?;
-        let actions = Submenu::with_id(
-            app,
-            "wallpaper-actions",
-            tr("壁纸操作", "Wallpaper actions"),
-            current.is_some(),
-        )?;
-        if let Some(current) = current {
-            if let Some(instance_id) = &current.instance_id {
-                let pause = crate::wallpaper_protocol::PauseState::new(
-                    current.paused,
-                    current.auto_paused,
-                    false,
-                );
-                for action in &current.actions {
-                    actions.append(&MenuItem::with_id(
-                        app,
-                        format!("action:{instance_id}:{}", action.id),
-                        &action.label,
-                        action.allowed(pause) && !current.action_busy,
-                        None::<&str>,
-                    )?)?;
-                }
-                if !current.actions.is_empty() {
-                    actions.append(&PredefinedMenuItem::separator(app)?)?;
-                }
-            }
-        }
-        actions.append(&CheckMenuItem::with_id(
-            app,
-            "pause-current",
-            tr("暂停当前壁纸", "Pause current wallpaper"),
-            current.is_some(),
-            current.map(|w| w.paused).unwrap_or(false),
-            None::<&str>,
-        )?)?;
-        actions.append(&MenuItem::with_id(
-            app,
-            "remove-current",
-            tr("关闭当前屏幕壁纸", "Remove wallpaper from current display"),
-            current.is_some(),
-            None::<&str>,
-        )?)?;
-        wallpapers.append(&actions)?;
-        menu.append(&wallpapers)?;
-        let all_paused = !view.wallpapers.is_empty() && view.wallpapers.iter().all(|w| w.paused);
-        menu.append(&MenuItem::with_id(
-            app,
-            "pause-all",
-            if all_paused {
-                tr("继续全部壁纸", "Resume all wallpapers")
-            } else {
-                tr("暂停全部壁纸", "Pause all wallpapers")
-            },
-            !view.wallpapers.is_empty(),
-            None::<&str>,
-        )?)?;
-        menu.append(&PredefinedMenuItem::separator(app)?)?;
-        menu.append(&MenuItem::with_id(
-            app,
-            "show-desktop",
-            tr("显示 / 还原桌面", "Show / restore desktop"),
-            true,
-            None::<&str>,
-        )?)?;
-        let settings = Submenu::with_id(
-            app,
-            "settings-help",
-            tr("设置与帮助", "Settings and help"),
-            true,
-        )?;
-        settings.append(&CheckMenuItem::with_id(
-            app,
-            "auto-pause",
-            tr("遮挡时自动暂停", "Pause when covered"),
-            true,
-            view.auto_pause,
-            None::<&str>,
-        )?)?;
-        settings.append(&PredefinedMenuItem::separator(app)?)?;
-        settings.append(&MenuItem::with_id(
-            app,
-            "check-app-update",
-            tr("检查程序更新", "Check for app updates"),
-            true,
-            None::<&str>,
-        )?)?;
-        settings.append(&MenuItem::with_id(
-            app,
-            "about",
-            tr("关于壁纸盒子", "About Wallpaper Box"),
-            true,
-            None::<&str>,
-        )?)?;
-        menu.append(&settings)?;
-        menu.append(&PredefinedMenuItem::separator(app)?)?;
-        menu.append(&MenuItem::with_id(
-            app,
-            "quit",
-            tr("退出壁纸盒子", "Quit Wallpaper Box"),
-            true,
-            None::<&str>,
-        )?)?;
-        if let Some(tray) = app.tray_by_id("screen-garden") {
-            tray.set_tooltip(Some(tr(
-                "壁纸盒子 · 右键切换壁纸",
-                "Wallpaper Box · Right-click to switch wallpaper",
-            )))?;
-            tray.set_menu(Some(menu))?;
-        }
-        Ok(())
-    })();
-    if let Err(error) = result {
-        log(app, &format!("Tray menu: {error}"));
+    if let Some(tray) = app.tray_by_id("screen-garden") {
+        let _ = tray.set_tooltip(Some(tr(
+            "壁纸盒子 · 右键切换壁纸",
+            "Wallpaper Box · Right-click to switch wallpaper",
+        )));
     }
+    tray_menu::refresh(app);
 }
 
 fn tray_action(app: &AppHandle, id: &str) {
-    if id == "about" {
+    if id == "about" || id == "open-settings" || id == "check-app-update" {
         show_manager(app);
         if let Some(window) = app.get_webview_window("manager") {
-            if let Err(message) = window.emit("show-about", ()) {
-                error(app, format!("打开关于失败：{message}"));
+            if let Err(message) = window.emit(
+                match id {
+                    "open-settings" => "show-settings",
+                    "check-app-update" => "show-app-update",
+                    _ => "show-about",
+                },
+                (),
+            ) {
+                error(app, format!("打开管理面板失败：{message}"));
             }
+        }
+        if id == "check-app-update" {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let _ = crate::app_updates::check(&app);
+            });
         }
         return;
     }
@@ -1064,10 +908,6 @@ fn tray_action(app: &AppHandle, id: &str) {
             apply(&app, &view.selected_monitor, module)
         } else if let Some(action) = id.strip_prefix("action:") {
             wallpaper_actions::tray_invoke(&app, action)
-        } else if id == "check-app-update" {
-            show_manager(&app);
-            let _ = crate::app_updates::check(&app);
-            Ok(())
         } else {
             match id.as_str() {
                 "pause-current" => {
@@ -1086,9 +926,6 @@ fn tray_action(app: &AppHandle, id: &str) {
                 }
                 "auto-pause" => set_auto(&app, !view.auto_pause),
                 "remove-current" => remove(&app, &view.selected_monitor),
-                "show-desktop" => {
-                    let _ = desktop::show_desktop();
-                }
                 "quit" => quit(&app),
                 _ => {}
             }
@@ -1316,6 +1153,7 @@ fn maintenance(app: AppHandle, first: bool) {
             };
         }
         diagnostics(&app);
+        tray_menu::refresh(&app);
         iteration += 1;
         std::thread::sleep(Duration::from_secs(2));
     }
@@ -1398,7 +1236,10 @@ pub fn run() {
             commands::hide_manager,
             commands::quit_app,
             commands::capture_desktop,
-            commands::show_desktop,
+            tray_menu::tray_menu_state,
+            tray_menu::tray_menu_ready,
+            tray_menu::tray_menu_hide,
+            tray_menu::tray_menu_action,
             commands::check_online,
             commands::install_online,
             commands::download_action,
@@ -1465,23 +1306,31 @@ pub fn run() {
             if let Some(error) = startup_error {
                 log(&handle, &format!("Autostart: {error}"));
             }
+            app.manage(tray_menu::Popup::default());
             download_workers::start(&handle);
             wallpaper_actions::start(&handle);
             TrayIconBuilder::with_id("screen-garden")
                 .icon(tray_image())
                 .tooltip("壁纸盒子 · 右键切换壁纸")
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| tray_action(app, event.id().as_ref()))
                 .on_tray_icon_event(|tray, event| {
-                    if matches!(
-                        event,
-                        TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            button_state: MouseButtonState::Up,
-                            ..
+                    if let TrayIconEvent::Click {
+                        button,
+                        button_state: MouseButtonState::Up,
+                        position,
+                        ..
+                    } = event
+                    {
+                        match button {
+                            MouseButton::Left => {
+                                tray_menu::hide(tray.app_handle());
+                                show_manager(tray.app_handle());
+                            }
+                            MouseButton::Right => {
+                                tray_menu::open(tray.app_handle(), position);
+                            }
+                            _ => {}
                         }
-                    ) {
-                        show_manager(tray.app_handle());
                     }
                 })
                 .build(app)?;
@@ -1525,6 +1374,16 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == "tray-menu" {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    tray_menu::hide(window.app_handle());
+                } else if matches!(event, WindowEvent::Focused(false))
+                    && window.is_visible().unwrap_or(false)
+                {
+                    tray_menu::hide(window.app_handle());
+                }
+            }
             if window.label().starts_with("preview-") && matches!(event, WindowEvent::Destroyed) {
                 if let Some(host) = window.app_handle().try_state::<Host>() {
                     host.data

@@ -425,27 +425,6 @@ pub fn capture(display: &Display, output: &std::path::Path) -> Result<(), String
     }
 }
 
-pub fn show_desktop() -> Result<(), String> {
-    use windows::Win32::{
-        System::Com::{
-            CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
-            COINIT_APARTMENTTHREADED,
-        },
-        UI::Shell::{IShellDispatch4, Shell},
-    };
-    unsafe {
-        let initialized = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        let result = (|| -> windows::core::Result<()> {
-            let shell: IShellDispatch4 = CoCreateInstance(&Shell, None, CLSCTX_INPROC_SERVER)?;
-            shell.ToggleDesktop()
-        })();
-        if initialized.is_ok() {
-            CoUninitialize();
-        }
-        result.map_err(|e| format!("无法显示桌面：{e}"))
-    }
-}
-
 fn lowering_needed(order: &[isize], moving: isize, anchor: isize) -> bool {
     if moving == 0 || anchor == 0 {
         return false;

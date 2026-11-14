@@ -10,7 +10,7 @@
     "allow-set-proxy", "allow-test-proxy", "allow-load-online-cover",
     "allow-set-auto-start", "allow-load-wallpaper-history", "allow-get-wallpaper-settings", "allow-set-wallpaper-settings",
     "allow-set-wallpaper-repositories",
-    "allow-hide-manager", "allow-quit-app", "allow-capture-desktop", "allow-show-desktop",
+    "allow-hide-manager", "allow-quit-app", "allow-capture-desktop",
     "allow-check-online", "allow-install-online", "allow-download-action", "allow-rollback-wallpaper", "allow-import-wallpaper", "allow-open-wallpaper-folder"
   ]
 }
