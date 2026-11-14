@@ -9,6 +9,11 @@ description: "准备或发布 whoarei/wallpaper-box 主程序的新版本时使�
 
 本 skill 用于 `whoarei/wallpaper-box` 的 Windows x64 主程序。`whoarei/wallpapers` 的内容库使用另一套版本与 `library-vX.Y.Z` 标签，不在这里发布。仅整理 skill、修改代码或制作原型不触发发布。
 
+发布目标仅为 GitHub。Gitee 已永久停止源码、分支、标签、Release 和附件同步；
+不执行补传、镜像修复或同步脚本，不派发、重跑或恢复历史 Gitee 工作流，
+不将 Gitee 状态作为发布完成条件。向 `whoarei/wallpapers` 同步协议文档仍只推送 GitHub，
+不延伸到 Gitee。Gitee 已有内容及客户端仓库读取能力按原状保留。
+
 ## 先展示修改点，再选择版本
 
 用户未指定本次具体版本时，先完成已授权且不依赖版本选择的工作：检查代码与远端状态、汇总相对最新公开正式版的修改点、完成有关检查。按以下顺序展示信息，再弹出**三个实际版本号**供用户选择，推荐项排第一：
