@@ -944,6 +944,11 @@ fn tray_action(app: &AppHandle, id: &str) {
             select(&app, display)
         } else if let Some(module) = id.strip_prefix("wallpaper:") {
             apply(&app, &view.selected_monitor, module)
+        } else if let Some(display) = id.strip_prefix("system-wallpaper:") {
+            // The menu pins this action to a display, independently of the
+            // current selection. Removing its assignment persists system mode.
+            remove(&app, display);
+            Ok(())
         } else if let Some(action) = id.strip_prefix("action:") {
             wallpaper_actions::tray_invoke(&app, action)
         } else {
@@ -963,7 +968,6 @@ fn tray_action(app: &AppHandle, id: &str) {
                     set_paused(&app, None, !paused);
                 }
                 "auto-pause" => set_auto(&app, !view.auto_pause),
-                "remove-current" => remove(&app, &view.selected_monitor),
                 "quit" => quit(&app),
                 _ => {}
             }

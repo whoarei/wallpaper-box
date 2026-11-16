@@ -128,13 +128,33 @@ async function test(name,body){await body();passed++;console.log('PASS '+name);}
    saved=JSON.parse(fs.readFileSync(storage));await page.reload();await open();
    assert.equal(await frame().locator('#lighting').inputValue(),'2');assert.equal(await frame().locator('#flow').inputValue(),'1');
   });
-  await test('wallpapers without a settings page show an empty state',async()=>{
+  await test('the settings picker excludes unsupported wallpapers and switches when settings are removed',async()=>{
+   assert.deepEqual(await page.locator('#wallpaper-settings-select option').evaluateAll(options=>options.map(option=>option.value)),['aquarium','pinewind-town']);
    await page.locator('#wallpaper-settings-expand').click();
-   await page.locator('#wallpaper-settings-select').selectOption('legacy');
+   const settings=modules[0].settings;modules[0].settings=null;
+   await page.waitForFunction(()=>document.querySelector('#wallpaper-settings-select').value==='pinewind-town');
+   await frame().locator('#save').waitFor({state:'visible'});
+   assert.deepEqual(await page.locator('#wallpaper-settings-select option').evaluateAll(options=>options.map(option=>option.value)),['pinewind-town']);
+   modules[0].settings=settings;
+   await page.waitForFunction(()=>document.querySelector('#wallpaper-settings-select').options.length===2);
+   assert.equal(await page.locator('#wallpaper-settings-select').inputValue(),'pinewind-town');
+   await open();
+  });
+  await test('no configurable wallpapers leaves an empty disabled picker with localized feedback',async()=>{
+   const settings=modules.map(module=>module.settings);modules.forEach(module=>{module.settings=null;});
+   await page.waitForFunction(()=>document.querySelector('#wallpaper-settings-select').options.length===0);
    assert.equal(await page.locator('#wallpaper-settings-frame iframe').count(),0);
-   assert.match(await page.locator('#wallpaper-settings-empty').innerText(),/暂无自定义设置/);
+   assert.equal(await page.locator('#wallpaper-settings-select').isDisabled(),true);
+   assert.equal(await page.locator('#wallpaper-settings-reload').isDisabled(),true);
+   assert.equal(await page.locator('#wallpaper-settings-empty').innerText(),'还没有支持自定义设置的壁纸。');
    assert.equal(await page.locator('#wallpaper-settings-expand').getAttribute('aria-pressed'),'false');
-   assert.equal(await page.locator('#wallpaper-settings-expand').isDisabled(),true);await open();
+   assert.equal(await page.locator('#wallpaper-settings-expand').isDisabled(),true);
+   await page.locator('#settings-tab-general').click();await page.locator('#language').selectOption('en');
+   await page.locator('#settings-tab-wallpaper').click();
+   assert.equal(await page.locator('#wallpaper-settings-empty').innerText(),'No installed wallpapers offer custom settings.');
+   await page.locator('#settings-tab-general').click();await page.locator('#language').selectOption('zh-CN');
+   await page.locator('#settings-tab-wallpaper').click();
+   modules.forEach((module,index)=>{module.settings=settings[index];});await open();
   });
   await test('expanding the editor preserves drafts and returning to general restores its actions',async()=>{
    await page.setViewportSize({width:1080,height:760});

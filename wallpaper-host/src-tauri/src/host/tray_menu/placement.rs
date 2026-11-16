@@ -1,3 +1,6 @@
+pub(super) const WIDTH: f64 = 320.0;
+pub(super) const HEIGHT: f64 = 584.0;
+
 /// Fit a logical popup into a physical monitor work area (taskbar excluded).
 pub(super) fn place(
     (left, top, available_width, available_height): (i32, i32, i32, i32),
@@ -5,8 +8,8 @@ pub(super) fn place(
     (cursor_x, cursor_y): (f64, f64),
 ) -> (i32, i32, u32, u32) {
     let margin = (8.0 * scale).round() as i32;
-    let width = ((320.0 * scale).round() as i32).min(available_width).max(1);
-    let height = ((548.0 * scale).round() as i32)
+    let width = ((WIDTH * scale).round() as i32).min(available_width).max(1);
+    let height = ((HEIGHT * scale).round() as i32)
         .min(available_height)
         .max(1);
     let x = (cursor_x as i32 - width + margin).clamp(left, left + available_width - width);
@@ -22,11 +25,11 @@ mod tests {
     fn opens_above_a_bottom_taskbar_at_the_clicked_dpi() {
         assert_eq!(
             place((0, 0, 1920, 1032), 1.0, (1900.0, 1056.0)),
-            (1588, 484, 320, 548)
+            (1588, 448, 320, 584)
         );
         assert_eq!(
             place((0, 0, 3840, 2064), 2.0, (3800.0, 2112.0)),
-            (3176, 968, 640, 1096)
+            (3176, 896, 640, 1168)
         );
     }
 

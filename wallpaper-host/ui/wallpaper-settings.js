@@ -30,10 +30,10 @@
     status(statusKey, statusError);
     expand(active && $('settings-dialog').classList.contains('wallpaper-settings-expanded'));
     const name = module => module.locales?.[i18n.locale]?.name || module.name;
-    const modules = data?.modules || [];
+    const modules = (data?.modules || []).filter(module => module.settings);
     if (!modules.some(module => module.id === selected)) {
       selected = modules.find(module => module.id === data?.wallpapers.find(w => w.display_id === data.selected_monitor)?.module_id)?.id ||
-        modules.find(module => module.settings)?.id || modules[0]?.id || '';
+        modules[0]?.id || '';
     }
     const signature = JSON.stringify(modules.map(module => [module.id, name(module)]));
     if (signature !== optionsKey) {
@@ -50,10 +50,10 @@
     const key = JSON.stringify([module?.id, module?.settings_token, module?.settings?.entry, data?.service]);
     if (context && context.key !== key) close();
     if (!active) return;
-    if (!module?.settings) {
+    if (!module) {
       expand(false);
       close(); $('wallpaper-settings-empty').hidden = false;
-      $('wallpaper-settings-empty').textContent = t(module ? '此壁纸暂无自定义设置。' : '还没有已安装的壁纸。');
+      $('wallpaper-settings-empty').textContent = t('还没有支持自定义设置的壁纸。');
       status(''); return;
     }
     $('wallpaper-settings-empty').hidden = true;

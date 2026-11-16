@@ -85,6 +85,22 @@ fn model(app: &AppHandle) -> MenuView {
                 .check(d.id == view.selected_monitor)
         })
         .collect();
+    let system_wallpapers = {
+        let host = app.state::<Host>();
+        let data = host.data.lock().unwrap();
+        view.displays
+            .iter()
+            .map(|display| {
+                Item::new(
+                    format!("system-wallpaper:{}", display.id),
+                    &display.name,
+                    "monitor",
+                    true,
+                )
+                .check(!data.settings.assignments.contains_key(&display.id))
+            })
+            .collect()
+    };
     let mut wallpapers: Vec<_> = view
         .modules
         .iter()
@@ -139,12 +155,6 @@ fn model(app: &AppHandle) -> MenuView {
         )
         .check(current.is_some_and(|w| w.paused)),
     );
-    actions.push(Item::new(
-        "remove-current",
-        tr("关闭当前屏幕壁纸", "Remove wallpaper from current display"),
-        "close",
-        current.is_some(),
-    ));
     wallpapers.push(Item::separator());
     wallpapers.push(
         Item::new(
@@ -166,13 +176,13 @@ fn model(app: &AppHandle) -> MenuView {
             .unwrap_or_else(|| tr("未连接显示器", "No connected display").into()),
         wallpaper: current
             .map(|w| w.name.clone())
-            .unwrap_or_else(|| tr("当前屏幕未播放壁纸", "No wallpaper on this display").into()),
+            .unwrap_or_else(|| tr("系统壁纸", "System wallpaper").into()),
         status: if current.is_some_and(|w| w.paused || w.auto_paused) {
             tr("已暂停", "Paused")
         } else if current.is_some() {
             tr("播放中", "Playing")
         } else {
-            tr("未播放", "Idle")
+            tr("系统壁纸", "System wallpaper")
         },
         playing: current.is_some_and(|w| !w.paused && !w.auto_paused),
         items: vec![
@@ -197,6 +207,13 @@ fn model(app: &AppHandle) -> MenuView {
                 selected.is_some(),
             )
             .children(wallpapers),
+            Item::new(
+                "system-wallpaper",
+                tr("使用系统壁纸", "Use system wallpaper"),
+                "monitor",
+                !view.displays.is_empty(),
+            )
+            .children(system_wallpapers),
             Item::new(
                 "pause-all",
                 if all_paused {
@@ -301,7 +318,7 @@ fn open_inner(
     } else {
         WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("tray-menu.html".into()))
             .title("Wallpaper Box")
-            .inner_size(320.0, 548.0)
+            .inner_size(placement::WIDTH, placement::HEIGHT)
             .decorations(false)
             .transparent(true)
             .shadow(false)
