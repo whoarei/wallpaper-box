@@ -2,6 +2,7 @@ mod commands;
 mod download_workers;
 mod tray_menu;
 mod wallpaper_actions;
+mod wallpaper_health;
 mod wallpaper_settings;
 use crate::{
     catalog::{self, Module},
@@ -77,6 +78,7 @@ struct Running {
     auto_paused: bool,
     effective_paused: bool,
     protocol: crate::wallpaper_protocol::Session,
+    health: wallpaper_health::Health,
 }
 struct Data {
     settings: Settings,
@@ -485,6 +487,29 @@ fn preview(app: &AppHandle, module_id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Closing a WebView is asynchronous. Wait for its label to be released before
+/// reusing it, without holding the data lock needed by UI-thread callbacks.
+fn discard_unresponsive_surface(app: &AppHandle, monitor_id: &str) -> Result<(), String> {
+    let window_label = label(monitor_id);
+    if let Some(window) = app.get_webview_window(&window_label) {
+        window.destroy().map_err(|e| e.to_string())?;
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while app.get_webview_window(&window_label).is_some() {
+            if Instant::now() >= deadline {
+                return Err("壁纸窗口关闭超时，请稍后重试。".into());
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    app.state::<Host>()
+        .data
+        .lock()
+        .unwrap()
+        .running
+        .remove(monitor_id);
+    Ok(())
+}
+
 fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(), String> {
     let display = desktop::displays()
         .into_iter()
@@ -504,6 +529,18 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
         .parse()
         .map_err(|e| format!("壁纸地址错误：{e}"))?;
     let window_label = label(monitor_id);
+    let unresponsive = host
+        .data
+        .lock()
+        .unwrap()
+        .running
+        .get(monitor_id)
+        .is_some_and(|running| running.health.unresponsive());
+    if unresponsive {
+        // Navigating the existing view cannot revive an OS-suspended renderer.
+        // Manual reload and the watchdog both replace the native surface.
+        discard_unresponsive_surface(app, monitor_id)?;
+    }
     host.data
         .lock()
         .unwrap()
@@ -597,6 +634,7 @@ fn apply_inner(app: &AppHandle, monitor_id: &str, module_id: &str) -> Result<(),
                 auto_paused: automatic,
                 effective_paused: effective,
                 protocol: Default::default(),
+                health: Default::default(),
             },
         );
         data.last_error = None;
@@ -1064,6 +1102,34 @@ fn maintenance(app: AppHandle, first: bool) {
                     }
                     continue;
                 };
+                let recovery = {
+                    let mut data = host.data.lock().unwrap();
+                    data.running.get_mut(&id).and_then(|running| {
+                        running
+                            .health
+                            .begin_recovery(Instant::now())
+                            .then(|| running.health.clone())
+                    })
+                };
+                if let Some(mut health) = recovery {
+                    log(
+                        &app,
+                        &format!(
+                            "Recreating unresponsive wallpaper {} on {id}",
+                            selection.module_id
+                        ),
+                    );
+                    match apply_inner(&app, &id, &selection.module_id) {
+                        Ok(()) => {
+                            health.rebuilt(Instant::now());
+                            if let Some(running) = host.data.lock().unwrap().running.get_mut(&id) {
+                                running.health = health;
+                            }
+                        }
+                        Err(message) => error(&app, message),
+                    }
+                    continue;
+                }
                 let changed_root = host
                     .data
                     .lock()

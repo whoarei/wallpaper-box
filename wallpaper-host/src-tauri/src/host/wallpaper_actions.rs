@@ -84,6 +84,7 @@ fn query(app: AppHandle, target: Target) {
         &target.label,
         "document.readyState === 'loading' ? null : window.__SCREEN_GARDEN_GET_ACTIONS?.()".into(),
     );
+    let responded = result.is_ok();
     let result = result.and_then(|raw| {
         if raw == "null" {
             Ok(None)
@@ -97,11 +98,14 @@ fn query(app: AppHandle, target: Target) {
     if host.exiting.load(Ordering::Acquire) {
         return;
     }
-    let changed = {
+    let (changed, liveness_changed) = {
         let mut data = host.data.lock().unwrap();
         let Some(running) = current(&mut data, &target) else {
             return;
         };
+        let was_unresponsive = running.health.unresponsive();
+        running.health.observe(responded);
+        let liveness_changed = was_unresponsive != running.health.unresponsive();
         let session = &mut running.protocol;
         session.query_pending = false;
         let old = (
@@ -130,12 +134,29 @@ fn query(app: AppHandle, target: Target) {
                 session.error = Some(message);
             }
         }
-        old != (
-            session.instance_id.clone(),
-            session.actions.clone(),
-            session.error.clone(),
+        (
+            old != (
+                session.instance_id.clone(),
+                session.actions.clone(),
+                session.error.clone(),
+            ),
+            liveness_changed,
         )
     };
+    if liveness_changed {
+        log(
+            &app,
+            &format!(
+                "Wallpaper native query on {}: {}",
+                target.monitor_id,
+                if responded {
+                    "responding again"
+                } else {
+                    "unresponsive"
+                }
+            ),
+        );
+    }
     if changed {
         rebuild_tray(&app);
         let _ = app.emit("host-updated", ());
